@@ -1,0 +1,14 @@
+name: Apply Template Labels
+on:
+  workflow_dispatch: # run manually after repo creation
+
+jobs:
+  sync-labels:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sync labels from template repo
+        uses: r7kamura/github-label-sync-action@v0
+        with:
+          source_repository: monark-community/repo-structure-template
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          allow_added_labels: "true"

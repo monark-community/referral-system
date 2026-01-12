@@ -1,0 +1,67 @@
+- name: BREAKING CHANGE
+  description: Identifies changes that won't be retro-compatible
+  color: '88057a'
+
+- name: bug
+  description: Something isn't working
+  color: 'd73a4a'
+
+- name: chore
+  description: Internal engineering work that does not add user-facing features
+  color: '4b718c'
+
+- name: docs
+  description: Report missing, incorrect, unclear, or requested documentation
+  color: '0075ca'
+
+- name: duplicate
+  description: This issue or pull request already exists
+  color: 'cfd3d7'
+
+- name: feat
+  description: Suggest an idea for this project
+  color: '8f78b6'
+
+- name: good first issue
+  description: Good for newcomers
+  color: '7057ff'
+
+- name: help wanted
+  description: Extra attention is needed
+  color: '008672'
+
+- name: needs triage
+  description: Issues that need to be evaluated and prioritized
+  color: '9dfcf5'
+
+- name: P0 🟣
+  description: Critical priority
+  color: '5319e7'
+
+- name: P1 🔴
+  description: High priority
+  color: 'b60205'
+
+- name: P2 🟡
+  description: Medium priority
+  color: 'fbca04'
+
+- name: P3 🟢
+  description: Low priority
+  color: '0e8a16'
+
+- name: question
+  description: Further information is requested
+  color: 'd876e3'
+
+- name: spike
+  description: Time-boxed technical research task
+  color: '9cb3e3'
+
+- name: tech
+  description: Use when product already approved the feature and needs development-level clarity
+  color: '2980fb'
+
+- name: wontfix
+  description: This will not be worked on
+  color: 'ffffff'
