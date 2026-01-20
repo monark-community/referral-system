@@ -1,6 +1,6 @@
-# Code of Conduct for {{PROJECT_NAME}}
+# Code of Conduct for Reffinity
 
-We value a welcoming and inclusive community at {{PROJECT_NAME}}. All contributors, maintainers, and users are expected to follow this Code of Conduct.
+We value a welcoming and inclusive community at Reffinity. All contributors, maintainers, and users are expected to follow this Code of Conduct.
 
 ## 1. Our Standards
 
@@ -36,7 +36,7 @@ Maintainers are responsible for enforcing this Code of Conduct. Consequences for
 
 ## 5. Scope
 
-This Code of Conduct applies to all spaces related to {{PROJECT_NAME}}, including:
+This Code of Conduct applies to all spaces related to Reffinity, including:
 
 - Public and private repositories.
 - Issue trackers and discussion forums.
@@ -49,4 +49,3 @@ This Code of Conduct is adapted from the [Contributor Covenant](https://www.cont
 ---
 
 Thank you for helping us maintain a **positive and inclusive community**!
-

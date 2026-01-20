@@ -1,8 +1,6 @@
-# Contributing to {{PROJECT_NAME}}
+# Contributing to Reffinity
 
-
-
-Thank you for your interest in contributing to **{{PROJECT_NAME}}**! We welcome contributions of all kinds: bug reports, feature requests, documentation improvements, and code.
+Thank you for your interest in contributing to **Reffinity**! We welcome contributions of all kinds: bug reports, feature requests, documentation improvements, and code.
 
 By contributing, you agree to the following terms:
 
@@ -16,7 +14,7 @@ By contributing, you agree to the following terms:
 git checkout -b feature/my-feature
 ```
 
-2. **Make your changes** following our [code style guidelines](#code-style).  
+2. **Make your changes** following our [code style guidelines](#code-style).
 
 3. **Commit your changes** with clear [conventional](https://www.conventionalcommits.org/en/v1.0.0) messages:
 
@@ -52,7 +50,7 @@ git push origin feature/my-feature
 ## 4. Legal Considerations
 
 - By contributing, you agree that your contributions will be licensed under the terms of the [LICENSE](./LICENSE).
-- Your contributions become part of **16918140 Canada Inc. (Monark Inc.)**’s project.  
+- Your contributions become part of **16918140 Canada Inc. (Monark Inc.)**’s project.
 
 > Example copyright notice for contributions:
 >
@@ -73,5 +71,4 @@ We expect all contributors to follow a respectful and collaborative approach. Pl
 
 ---
 
-Thank you for helping improve **{{PROJECT_NAME}}**! Your contributions are highly appreciated.
-
+Thank you for helping improve **Reffinity**! Your contributions are highly appreciated.

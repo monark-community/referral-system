@@ -1,3 +1,3 @@
-## {{PROJECT_NAME}} Documentation
+## Reffinity Documentation
 
 Use the documentation folder to add any extra relevant documentation.
