@@ -119,8 +119,8 @@ TODO
 
 ## Documentation
 
-- [GitHub Issues](https://github.com/monark-community/referral-system/issues?q=is%3Aissue+is%3Aopen+label%3A%22type%3A+feature%22)
-- [Client Meeting Notes](/wiki/Client-Meeting-Notes)
+- [GitHub Issues](https://github.com/monark-community/referral-system/issues)
+- [Client Meeting Notes](https://github.com/monark-community/referral-system/wiki/Client%E2%80%90Meeting%E2%80%90Notes)
 
 ## Contribution
 
