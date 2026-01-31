@@ -29,7 +29,7 @@ jobs:
 
     # Change directory into the Hardhat workspace
     - name: Enter Hardhat project
-      working-directory: packages/contracts
+      working-directory: packages/common/contracts
       run: |
         echo "Now in $(pwd)"
         ls -la
