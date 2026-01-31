@@ -27,14 +27,23 @@ jobs:
         node-version: ${{ matrix.node-version }}
         cache: 'npm'
 
-    # Change directory into the Hardhat workspace
-    - name: Enter Hardhat project
+    - name: Install dependencies
       working-directory: packages/common/contracts
-      run: |
-        echo "Now in $(pwd)"
-        ls -la
-    - run: npm install
-    - run: npx hardhat compile
-    - run: npx hardhat node &
-    - run: sleep 5
-    - run: npx hardhat test
+      run: npm install
+
+    - name: Compile contracts
+      working-directory: packages/common/contracts
+      env:
+        HARDHAT_TS_NODE_REGISTER: true
+      run: npx hardhat compile
+    
+    - name: Start Hardhat node
+      working-directory: packages/common/contracts
+      run: npx hardhat node &
+    
+    - name: Wait for node
+      run: sleep 5
+    
+    - name: Run Hardhat tests
+      working-directory: packages/common/contracts
+      run: npx hardhat test
