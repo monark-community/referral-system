@@ -9,6 +9,8 @@
     "skipLibCheck": true,
     "moduleResolution": "node16",
     "outDir": "dist",
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "declaration": true,
+    "emitDeclarationOnly": false,
   }
 }

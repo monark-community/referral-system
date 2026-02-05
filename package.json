@@ -1,11 +1,13 @@
 {
   "name": "referral-system",
   "version": "1.0.0",
+  "type": "module",
   "description": "[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)\r ![GitHub Issues](https://img.shields.io/github/issues/monark-community/Reffinity)\r ![GitHub Issues](https://img.shields.io/github/issues-pr/monark-community/Reffinity)\r ![GitHub Stars](https://img.shields.io/github/stars/monark-community/Reffinity)\r ![GitHub Forks](https://img.shields.io/github/forks/monark-community/Reffinity)",
   "workspaces": [
     "packages/*",
     "services/*",
-    "packages/common/contracts"
+    "packages/common/contracts",
+    "packages/shared/types"
   ],
   "directories": {
     "doc": "docs"
@@ -23,5 +25,9 @@
   "bugs": {
     "url": "https://github.com/monark-community/referral-system/issues"
   },
-  "homepage": "https://github.com/monark-community/referral-system#readme"
+  "homepage": "https://github.com/monark-community/referral-system#readme",
+  "devDependencies": {
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  }
 }

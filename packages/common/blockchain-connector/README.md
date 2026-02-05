@@ -1,0 +1,1 @@
+# This folder contains the service for connecting to smart contracts

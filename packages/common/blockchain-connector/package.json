@@ -1,0 +1,17 @@
+{
+  "name": "@reffinity/blockchain-connector",
+  "version": "0.1.0",
+  "type": "module",
+  "dependencies": {
+    "@reffinity/common-contracts": "*"
+  },
+  "exports": {
+    ".": {
+      "import":"./dist/referral.service.js",
+      "types": "./dist/referral.service.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc"
+  }
+}
