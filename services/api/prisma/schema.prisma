@@ -1,0 +1,42 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                String    @id @default(uuid())
+  walletAddress     String    @unique @map("wallet_address")
+
+  // Profile fields (nullable until profile completion)
+  name              String?
+  email             String?   @unique
+  phone             String?
+
+  // Email verification
+  emailVerified     Boolean   @default(false) @map("email_verified")
+  emailVerifyToken  String?   @map("email_verify_token")
+  emailVerifyExpiry DateTime? @map("email_verify_expiry")
+
+  // Referral program
+  referralCode      String    @unique @map("referral_code")
+  referredBy        String?   @map("referred_by")
+  termsAcceptedAt   DateTime? @map("terms_accepted_at")
+
+  // Points tracking (cached from blockchain)
+  earnedPoints      Int       @default(0) @map("earned_points")
+  pendingPoints     Int       @default(0) @map("pending_points")
+
+  // Timestamps
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  // Self-referential relation for referrals
+  referrer          User?     @relation("Referrals", fields: [referredBy], references: [id])
+  referrals         User[]    @relation("Referrals")
+
+  @@map("users")
+}
