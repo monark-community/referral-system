@@ -14,7 +14,11 @@ contract MilestoneRewards is AccessControl {
         _grantRole(ACCESS_ROLE, access_role);
     }
 
-    function awardReward(uint256) public onlyRole(ACCESS_ROLE) {
+    function awardReward(uint256) public {
+        require(
+            hasRole(ACCESS_ROLE, msg.sender),
+            "awardReward: caller lacks ACCESS_ROLE"
+        );
         //TODO add reward functionality
     }
 }

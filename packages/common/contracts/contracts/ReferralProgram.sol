@@ -37,8 +37,14 @@ contract ReferralProgram is AccessControl {
         relationships.createRelationship(msg.sender, referrer);
         points.completeAction(ReferralPoints.Action.ReferredNewUser, referrer);
         points.completeAction(ReferralPoints.Action.AcceptedInvite, msg.sender);
-        milestones.checkMilestone(msg.sender, points.getUserPoints(msg.sender));
-        milestones.checkMilestone(referrer, points.getUserPoints(referrer));
+        milestones.updateUserMilestone(
+            msg.sender,
+            points.getUserPoints(msg.sender)
+        );
+        milestones.updateUserMilestone(
+            referrer,
+            points.getUserPoints(referrer)
+        );
     }
 
     function viewReferrals() public view returns (address[] memory) {
@@ -49,7 +55,31 @@ contract ReferralProgram is AccessControl {
         return relationships.viewReferrer(msg.sender);
     }
 
+    function setPointsForAction(
+        ReferralPoints.Action action,
+        uint256 amount
+    ) public onlyRole(DEFAULT_ADMIN_ROLE) {
+        points.setPointsForAction(action, amount);
+    }
+
     function viewPoints() public view returns (uint256) {
         return points.getUserPoints(msg.sender);
+    }
+
+    function getCurrentUserMilestone() public view returns (uint256) {
+        return milestones.getCurrentMilestone(msg.sender);
+    }
+
+    function addNewMilestone(
+        uint256 value
+    ) public onlyRole(DEFAULT_ADMIN_ROLE) {
+        milestones.insertMilestone(value);
+    }
+
+    function updateMilestone(
+        uint256 value,
+        uint256 milestoneToUpdate
+    ) public onlyRole(DEFAULT_ADMIN_ROLE) {
+        milestones.updateMilestone(value, milestoneToUpdate);
     }
 }

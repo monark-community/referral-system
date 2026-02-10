@@ -20,30 +20,62 @@ contract ReferralMilestone is AccessControl {
         _grantRole(ACCESS_ROLE, access_role);
 
         rewards = new MilestoneRewards(admin_role, address(this));
+
+        milestoneAmounts.push(0); // the 0th level milestone is always 0
     }
 
-    //check current milestone
-    function checkMilestone(address user, uint256 currentPoints) public onlyRole("ACCESS_ROLE"){
-        uint256 previousMilestone = usersCurrentMilestone.get(user);
+    //update current milestone
+    function updateUserMilestone(address user, uint256 currentPoints) public {
+        require(
+            hasRole(ACCESS_ROLE, msg.sender),
+            "updateMilestone: caller lacks ACCESS_ROLE"
+        );
+
+        uint256 previousMilestone = getCurrentMilestone(user);
+
         uint256 currentMilestone = previousMilestone;
-        for(uint256 i = previousMilestone; i<milestoneAmounts.length-1; i++){
-            if(currentPoints>milestoneAmounts[i]){
+        for (uint256 i = previousMilestone; i < milestoneAmounts.length; i++) {
+            if (currentPoints >= milestoneAmounts[i]) {
+                // if the user matches or exeeds the milestone amount then they are at that level
                 currentMilestone = i;
             } else {
                 break;
             }
         }
 
-        if(previousMilestone != currentMilestone){
+        if (previousMilestone != currentMilestone) {
             usersCurrentMilestone.set(user, currentMilestone);
-            for (uint256 j = previousMilestone + 1; j <= currentMilestone; j++) {
+            for (
+                uint256 j = previousMilestone + 1;
+                j <= currentMilestone;
+                j++
+            ) {
                 rewards.awardReward(j);
             }
         }
     }
 
+    function getCurrentMilestone(address user) public view returns (uint256) {
+        require(
+            hasRole(ACCESS_ROLE, msg.sender),
+            "getCurrentMilestone: caller lacks ACCESS_ROLE"
+        );
+        (bool exists, uint256 currentMilestone) = usersCurrentMilestone.tryGet(
+            user
+        );
+        if (!exists) {
+            currentMilestone = 0; // or whatever your default is
+        }
+
+        return currentMilestone;
+    }
+
     //functions for adding milestone values
-    function insertMilestone(uint256 value) public onlyRole("ACCESS_ROLE") {
+    function insertMilestone(uint256 value) public {
+        require(
+            hasRole(ACCESS_ROLE, msg.sender),
+            "insertMilestone: caller lacks ACCESS_ROLE"
+        );
         require(
             validMilestone(value, milestoneAmounts.length),
             "Invalid Milestone Value"
@@ -52,7 +84,11 @@ contract ReferralMilestone is AccessControl {
         milestoneAmounts.push(value);
     }
 
-    function updateMilestone(uint256 value, uint256 position) public onlyRole("ACCESS_ROLE"){
+    function updateMilestone(uint256 value, uint256 position) public {
+        require(
+            hasRole(ACCESS_ROLE, msg.sender),
+            "updateMilestone: caller lacks ACCESS_ROLE"
+        );
         require(validMilestone(value, position), "Invalid Milestone Value");
 
         milestoneAmounts[position] = value;

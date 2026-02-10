@@ -5,7 +5,6 @@ import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
 contract ReferralPoints is AccessControl {
-
     using EnumerableSet for EnumerableSet.UintSet;
 
     bytes32 public constant ACCESS_ROLE = keccak256("ACCESS_ROLE");
@@ -19,7 +18,6 @@ contract ReferralPoints is AccessControl {
     mapping(Action => uint256) pointsForAction;
     mapping(address => EnumerableSet.UintSet) userCompletedActions;
 
-
     //Gives the role of access to the contract provided, and admin to the user provided
     constructor(address admin_role, address access_role) {
         _grantRole(DEFAULT_ADMIN_ROLE, admin_role);
@@ -27,17 +25,30 @@ contract ReferralPoints is AccessControl {
         _grantRole(ACCESS_ROLE, access_role);
     }
 
-    function setPointsForAction(Action action, uint256 amount) public onlyRole(ACCESS_ROLE){
-        require(amount>=0, "Points cannot be negative");
+    function setPointsForAction(Action action, uint256 amount) public {
+        require(
+            hasRole(ACCESS_ROLE, msg.sender),
+            "setPointsForAction: caller lacks ACCESS_ROLE"
+        );
+        require(amount >= 0, "Points cannot be negative");
         pointsForAction[action] = amount;
     }
 
-    function completeAction(Action action, address user) public onlyRole(ACCESS_ROLE){
+    function completeAction(Action action, address user) public {
+        require(
+            hasRole(ACCESS_ROLE, msg.sender),
+            "completeAction: caller lacks ACCESS_ROLE"
+        );
         userCompletedActions[user].add(uint256(action));
     }
 
-
-    function getUserPoints(address user) public view onlyRole(ACCESS_ROLE) returns(uint256){
+    function getUserPoints(
+        address user
+    ) public view onlyRole(ACCESS_ROLE) returns (uint256) {
+        require(
+            hasRole(ACCESS_ROLE, msg.sender),
+            "getUserPoints: caller lacks ACCESS_ROLE"
+        );
         uint256 usersPointAmount = 0;
         EnumerableSet.UintSet storage set = userCompletedActions[user];
 
@@ -47,6 +58,4 @@ contract ReferralPoints is AccessControl {
 
         return usersPointAmount;
     }
-
-
 }

@@ -28,6 +28,10 @@ contract ReferralRelationships is AccessControl {
         address referrer
     ) external onlyRole(ACCESS_ROLE) {
         require(
+            hasRole(ACCESS_ROLE, msg.sender),
+            "createRelationship: caller lacks ACCESS_ROLE"
+        );
+        require(
             _referrers[referree] == address(0),
             "Cannot accept invite, already referred"
         );
