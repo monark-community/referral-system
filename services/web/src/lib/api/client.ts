@@ -10,7 +10,7 @@ export class ApiError extends Error {
     this.name = 'ApiError';
   }
 }
-
+ 
 export async function apiClient<T>(
   endpoint: string,
   options: RequestInit = {}

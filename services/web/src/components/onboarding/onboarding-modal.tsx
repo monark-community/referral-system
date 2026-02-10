@@ -16,7 +16,7 @@ import type { OnboardingStep } from '@/hooks/use-onboarding';
 interface OnboardingModalProps {
   isOpen: boolean;
   step: OnboardingStep;
-  onClose: () => void;
+  onClose: () => void; 
   onNextStep: () => void;
   onPreviousStep: () => void;
   onGoToStep: (step: OnboardingStep) => void;

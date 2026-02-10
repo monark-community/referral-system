@@ -14,7 +14,7 @@ interface WalletConnectStepProps {
 }
 
 export function WalletConnectStep({ onSuccess }: WalletConnectStepProps) {
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null); 
   const [isAuthenticating, setIsAuthenticating] = useState(false);
 
   const { login } = useAuth();

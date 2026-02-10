@@ -10,7 +10,7 @@ import { User } from 'lucide-react';
 import { updateProfile, sendVerificationEmail } from '@/lib/api/user';
 import { useAuth } from '@/contexts/auth-context';
 
-interface ProfileStepProps {
+interface ProfileStepProps { 
   onSuccess: () => void;
   onBack: () => void;
 }

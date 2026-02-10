@@ -15,7 +15,7 @@ function handleValidationErrors(
     });
     return;
   }
-  next();
+  next(); 
 }
 
 // Validate wallet authentication request

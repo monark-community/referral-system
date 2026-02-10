@@ -13,7 +13,7 @@ export async function sendVerificationEmail(
   // Link goes directly to backend, which redirects to frontend after verification
   const verificationUrl = `${API_URL}/api/users/verify-email/${token}`;
 
-  // In development, log to console
+  // In development, log to console 
   if (process.env.NODE_ENV !== 'production') {
     console.log('\n========================================');
     console.log('📧 EMAIL VERIFICATION (Development Mode)');

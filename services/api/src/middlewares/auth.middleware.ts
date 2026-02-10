@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyJWT } from '../services/auth.service';
-import { prisma } from '../lib/prisma';
+import pool from '../db/connection';
 
 // Extend Express Request type to include user
 declare global {
@@ -39,19 +39,27 @@ export async function authMiddleware(
     }
 
     // Check if user still exists
-    const user = await prisma.user.findUnique({
-      where: { id: payload.userId },
-      select: { id: true, walletAddress: true },
-    });
+    const client = await pool.connect();
+    try {
+      const result = await client.query(
+        'SELECT id, wallet_address FROM users WHERE id = $1',
+        [payload.userId]
+      );
 
-    if (!user) {
-      res.status(401).json({ error: 'User not found' });
-      return;
+      if (result.rows.length === 0) {
+        res.status(401).json({ error: 'User not found' });
+        return;
+      }
+
+      // Attach user to request
+      req.user = {
+        id: result.rows[0].id,
+        walletAddress: result.rows[0].wallet_address,
+      };
+      next();
+    } finally {
+      client.release();
     }
-
-    // Attach user to request
-    req.user = user;
-    next();
   } catch (error) {
     console.error('Auth middleware error:', error);
     res.status(401).json({ error: 'Authentication failed' });

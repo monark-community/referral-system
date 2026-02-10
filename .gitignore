@@ -41,3 +41,6 @@ coverage/
 # Environment
 .env.*
 !.env.example.claude/
+
+# Migration notes
+PRISMA_TO_PG_MIGRATION.md
