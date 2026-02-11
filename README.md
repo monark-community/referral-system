@@ -111,7 +111,7 @@ TODO
 
 ## Available Scripts
 
-TODO
+- [Creating a local chain with hardhat](https://github.com/monark-community/referral-system/wiki/Deploying-Test-Smart-Contracts)
 
 ## Deployment
 
