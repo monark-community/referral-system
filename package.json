@@ -1,27 +1,20 @@
 {
   "name": "referral-system",
-  "version": "1.0.0",
-  "description": "[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)\r ![GitHub Issues](https://img.shields.io/github/issues/monark-community/Reffinity)\r ![GitHub Issues](https://img.shields.io/github/issues-pr/monark-community/Reffinity)\r ![GitHub Stars](https://img.shields.io/github/stars/monark-community/Reffinity)\r ![GitHub Forks](https://img.shields.io/github/forks/monark-community/Reffinity)",
-  "workspaces": [
-    "packages/*",
-    "services/*",
-    "packages/common/contracts"
-  ],
-  "directories": {
-    "doc": "docs"
-  },
+  "version": "0.1.0",
+  "private": true,
+  "description": "Reffinity - Smart contract-powered referral system",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "setup": "docker-compose up -d && npm run install:all && npm run db:migrate",
+    "install:all": "cd services/api && npm install && cd ../web && npm install",
+    "db:migrate": "cd services/api && npx prisma migrate dev",
+    "db:generate": "cd services/api && npx prisma generate",
+    "dev": "concurrently \"npm run dev:api\" \"npm run dev:web\"",
+    "dev:api": "cd services/api && npm run dev",
+    "dev:web": "cd services/web && npm run dev",
+    "build": "cd services/api && npm run build && cd ../web && npm run build",
+    "lint": "cd services/api && npm run lint && cd ../web && npm run lint"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/monark-community/referral-system.git"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "bugs": {
-    "url": "https://github.com/monark-community/referral-system/issues"
-  },
-  "homepage": "https://github.com/monark-community/referral-system#readme"
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
 }
