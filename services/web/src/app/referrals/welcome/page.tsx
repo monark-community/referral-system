@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/referral";
 import { Button } from "@/components/ui/button";
 import { Gift, Link2, Shield, Sparkles } from "lucide-react";
+import { useAuth } from "@/contexts/auth-context";
 
 const features = [
   {
@@ -30,6 +31,7 @@ const features = [
 
 export default function WelcomePage() {
   const router = useRouter();
+  const { isAuthenticated, isLoading } = useAuth();
 
   return (
     <div className="h-screen bg-background flex flex-col max-w-md mx-auto overflow-hidden">
@@ -89,12 +91,22 @@ export default function WelcomePage() {
           >
             How it Works
           </Button>
-          <Button
-            className="flex-1"
-            onClick={() => router.push("/referrals/terms")}
-          >
-            Join the Program
-          </Button>
+          {!isLoading && isAuthenticated ? (
+            <Button
+              className="flex-1"
+              onClick={() => router.push("/referrals")}
+            >
+              Go to Dashboard
+            </Button>
+          ) : (
+            <Button
+              className="flex-1"
+              disabled={isLoading}
+              onClick={() => router.push("/referrals/terms")}
+            >
+              Join the Program
+            </Button>
+          )}
         </div>
       </footer>
     </div>
