@@ -1,9 +1,16 @@
 {
-  "name": "contracts",
+  "name": "@reffinity/common-contracts",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
+  "exports": {
+    ".": {
+      "import":"./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
   "scripts": {
+    "build": "tsc",
     "compile": "npx hardhat compile",
     "node": "npx hardhat node",
     "viem-test": "node scripts/viem-test.js"
