@@ -30,6 +30,9 @@ jobs:
     - name: Install dependencies
       run: npm install
 
+    - name: Install Hardhat
+      run: npm install --save-dev hardhat
+
     - name: Compile contracts
       working-directory: packages/common/contracts
       env:
