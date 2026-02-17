@@ -19,7 +19,7 @@ export function generateJWT(userId: string, walletAddress: string): string {
   return jwt.sign(
     { userId, walletAddress } as JWTPayload,
     JWT_SECRET,
-    { expiresIn: JWT_EXPIRES_IN }
+    { expiresIn: JWT_EXPIRES_IN as jwt.SignOptions["expiresIn"] }
   );
 }
 

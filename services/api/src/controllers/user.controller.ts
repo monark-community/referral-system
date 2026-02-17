@@ -1,7 +1,6 @@
 import { Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { generateEmailVerificationToken } from '../services/auth.service';
-import { sendVerificationEmail } from '../services/email.service';
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 
@@ -179,7 +178,7 @@ export async function sendVerificationEmail(req: Request, res: Response): Promis
  */
 export async function verifyEmail(req: Request, res: Response): Promise<void> {
   try {
-    const { token } = req.params;
+    const token = req.params.token as string;
 
     if (!token) {
       res.status(400).json({ error: 'Token is required' });
