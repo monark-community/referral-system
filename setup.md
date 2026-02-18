@@ -22,6 +22,18 @@ npm run dev                  # Starts both API (3001) and Web (3000)
 
 ## Individual Commands
 
+### Setup Smart Contracts 
+| Command | Description |
+| `cd packages/common/contracts` | Navigate to the contracts directory |
+| `npm install` | install dependencies |
+| `npx hardhat compile` | compile hardhat contracts |
+| `npx hardhat node` | spin up a local node |
+| `npx hardhat run scripts/deploy.js` | deploy the smart contract to the local node |
+| `npm build` | builds the ABI functions to be used |
+| `cd packages/common/blockchain-connector` | Navigate to the blockchain-connector directory |
+| `npm install` | install dependencies |
+| `npm build` | builds the blockchain helper files to be used in the app |
+
 ### Installation
 
 | Command | Description |
