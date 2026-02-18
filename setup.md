@@ -23,7 +23,9 @@ npm run dev                  # Starts both API (3001) and Web (3000)
 ## Individual Commands
 
 ### Setup Smart Contracts 
+
 | Command | Description |
+|---------|-------------|
 | `cd packages/common/contracts` | Navigate to the contracts directory |
 | `npm install` | install dependencies |
 | `npx hardhat compile` | compile hardhat contracts |
