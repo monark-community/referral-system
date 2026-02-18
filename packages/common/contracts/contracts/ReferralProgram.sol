@@ -47,12 +47,12 @@ contract ReferralProgram is AccessControl {
         );
     }
 
-    function viewReferrals() public view returns (address[] memory) {
-        return relationships.viewReferrals(msg.sender);
+    function viewReferrals(address user) public view returns (address[] memory) {
+        return relationships.viewReferrals(user);
     }
 
-    function viewReferrer() public view returns (address) {
-        return relationships.viewReferrer(msg.sender);
+    function viewReferrer(address user) public view returns (address) {
+        return relationships.viewReferrer(user);
     }
 
     function setPointsForAction(
@@ -62,12 +62,12 @@ contract ReferralProgram is AccessControl {
         points.setPointsForAction(action, amount);
     }
 
-    function viewPoints() public view returns (uint256) {
-        return points.getUserPoints(msg.sender);
+    function viewPoints(address user) public view returns (uint256) {
+        return points.getUserPoints(user);
     }
 
-    function getCurrentUserMilestone() public view returns (uint256) {
-        return milestones.getCurrentMilestone(msg.sender);
+    function getCurrentUserMilestone(address user) public view returns (uint256) {
+        return milestones.getCurrentMilestone(user);
     }
 
     function addNewMilestone(

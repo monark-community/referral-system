@@ -66,10 +66,10 @@ beforeEach(async () => {
 
 test("Referee has a default referrer empty", async () => {
     const value = await publicClient.readContract({
-        account: referreeAccount,
         address: contractAddress,
         abi,
         functionName: "viewReferrer",
+        args: [referreeAccount.address],
     });
 
     assert.equal(value, zeroAddress);
@@ -77,10 +77,10 @@ test("Referee has a default referrer empty", async () => {
 
 test("User has a default of zero points", async () => {
     const value = await publicClient.readContract({
-        account: referreeAccount,
         address: contractAddress,
         abi,
         functionName: "viewPoints",
+        args: [referreeAccount.address],
     });
 
     assert.equal(value, 0n);
@@ -88,10 +88,10 @@ test("User has a default of zero points", async () => {
 
 test("User has a default milestone of zero", async () => {
     const value = await publicClient.readContract({
-        account: referreeAccount,
         address: contractAddress,
         abi,
         functionName: "getCurrentUserMilestone",
+        args: [referreeAccount.address],
     });
 
     assert.equal(value, 0n);
@@ -104,19 +104,19 @@ test("points can be added to an account", async () => {
     await addReferrerAndReferree();
 
     const referrerPoints = await publicClient.readContract({
-        account: referrerAccount,
         address: contractAddress,
         abi,
         functionName: "viewPoints",
+        args: [referrerAccount.address],
     });
 
     assert.equal(referrerPoints, 100n); // referrer has 100 points after referral 
 
     const referreePoints = await publicClient.readContract({
-        account: referreeAccount,
         address: contractAddress,
         abi,
         functionName: "viewPoints",
+        args: [referreeAccount.address],
     });
 
     assert.equal(referreePoints, 50n); // referree has 50 points after referral
@@ -127,19 +127,19 @@ test("accepting invite adds a referrer-referree relationship", async () => {
     await addReferrerAndReferree();
 
     const referrerValue = await publicClient.readContract({
-        account: referreeAccount,
         address: contractAddress,
         abi,
         functionName: "viewReferrer",
+        args: [referreeAccount.address],
     });
 
     assert.equal(referrerValue, referrerAccount.address);
 
     const referreeValues = await publicClient.readContract({
-        account: referrerAccount,
         address: contractAddress,
         abi,
         functionName: "viewReferrals",
+        args: [referrerAccount.address],
     });
 
     assert.equal(referreeValues[0], referreeAccount.address);
@@ -154,19 +154,19 @@ test("user achieves a milestone", async () => {
     await addReferrerAndReferree();
 
     const referrerMilestone = await publicClient.readContract({
-        account: referrerAccount,
         address: contractAddress,
         abi,
         functionName: "getCurrentUserMilestone",
+        args: [referrerAccount.address],
     });
 
     assert.equal(referrerMilestone, 2n); // referrer has crossed the second milestone (100 points) after referring 
 
     const referreeMilestone = await publicClient.readContract({
-        account: referreeAccount,
         address: contractAddress,
         abi,
         functionName: "getCurrentUserMilestone",
+        args: [referreeAccount.address],
     });
 
     assert.equal(referreeMilestone, 1n); // referree has crossed the first milestone (25 points) after referring 
