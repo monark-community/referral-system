@@ -1,13 +1,15 @@
 'use client';
 
 import { useState } from 'react';
-import { useConnect, useAccount, useSignMessage, useDisconnect } from 'wagmi';
+import { useConnect, useAccount, useSignMessage, useDisconnect, useWriteContract } from 'wagmi';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Wallet } from 'lucide-react';
 import { walletAuth } from '@/lib/api/auth';
 import { useAuth } from '@/contexts/auth-context';
+import { WriteReferralContractHelper } from '@reffinity/blockchain-connector/writeReferralContractHelper';
+import { join } from 'path';
 
 interface WalletConnectStepProps {
   onSuccess: () => void;
@@ -22,6 +24,8 @@ export function WalletConnectStep({ onSuccess }: WalletConnectStepProps) {
   const { disconnect } = useDisconnect();
   const { connectors, connect, isPending: isConnecting } = useConnect();
   const { signMessageAsync } = useSignMessage();
+  const { writeContract } = useWriteContract();
+  
 
   // Get MetaMask connector
   const metaMaskConnector = connectors.find(
@@ -63,6 +67,13 @@ export function WalletConnectStep({ onSuccess }: WalletConnectStepProps) {
 
       // Store token and user data
       login(response.token, response.user);
+
+      const joinProgramContext = await WriteReferralContractHelper.joinProgramContext();
+
+      writeContract({
+        ...joinProgramContext,
+        args: [],
+      })
 
       // Move to next step
       onSuccess();

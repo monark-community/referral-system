@@ -1,8 +1,7 @@
-import { createPublicClient, createWalletClient, http } from 'viem'
-import { privateKeyToAccount } from 'viem/accounts';
+import { createPublicClient, http } from 'viem'
 import { hardhat, sepolia} from 'viem/chains'
 
-export function createClients(network: 'localhost' | 'sepolia' ){
+export function createClient(network: 'localhost' | 'sepolia' ){
 
     const chain = network === 'localhost'? hardhat : sepolia;
 
@@ -10,17 +9,10 @@ export function createClients(network: 'localhost' | 'sepolia' ){
         throw new Error("RPC_URL is not defined");
     }
 
-    var account;
-
     const publicClient = createPublicClient({
         chain: chain,
         transport: http(process.env.RPC_URL)
     })
 
-    const walletClient = createWalletClient({
-        chain: chain,
-        transport: http(process.env.RPC_URL)
-    })
-
-    return {publicClient, walletClient};
+    return {publicClient};
 }

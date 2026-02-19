@@ -6,9 +6,13 @@
     "@reffinity/common-contracts": "*"
   },
   "exports": {
-    ".": {
-      "import":"./dist/referral.service.js",
-      "types": "./dist/referral.service.d.ts"
+    "./readReferralContract": {
+      "import": "./dist/readReferralContract.service.js",
+      "types": "./dist/readReferralContract.service.d.ts"
+    },
+    "./writeReferralContractHelper": {
+      "import": "./dist/writeReferralContractHelper.js",
+      "types": "./dist/writeReferralContractHelper.d.ts"
     }
   },
   "scripts": {
