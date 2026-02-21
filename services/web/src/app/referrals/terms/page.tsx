@@ -39,6 +39,11 @@ export default function TermsPage() {
     // This is handled in the success step
   };
 
+  const handleReturningUser = () => {
+    closeOnboarding();
+    router.push("/referrals");
+  };
+
   return (
     <div className="h-screen bg-background flex flex-col max-w-md mx-auto overflow-hidden">
       <PageHeader
@@ -177,6 +182,7 @@ export default function TermsPage() {
         onNextStep={nextStep}
         onPreviousStep={previousStep}
         onGoToStep={goToStep}
+        onReturningUser={handleReturningUser}
       />
     </div>
   );

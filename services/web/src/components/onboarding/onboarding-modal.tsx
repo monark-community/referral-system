@@ -20,6 +20,7 @@ interface OnboardingModalProps {
   onNextStep: () => void;
   onPreviousStep: () => void;
   onGoToStep: (step: OnboardingStep) => void;
+  onReturningUser?: () => void;
 }
 
 const stepConfig: Record<OnboardingStep, { title: string; description: string }> = {
@@ -48,6 +49,7 @@ export function OnboardingModal({
   onNextStep,
   onPreviousStep,
   onGoToStep,
+  onReturningUser,
 }: OnboardingModalProps) {
   const config = stepConfig[step];
 
@@ -95,7 +97,7 @@ export function OnboardingModal({
         </div>
 
         {/* Step Content */}
-        {step === 'wallet' && <WalletConnectStep onSuccess={onNextStep} />}
+        {step === 'wallet' && <WalletConnectStep onSuccess={onNextStep} onReturningUser={onReturningUser} />}
 
         {step === 'profile' && (
           <ProfileStep onSuccess={onNextStep} onBack={onPreviousStep} />

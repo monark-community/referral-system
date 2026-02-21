@@ -1,10 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { PageHeader } from "@/components/referral";
 import { Button } from "@/components/ui/button";
-import { Gift, Link2, Shield, Sparkles } from "lucide-react";
+import { Gift, Link2, Shield, Sparkles, X } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
+import { LoginModal } from "@/components/login/login-modal";
 
 const features = [
   {
@@ -32,14 +33,34 @@ const features = [
 export default function WelcomePage() {
   const router = useRouter();
   const { isAuthenticated, isLoading } = useAuth();
+  const [isLoginOpen, setIsLoginOpen] = useState(false);
 
   return (
     <div className="h-screen bg-background flex flex-col max-w-md mx-auto overflow-hidden">
-      <PageHeader
-        subtitle="LedgerLift"
-        title="Referrals Program"
-        onClose={() => router.push("/")}
-      />
+      <header className="flex items-center justify-between px-4 py-3 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div>
+          <p className="text-xs text-muted-foreground">LedgerLift</p>
+          <h1 className="text-base font-semibold text-foreground">Referrals Program</h1>
+        </div>
+        <div className="flex items-center gap-2">
+          {!isLoading && !isAuthenticated && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setIsLoginOpen(true)}
+            >
+              Login
+            </Button>
+          )}
+          <button
+            onClick={() => router.push("/")}
+            className="p-1 rounded-md hover:bg-secondary transition-colors"
+            aria-label="Close"
+          >
+            <X className="w-5 h-5 text-foreground" />
+          </button>
+        </div>
+      </header>
 
       <main className="flex-1 min-h-0 overflow-y-auto">
         <div className="p-4 space-y-6">
@@ -109,6 +130,11 @@ export default function WelcomePage() {
           )}
         </div>
       </footer>
+
+      <LoginModal
+        isOpen={isLoginOpen}
+        onClose={() => setIsLoginOpen(false)}
+      />
     </div>
   );
 }
