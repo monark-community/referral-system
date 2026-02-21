@@ -13,9 +13,10 @@ import { join } from 'path';
 
 interface WalletConnectStepProps {
   onSuccess: () => void;
+  onReturningUser?: () => void;
 }
 
-export function WalletConnectStep({ onSuccess }: WalletConnectStepProps) {
+export function WalletConnectStep({ onSuccess, onReturningUser }: WalletConnectStepProps) {
   const [error, setError] = useState<string | null>(null);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
 
@@ -67,6 +68,12 @@ export function WalletConnectStep({ onSuccess }: WalletConnectStepProps) {
 
       // Store token and user data
       login(response.token, response.user);
+
+      // If returning user, skip onboarding and go to dashboard
+      if (!response.isNewUser && onReturningUser) {
+        onReturningUser();
+        return;
+      }
 
       const joinProgramContext = await WriteReferralContractHelper.joinProgramContext();
 
