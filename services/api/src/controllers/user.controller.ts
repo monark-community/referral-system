@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
-import { prisma } from '../lib/prisma';
-import { generateEmailVerificationToken } from '../services/auth.service';
+import { prisma } from '../lib/prisma.js';
+import { generateEmailVerificationToken } from '../services/auth.service.js';
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 
@@ -162,7 +162,7 @@ export async function sendVerificationEmail(req: Request, res: Response): Promis
     });
 
     // Send verification email
-    const { sendVerificationEmail: sendEmail } = await import('../services/email.service');
+    const { sendVerificationEmail: sendEmail } = await import('../services/email.service.js');
     await sendEmail(user.email, token, user.name);
 
     res.json({ success: true, message: 'Verification email sent' });

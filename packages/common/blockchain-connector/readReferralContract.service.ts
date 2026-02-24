@@ -1,6 +1,9 @@
 import { contracts } from './contracts.js'
+import { WatchContractEventReturnType } from 'viem'
 
 export class ReadReferralContractService {
+    private unwatchPointsAddedEvent: WatchContractEventReturnType | null = null;
+
     constructor(private clients: any) {}
 
     async getReferrals(userAddress: string) {
@@ -38,5 +41,27 @@ export class ReadReferralContractService {
             functionName: 'getCurrentUserMilestone',
             args: [userAddress] 
         })
+    }
+
+    async listenToPointsAddedEvent(callback: (eventData: any) => void) {
+        const unwatch =this.clients.publicClient.watchContractEvent({
+            address: contracts.referral.address.local,
+            abi: contracts.referral.abi,
+            eventName: 'PointsAdded',
+            onData: (event: any) => {    
+                const { user, points } = event.args;
+                callback({ user, points });
+            }
+        })
+
+        this.unwatchPointsAddedEvent = unwatch;
+
+    }
+
+    async stopListeningToPointsAddedEvent() {
+        if (this.unwatchPointsAddedEvent) {
+            this.unwatchPointsAddedEvent();
+            this.unwatchPointsAddedEvent = null;
+        }
     }
 }

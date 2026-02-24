@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
-import { verifyJWT } from '../services/auth.service';
-import { prisma } from '../lib/prisma';
+import { verifyJWT } from '../services/auth.service.js';
+import { prisma } from '../lib/prisma.js';
 
 // Extend Express Request type to include user
 declare global {

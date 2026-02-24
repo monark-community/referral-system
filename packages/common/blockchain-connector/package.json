@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "type": "module",
   "dependencies": {
-    "@reffinity/common-contracts": "*"
+    "@reffinity/common-contracts": "*",
+    "dotenv": "^17.3.1"
   },
   "exports": {
     "./readReferralContract": {
@@ -13,9 +14,14 @@
     "./writeReferralContractHelper": {
       "import": "./dist/writeReferralContractHelper.js",
       "types": "./dist/writeReferralContractHelper.d.ts"
+    },
+    "./clients": {
+      "import": "./dist/clients.js",
+      "types": "./dist/clients.d.ts"
     }
   },
   "scripts": {
-    "build": "tsc"
+    "build": "tsc",
+    "test": "node --test"
   }
 }

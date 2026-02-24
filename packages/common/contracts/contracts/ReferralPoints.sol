@@ -15,6 +15,9 @@ contract ReferralPoints is AccessControl {
         AcceptedInvite
     }
 
+
+    event PointsAdded(address indexed user, uint256 points);
+
     mapping(Action => uint256) pointsForAction;
     mapping(address => EnumerableSet.UintSet) userCompletedActions;
 
@@ -40,6 +43,7 @@ contract ReferralPoints is AccessControl {
             "completeAction: caller lacks ACCESS_ROLE"
         );
         userCompletedActions[user].add(uint256(action));
+        emit PointsAdded(user, getUserPoints(user));
     }
 
     function getUserPoints(
