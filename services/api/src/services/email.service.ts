@@ -52,12 +52,10 @@ function getVerificationEmailHtml(
       <td align="center">
         <table width="560" cellpadding="0" cellspacing="0" style="background-color: #121212; border-radius: 12px; overflow: hidden;">
 
-          <!-- Header with text logo -->
+          <!-- Header with logo -->
           <tr>
             <td style="background-color: #121212; padding: 36px 40px 24px; text-align: center;">
-              <span style="font-size: 24px; font-weight: 700; letter-spacing: 1px;">
-                <span style="color: #F27A1A;">M</span><span style="color: #ffffff;">ONARK</span>
-              </span>
+              <img src="https://raw.githubusercontent.com/monark-community/referral-system/email-verif/assets/logos/logo-branded-dark-horizontal.png" alt="Monark" width="160" style="display: inline-block;" />
             </td>
           </tr>
 
