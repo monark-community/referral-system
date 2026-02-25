@@ -41,3 +41,12 @@ export async function sendVerificationEmail(): Promise<{ success: boolean; messa
     method: 'POST',
   });
 }
+
+/**
+ * Delete user account
+ */
+export async function deleteAccount(): Promise<{ success: boolean; message: string }> {
+  return apiClient('/users/account', {
+    method: 'DELETE',
+  });
+}

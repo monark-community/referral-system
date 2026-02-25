@@ -218,3 +218,27 @@ export async function verifyEmail(req: Request, res: Response): Promise<void> {
     res.redirect(`${FRONTEND_URL}/referrals/email-verified?error=server`);
   }
 }
+
+/**
+ * DELETE /api/users/account
+ * Delete the current user's account
+ */
+export async function deleteAccount(req: Request, res: Response): Promise<void> {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    await prisma.user.delete({
+      where: { id: req.user.id },
+    });
+
+    console.log(`Account deleted: ${req.user.id}`);
+
+    res.json({ success: true, message: 'Account deleted' });
+  } catch (error) {
+    console.error('Delete account error:', error);
+    res.status(500).json({ error: 'Failed to delete account' });
+  }
+}

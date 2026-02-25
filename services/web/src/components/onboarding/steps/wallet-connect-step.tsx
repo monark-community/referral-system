@@ -14,9 +14,10 @@ import { join } from 'path';
 interface WalletConnectStepProps {
   onSuccess: () => void;
   onReturningUser?: () => void;
+  onNeedsVerification?: () => void;
 }
 
-export function WalletConnectStep({ onSuccess, onReturningUser }: WalletConnectStepProps) {
+export function WalletConnectStep({ onSuccess, onReturningUser, onNeedsVerification }: WalletConnectStepProps) {
   const [error, setError] = useState<string | null>(null);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
 
@@ -69,9 +70,15 @@ export function WalletConnectStep({ onSuccess, onReturningUser }: WalletConnectS
       // Store token and user data
       login(response.token, response.user);
 
-      // If returning user, skip onboarding and go to dashboard
-      if (!response.isNewUser && onReturningUser) {
+      // Returning user with verified email - go to dashboard
+      if (!response.isNewUser && response.user.emailVerified && onReturningUser) {
         onReturningUser();
+        return;
+      }
+
+      // Returning user with unverified email - go to verification step
+      if (!response.isNewUser && !response.user.emailVerified && onNeedsVerification) {
+        onNeedsVerification();
         return;
       }
 

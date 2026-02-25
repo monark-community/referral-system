@@ -3,7 +3,8 @@ import {
   getProfile,
   updateProfile,
   sendVerificationEmail,
-  verifyEmail
+  verifyEmail,
+  deleteAccount
 } from '../controllers/user.controller';
 import { authMiddleware } from '../middlewares/auth.middleware';
 import { validateProfileUpdate } from '../middlewares/validation.middleware';
@@ -21,5 +22,8 @@ router.post('/verify-email/send', authMiddleware, sendVerificationEmail);
 
 // GET /api/users/verify-email/:token - Verify email from link
 router.get('/verify-email/:token', verifyEmail);
+
+// DELETE /api/users/account - Delete user account
+router.delete('/account', authMiddleware, deleteAccount);
 
 export default router;
