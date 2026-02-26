@@ -13,8 +13,7 @@ export class BlockchainListenerService {
     async initialize(): Promise<void> {
         try {
             console.log("Initializing blockchain listener...");
-            console.log("PublicClient:", typeof this.publicClient);
-            console.log("PublicClient Watcher:", typeof this.publicClient.watchContractEvent);
+            console.log("PublicClient:", await this.publicClient.getChainId());
             await this.startPointsAddedListener();
 
             console.log("Blockchain listener initialized successfully.");
@@ -34,10 +33,17 @@ export class BlockchainListenerService {
                 console.log(`PointsAdded event detected for user ${user} with points ${points}`);
                 // Update the user's points in the database
                 const normalizedAddress = user.toLowerCase();       
-                await prisma.user.update({
+                const existingUser = await prisma.user.findUnique({
+                    where: { walletAddress: normalizedAddress },
+                });
+                if (existingUser) {
+                    await prisma.user.update({
                     where: { walletAddress: normalizedAddress },
                     data: { earnedPoints: Number(points) }
                 });
+                } else {
+                    console.warn(`User ${normalizedAddress} not found in DB, skipping points update`);
+                }
                 console.log(`Updated points for user ${normalizedAddress} to ${points}`);
             });
 

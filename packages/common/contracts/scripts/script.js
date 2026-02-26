@@ -8,7 +8,7 @@ import artifact from "../artifacts/contracts/ReferralProgram.sol/ReferralProgram
 async function main() {
   // Hardhat local private key (account #0)
   const account = privateKeyToAccount(
-    "0xdf57089febbacf7ba0bc227dafbffa9fc08a93fdc68e1e42411a14efcf23656e"
+    "0x92db14e403b83dfe3df233f83dfa3a0d7096f21ca9b0d6d6b8d88b2b4ec1564e"
   );
 
   const publicClient = createPublicClient({
@@ -29,18 +29,7 @@ async function main() {
       })
       const receipt = await publicClient.waitForTransactionReceipt({ hash });
 
-      for (const log of receipt.logs) {
-        try {
-          const decoded = decodeEventLog({
-            abi: artifact.abi,
-            data: log.data,
-            topics: log.topics,
-          })
-
-          console.log('Event name:', decoded.eventName)
-          console.log('Args:', decoded.args)
-        } catch {}
-      }
+    console.log(receipt.logs)
 
     // const events = await publicClient.getContractEvents({
     //   address: '0x5fbdb2315678afecb367f032d93f642f64180aa3',

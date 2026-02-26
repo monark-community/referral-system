@@ -48,10 +48,18 @@ export class ReadReferralContractService {
             address: contracts.referral.address.local,
             abi: contracts.referral.abi,
             eventName: 'PointsAdded',
-            onData: (event: any) => {    
-                const { user, points } = event.args;
-                callback({ user, points });
-            }
+            onLogs: (logs: any) => {
+                for (const log of logs) {
+                    if (!log.args) continue;
+
+                    const { user, points } = log.args as {
+                        user: `0x${string}`;
+                        points: bigint;
+                    };
+
+                    callback({ user, points });
+                }
+            },
         })
 
         this.unwatchPointsAddedEvent = unwatch;

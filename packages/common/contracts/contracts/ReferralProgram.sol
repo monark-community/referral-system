@@ -37,13 +37,17 @@ contract ReferralProgram is AccessControl {
         relationships.createRelationship(msg.sender, referrer);
         points.completeAction(ReferralPoints.Action.ReferredNewUser, referrer);
         points.completeAction(ReferralPoints.Action.AcceptedInvite, msg.sender);
+        uint256 referrerPoints = points.getUserPoints(referrer);
+        uint256 refereePoints = points.getUserPoints(msg.sender);
+        emit ReferralPoints.PointsAdded(referrer, referrerPoints);
+        emit ReferralPoints.PointsAdded(msg.sender, refereePoints);
         milestones.updateUserMilestone(
             msg.sender,
-            points.getUserPoints(msg.sender)
+            refereePoints
         );
         milestones.updateUserMilestone(
             referrer,
-            points.getUserPoints(referrer)
+            referrerPoints
         );
     }
 
