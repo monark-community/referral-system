@@ -53,7 +53,7 @@ contract ReferralPoints is AccessControl {
         EnumerableSet.UintSet storage set = userCompletedActions[user];
 
         for (uint256 i = 0; i < set.length(); i++) {
-            usersPointAmount += pointsForAction[Action(set.at(i))];
+            usersPointAmount = pointsForAction[Action(set.at(i))];
         }
 
         return usersPointAmount;
