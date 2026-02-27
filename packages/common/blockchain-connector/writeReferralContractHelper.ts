@@ -1,9 +1,8 @@
 import { contracts } from './contracts.js'
-import type { Address } from 'viem'
 
 export class WriteReferralContractHelper {
 
-    static async staticacceptInviteContext() {
+    static async acceptInviteContext() {
         return {
             abi: contracts.referral.abi,
             address: contracts.referral.address.local,

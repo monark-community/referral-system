@@ -16,7 +16,7 @@ export class ReadReferralContractService {
         return this.clients.publicClient.readContract({
             address: contracts.referral.address.local,
             abi: contracts.referral.abi,
-            functionName: 'viewReferrers',
+            functionName: 'viewReferrer',
             args: [userAddress]
         })
     }
