@@ -8,7 +8,7 @@ import artifact from "../artifacts/contracts/ReferralProgram.sol/ReferralProgram
 async function main() {
   // Hardhat local private key (account #0)
   const account = privateKeyToAccount(
-    "0x92db14e403b83dfe3df233f83dfa3a0d7096f21ca9b0d6d6b8d88b2b4ec1564e"
+    "0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6"
   );
 
   const publicClient = createPublicClient({
