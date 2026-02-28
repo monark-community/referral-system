@@ -1,10 +1,10 @@
 import { Request, Response } from 'express';
-import { prisma } from '../lib/prisma';
+import { prisma } from '../lib/prisma.js';
 import {
   generateJWT,
   verifyWalletSignature,
   generateReferralCode,
-} from '../services/auth.service';
+} from '../services/auth.service.js';
 
 /**
  * POST /api/auth/wallet

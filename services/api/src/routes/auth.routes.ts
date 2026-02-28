@@ -1,7 +1,7 @@
 import { Router } from 'express';
-import { walletAuth, getMe, logout } from '../controllers/auth.controller';
-import { authMiddleware } from '../middlewares/auth.middleware';
-import { validateWalletAuth } from '../middlewares/validation.middleware';
+import { walletAuth, getMe, logout } from '../controllers/auth.controller.js';
+import { authMiddleware } from '../middlewares/auth.middleware.js';
+import { validateWalletAuth } from '../middlewares/validation.middleware.js';
 
 const router = Router();
 

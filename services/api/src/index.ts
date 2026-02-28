@@ -2,8 +2,9 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
-import routes from './routes';
-import { errorHandler } from './middlewares/error.middleware';
+import routes from './routes/index.js';
+import { errorHandler } from './middlewares/error.middleware.js';
+import { BlockchainListenerService } from './services/blockchainListener.service.js';
 
 // Load environment variables
 dotenv.config();
@@ -30,6 +31,17 @@ app.use('/api', routes);
 
 // Error handling
 app.use(errorHandler);
+
+//bolockchain listener service
+const blockchainListener = new BlockchainListenerService();
+blockchainListener.initialize().catch(error => {
+  console.error('Failed to initialize blockchain listener:', error);
+  process.exit(1);
+});
+process.on('SIGTERM', () => {
+  blockchainListener.stop();
+  console.log('Shutting down gracefully');
+});
 
 // Start server
 app.listen(PORT, () => {

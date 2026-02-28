@@ -9,17 +9,16 @@ import {
   NavMenuItem,
 } from "@/components/referral";
 
+import { getProfile } from '@/lib/api/user';
+import type { User } from "@/lib/api/auth";
+
 // Mock data - replace with actual API calls
-const mockUserData = {
-  earnedPoints: 15000,
-  pendingPoints: 10000,
-  referralCode: "K0FBE6BARG",
-  pendingInvites: 3,
-};
+const apiResponse = await getProfile();
+const userApiData: User = apiResponse.user;
 
 export default function ReferralsPage() {
   const router = useRouter();
-  const [userData] = useState(mockUserData);
+  const [userData] = useState(userApiData);
 
   const referralLink = `https://monark.io/invite/${userData.referralCode}`;
 
@@ -71,7 +70,7 @@ export default function ReferralsPage() {
             <NavMenuItem
               label="Invites History"
               onClick={() => router.push("/referrals/history")}
-              badge={userData.pendingInvites}
+              badge={userData.pendingPoints > 0 ? 1 : 0}
             />
             <NavMenuItem
               label="Preferences"

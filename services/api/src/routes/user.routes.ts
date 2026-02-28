@@ -4,9 +4,9 @@ import {
   updateProfile,
   sendVerificationEmail,
   verifyEmail
-} from '../controllers/user.controller';
-import { authMiddleware } from '../middlewares/auth.middleware';
-import { validateProfileUpdate } from '../middlewares/validation.middleware';
+} from '../controllers/user.controller.js';
+import { authMiddleware } from '../middlewares/auth.middleware.js';
+import { validateProfileUpdate } from '../middlewares/validation.middleware.js';
 
 const router = Router();
 

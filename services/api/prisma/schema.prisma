@@ -40,3 +40,10 @@ model User {
 
   @@map("users")
 }
+
+//Used for the listener service to determine the last block updated_at
+model ChainSyncState {
+  id                 Int     @id @default(1)
+  lastProcessedBlock BigInt
+  lastProcessedLogIndex Int
+}

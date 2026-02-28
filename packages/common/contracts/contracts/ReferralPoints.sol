@@ -15,8 +15,10 @@ contract ReferralPoints is AccessControl {
         AcceptedInvite
     }
 
+    event PointsAdded(address indexed user, uint256 points);
+
     mapping(Action => uint256) pointsForAction;
-    mapping(address => EnumerableSet.UintSet) userCompletedActions;
+    mapping(address => mapping(Action => uint256)) public userActionCounts;
 
     //Gives the role of access to the contract provided, and admin to the user provided
     constructor(address admin_role, address access_role) {
@@ -39,7 +41,7 @@ contract ReferralPoints is AccessControl {
             hasRole(ACCESS_ROLE, msg.sender),
             "completeAction: caller lacks ACCESS_ROLE"
         );
-        userCompletedActions[user].add(uint256(action));
+        userActionCounts[user][action] += 1;
     }
 
     function getUserPoints(
@@ -50,11 +52,13 @@ contract ReferralPoints is AccessControl {
             "getUserPoints: caller lacks ACCESS_ROLE"
         );
         uint256 usersPointAmount = 0;
-        EnumerableSet.UintSet storage set = userCompletedActions[user];
+        
 
-        for (uint256 i = 0; i < set.length(); i++) {
-            usersPointAmount = pointsForAction[Action(set.at(i))];
-        }
+        for (uint256 i = 0; i <= uint256(type(Action).max); i++) {
+        Action action = Action(i);
+        uint256 completedAmount = userActionCounts[user][action];
+        usersPointAmount += completedAmount * pointsForAction[action];
+    }
 
         return usersPointAmount;
     }
