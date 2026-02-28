@@ -18,7 +18,7 @@ describe('ReadReferralContractService', () => {
         async (args: ReadContractParameters<any, string, readonly any[]>) => {
           if (args.functionName === 'viewPoints') return 42;
           if (args.functionName === 'viewReferrals') return ['0xabc', '0xdef'];
-          if (args.functionName === 'viewReferrers') return '0xxyz';
+          if (args.functionName === 'viewReferrer') return '0xxyz';
           throw new Error(`Unexpected function: ${args.functionName}`);
         }
       ) as unknown as PublicClient['readContract'],
@@ -59,7 +59,7 @@ describe('ReadReferralContractService', () => {
     const referrer = await service.getReferrers('0x123');
     expect(referrer).toBe('0xxyz');
     expect(mockPublicClient.readContract).toHaveBeenCalledWith(
-      expect.objectContaining({ functionName: 'viewReferrers', args: ['0x123'] })
+      expect.objectContaining({ functionName: 'viewReferrer', args: ['0x123'] })
     );
   });
 });
