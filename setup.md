@@ -7,7 +7,11 @@ All commands run from the project root.
 ## Quick Start
 
 ```bash
-# One command to do everything:
+
+# Spin up local chain if not up already (Best to keep the chain seperate to app):
+npm run contracts:setup-local
+
+# One command to do everything for the app:
 npm run setup
 
 # Or step by step:

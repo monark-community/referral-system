@@ -6,7 +6,7 @@
   "description": "Reffinity API Backend",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "node --loader ts-node/esm --watch src/index.ts",
+    "dev": "nodemon --watch src --exec tsx src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
     "lint": "eslint src --ext .ts",
@@ -30,11 +30,13 @@
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
     "@types/jsonwebtoken": "^9.0.7",
-    "@types/node": "^22.10.0",
+    "@types/node": "^22.19.13",
     "@types/uuid": "^10.0.0",
+    "nodemon": "^3.1.14",
     "prisma": "^5.22.0",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
+    "tsx": "^4.21.0",
     "typescript": "^5.7.0"
   }
 }

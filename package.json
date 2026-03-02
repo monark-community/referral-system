@@ -17,6 +17,7 @@
     "dev": "npm run build:packages && concurrently \"npm run dev:api\" \"npm run dev:web\"",
     "dev:api": "npm run dev -w reffinity-api",
     "dev:web": "npm run dev -w reffinity-web",
+    "contracts:setup-local": "npm run setup-local -w @reffinity/common-contracts",
     "db:migrate": "npm run db:migrate -w reffinity-api",
     "db:generate": "npm run db:generate -w reffinity-api",
     "lint": "npm run lint -w reffinity-api && npm run lint -w reffinity-web"
@@ -24,6 +25,7 @@
   "devDependencies": {
     "concurrently": "^8.2.2",
     "ts-node": "^10.9.2",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "wait-on": "^9.0.4"
   }
 }

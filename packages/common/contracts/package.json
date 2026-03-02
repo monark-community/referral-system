@@ -12,7 +12,9 @@
   "scripts": {
     "build": "tsc",
     "compile": "npx hardhat compile",
-    "node": "npx hardhat node",
+    "hardhat:node": "hardhat node",
+    "hardhat:deploy": "hardhat run ./scripts/deploy.js --network localhost",
+    "setup-local": "concurrently -s first \"npm run hardhat:node\" \"wait-on http://localhost:8545 && npm run hardhat:deploy\"",
     "viem-test": "node scripts/viem-test.js"
   },
   "author": "",
