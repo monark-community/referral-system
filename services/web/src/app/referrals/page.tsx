@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   PageHeader,
@@ -12,13 +12,32 @@ import {
 import { getProfile } from '@/lib/api/user';
 import type { User } from "@/lib/api/auth";
 
-// Mock data - replace with actual API calls
-const apiResponse = await getProfile();
-const userApiData: User = apiResponse.user;
-
 export default function ReferralsPage() {
   const router = useRouter();
-  const [userData] = useState(userApiData);
+  const [userData, setUserData] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    getProfile()
+      .then((res) => setUserData(res.user))
+      .catch((err) => {
+        console.error("Failed to load profile:", err);
+        router.push("/referrals/welcome");
+      })
+      .finally(() => setLoading(false));
+  }, [router]);
+
+  if (loading) {
+    return (
+      <div className="h-screen bg-background flex items-center justify-center">
+        <p>Loading...</p>
+      </div>
+    );
+  }
+
+  if (!userData) {
+    return null;
+  }
 
   const referralLink = `https://monark.io/invite/${userData.referralCode}`;
 
