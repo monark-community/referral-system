@@ -5,23 +5,21 @@
   "type": "module",
   "description": "Reffinity - Smart contract-powered referral system",
   "workspaces": [
-    "packages/*",
-    "services/*",
     "packages/common/contracts",
     "packages/common/blockchain-connector",
     "services/api",
     "services/web"
   ],
   "scripts": {
-    "setup": "docker-compose up -d && npm run install:all && npm run db:migrate",
-    "install:all": "cd services/api && npm install && cd ../web && npm install",
-    "db:migrate": "cd services/api && npx prisma migrate dev",
-    "db:generate": "cd services/api && npx prisma generate",
-    "dev": "concurrently \"npm run dev:api\" \"npm run dev:web\"",
-    "dev:api": "cd services/api && npm run dev",
-    "dev:web": "cd services/web && npm run dev",
-    "build": "cd services/api && npm run build && cd ../web && npm run build",
-    "lint": "cd services/api && npm run lint && cd ../web && npm run lint"
+    "setup": "docker-compose up -d && npm install && npm run build:packages && npm run db:generate && npm run db:migrate",
+    "build:packages": "npm run build -w @reffinity/common-contracts && npm run build -w @reffinity/blockchain-connector",
+    "build": "npm run build:packages && npm run build -w reffinity-api && npm run build -w reffinity-web",
+    "dev": "npm run build:packages && concurrently \"npm run dev:api\" \"npm run dev:web\"",
+    "dev:api": "npm run dev -w reffinity-api",
+    "dev:web": "npm run dev -w reffinity-web",
+    "db:migrate": "npm run db:migrate -w reffinity-api",
+    "db:generate": "npm run db:generate -w reffinity-api",
+    "lint": "npm run lint -w reffinity-api && npm run lint -w reffinity-web"
   },
   "devDependencies": {
     "concurrently": "^8.2.2",

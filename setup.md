@@ -1,20 +1,31 @@
 # Reffinity Setup Guide
 
-All commands run from the project root: `c:\Users\User\Documents\referral-system`
+All commands run from the project root.
 
 ---
 
 ## Quick Start
 
 ```bash
-# 1. Install all dependencies
-npm install                  # Install root dependencies (concurrently)
-npm run install:all          # Install API and Web dependencies
+# One command to do everything:
+npm run setup
 
-# 2. Setup database (requires PostgreSQL running)
-npm run db:migrate           # Run Prisma migrations
+# Or step by step:
 
-# 3. Start development servers
+# 1. Start PostgreSQL
+docker-compose up -d
+
+# 2. Install all dependencies (npm workspaces handles everything)
+npm install
+
+# 3. Build common packages (contracts → blockchain-connector)
+npm run build:packages
+
+# 4. Setup database
+npm run db:generate
+npm run db:migrate
+
+# 5. Start development servers
 npm run dev                  # Starts both API (3001) and Web (3000)
 ```
 
@@ -22,34 +33,29 @@ npm run dev                  # Starts both API (3001) and Web (3000)
 
 ## Individual Commands
 
-### Setup Smart Contracts 
+### Setup Smart Contracts
 
 | Command | Description |
 |---------|-------------|
 | `cd packages/common/contracts` | Navigate to the contracts directory |
-| `npm install` | install dependencies |
 | `npx hardhat compile` | compile hardhat contracts |
 | `npx hardhat node` | spin up a local node |
 | `npx hardhat run scripts/deploy.js` | deploy the smart contract to the local node |
-| `npm build` | builds the ABI functions to be used |
-| `cd packages/common/blockchain-connector` | Navigate to the blockchain-connector directory |
-| `npm install` | install dependencies |
-| `npm build` | builds the blockchain helper files to be used in the app |
+| `npm run build` | builds the ABI functions to be used |
 
-### Installation
+### Build Common Packages
 
 | Command | Description |
 |---------|-------------|
-| `npm install` | Install root package dependencies |
-| `npm run install:all` | Install both API and Web dependencies |
-| `cd services/api && npm install` | Install only API dependencies |
-| `cd services/web && npm install` | Install only Web dependencies |
+| `npm run build:packages` | Build contracts and blockchain-connector in order |
+| `npm run build -w @reffinity/common-contracts` | Build only the contracts package |
+| `npm run build -w @reffinity/blockchain-connector` | Build only the blockchain-connector package |
 
 ### Running Servers
 
 | Command | Description |
 |---------|-------------|
-| `npm run dev` | Start both API and Web servers |
+| `npm run dev` | Build packages, then start both API and Web servers |
 | `npm run dev:api` | Start only the API server (port 3001) |
 | `npm run dev:web` | Start only the Web server (port 3000) |
 
@@ -63,7 +69,7 @@ npm run dev                  # Starts both API (3001) and Web (3000)
 | `cd services/api && npx prisma migrate dev` | Create new migration |
 | `cd services/api && npx prisma db push` | Push schema changes without migration |
 
-### Docker (Optional)
+### Docker
 
 | Command | Description |
 |---------|-------------|
@@ -109,9 +115,15 @@ SELECT * FROM users WHERE email IS NOT NULL;  -- Users with email
 ### API Environment Variables
 ```env
 PORT=3001
+NODE_ENV=development
 DATABASE_URL=postgresql://reffinity:reffinity_dev@localhost:5432/reffinity
-JWT_SECRET=your-secret-key
+JWT_SECRET=your-super-secret-key-change-in-production-min-32-chars
+JWT_EXPIRES_IN=7d
 FRONTEND_URL=http://localhost:3000
+API_URL=http://localhost:3001
+RPC_URL=http://127.0.0.1:8545
+RPC_WEBSOCKET_URL=ws://127.0.0.1:8545
+CHAIN_TYPE=localhost
 ```
 
 ### Web Environment Variables
@@ -162,3 +174,7 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 ### MetaMask not connecting
 - Make sure MetaMask extension is installed
 - Check you're on the correct network (Sepolia for testnet)
+
+### API build errors
+- Make sure common packages are built first: `npm run build:packages`
+- If you change code in `packages/common/`, rebuild with `npm run build:packages`
