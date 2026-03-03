@@ -44,6 +44,10 @@ contract ReferralPoints is AccessControl {
         userActionCounts[user][action] += 1;
     }
 
+    function getPointsForAction(Action action) public view returns (uint256) {
+        return pointsForAction[action];
+    }
+
     function getUserPoints(
         address user
     ) public view onlyRole(ACCESS_ROLE) returns (uint256) {
