@@ -9,7 +9,6 @@ import { Wallet } from 'lucide-react';
 import { walletAuth } from '@/lib/api/auth';
 import { useAuth } from '@/contexts/auth-context';
 import { WriteReferralContractHelper } from '@reffinity/blockchain-connector/writeReferralContractHelper';
-import { join } from 'path';
 
 interface WalletConnectStepProps {
   onSuccess: () => void;
@@ -63,8 +62,14 @@ export function WalletConnectStep({ onSuccess, onReturningUser }: WalletConnectS
       // Request signature from wallet
       const signature = await signMessageAsync({ message });
 
+      // Check for stored referral code from invite link
+      const referralCode = localStorage.getItem('referralCode') || undefined;
+
       // Send to backend for verification
-      const response = await walletAuth(address, signature, message);
+      const response = await walletAuth(address, signature, message, referralCode);
+
+      // Clear the stored referral code after use
+      localStorage.removeItem('referralCode');
 
       // Store token and user data
       login(response.token, response.user);
@@ -75,12 +80,20 @@ export function WalletConnectStep({ onSuccess, onReturningUser }: WalletConnectS
         return;
       }
 
-      const joinProgramContext = await WriteReferralContractHelper.joinProgramContext();
-
-      writeContract({
-        ...joinProgramContext,
-        args: [],
-      })
+      // If referred, call acceptInvite with referrer's address; otherwise joinProgram
+      if (response.referrerWalletAddress) {
+        const acceptInviteContext = await WriteReferralContractHelper.acceptInviteContext();
+        writeContract({
+          ...acceptInviteContext,
+          args: [response.referrerWalletAddress as `0x${string}`],
+        });
+      } else {
+        const joinProgramContext = await WriteReferralContractHelper.joinProgramContext();
+        writeContract({
+          ...joinProgramContext,
+          args: [],
+        });
+      }
 
       // Move to next step
       onSuccess();
