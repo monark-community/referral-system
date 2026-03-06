@@ -39,7 +39,8 @@ export default function ReferralsPage() {
     return null;
   }
 
-  const referralLink = `https://monark.io/invite/${userData.referralCode}`;
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  const referralLink = `${appUrl}/invite/${userData.referralCode}`;
 
   return (
     <div className="h-screen bg-background flex flex-col max-w-md mx-auto overflow-hidden">

@@ -75,6 +75,17 @@ export async function walletAuth(req: Request, res: Response): Promise<void> {
         },
       });
 
+      // Create a Referral record to track this individual referral
+      if (referredBy) {
+        await prisma.referral.create({
+          data: {
+            referrerId: referredBy,
+            refereeId: user.id,
+            status: 'pending',
+          },
+        });
+      }
+
       console.log(`New user created: ${user.id} (${normalizedAddress})${referredBy ? ` referred by ${referredBy}` : ''}`);
     }
 
