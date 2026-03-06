@@ -116,6 +116,7 @@ contract ReferralProgram is AccessControl {
         bytes32 inviteId;
         ReferralInvites.InviteStatus status;
         uint256 points;
+        address referrer;
     }
 
     function getReferrerInvites(address user) public view returns (ReferrerInviteSummary[] memory) {
@@ -125,7 +126,8 @@ contract ReferralProgram is AccessControl {
             summaries[i] = ReferrerInviteSummary({
                 inviteId: inviteSummaries[i].inviteId,
                 status: inviteSummaries[i].status,
-                points: points.getPointsForAction(ReferralPoints.Action.ReferredNewUser)
+                points: points.getPointsForAction(ReferralPoints.Action.ReferredNewUser),
+                referrer: inviteSummaries[i].referrer
             });
         }
 

@@ -4,7 +4,6 @@ pragma solidity ^0.8.28;
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 
 contract ReferralInvites is AccessControl {
-    
     //Role allowing access to the contract
     bytes32 public constant ACCESS_ROLE = keccak256("ACCESS_ROLE");
 
@@ -19,7 +18,11 @@ contract ReferralInvites is AccessControl {
         InviteStatus status;
     }
 
-    event InviteChanged(bytes32 indexed inviteId, address indexed referrer, InviteStatus status);
+    event InviteChanged(
+        bytes32 indexed inviteId,
+        address indexed referrer,
+        InviteStatus status
+    );
 
     //Holds the invites based on a unique id code
     mapping(bytes32 => Invite) public invites;
@@ -34,23 +37,27 @@ contract ReferralInvites is AccessControl {
         _grantRole(ACCESS_ROLE, access_role);
     }
 
-    function createInvite(bytes32 inviteID, address user, InviteStatus status) public {
+    function createInvite(
+        bytes32 inviteID,
+        address user,
+        InviteStatus status
+    ) public {
         require(
             hasRole(ACCESS_ROLE, msg.sender),
             "createInvite: caller lacks ACCESS_ROLE"
         );
         require(
-            invites[inviteID].referrer == address(0), 
+            invites[inviteID].referrer == address(0),
             "Invite ID already exists"
         );
-        invites[inviteID] = Invite({
-            referrer: user,
-            status: status
-        });
+        invites[inviteID] = Invite({referrer: user, status: status});
         userInvites[user].push(inviteID);
     }
 
-    function updateInviteStatus(bytes32 inviteID, InviteStatus newStatus) public returns (address) {
+    function updateInviteStatus(
+        bytes32 inviteID,
+        InviteStatus newStatus
+    ) public returns (address) {
         require(
             hasRole(ACCESS_ROLE, msg.sender),
             "updateInviteStatus: caller lacks ACCESS_ROLE"
@@ -59,7 +66,9 @@ contract ReferralInvites is AccessControl {
         return invites[inviteID].referrer;
     }
 
-    function getInviteStatus(bytes32 inviteID) public view returns (InviteStatus) {
+    function getInviteStatus(
+        bytes32 inviteID
+    ) public view returns (InviteStatus) {
         return invites[inviteID].status;
     }
 
@@ -70,15 +79,21 @@ contract ReferralInvites is AccessControl {
     struct InviteSummary {
         bytes32 inviteId;
         InviteStatus status;
+        address referrer;
     }
 
-    function getReferrerInvites(address user) public view returns (InviteSummary[] memory) {
+    function getReferrerInvites(
+        address user
+    ) public view returns (InviteSummary[] memory) {
         bytes32[] memory inviteIds = userInvites[user];
-        InviteSummary[] memory summaries = new InviteSummary[](inviteIds.length);
+        InviteSummary[] memory summaries = new InviteSummary[](
+            inviteIds.length
+        );
         for (uint256 i = 0; i < inviteIds.length; i++) {
             summaries[i] = InviteSummary({
                 inviteId: inviteIds[i],
-                status: getInviteStatus(inviteIds[i])
+                status: getInviteStatus(inviteIds[i]),
+                referrer: user
             });
         }
         return summaries;

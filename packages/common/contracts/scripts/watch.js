@@ -1,7 +1,7 @@
 import { createPublicClient, webSocket, parseAbi } from 'viem'
 import { hardhat } from 'viem/chains'
 
-const CONTRACT_ADDRESS = '0xb7a5bd0345ef1cc5e66bf61bdec17d2461fbd968'
+const CONTRACT_ADDRESS = '0x5fbdb2315678afecb367f032d93f642f64180aa3'
 
 async function main() {
   console.log("Starting watcher...")
@@ -27,24 +27,32 @@ async function main() {
         console.log("Existing logs:", logs)
 
   const abi = parseAbi([
-    'event PointsAdded(address indexed user, uint256 points)'
+    'event InviteChanged(bytes32 indexed inviteId, address indexed referrer, uint8 status)'
   ])
 
-  client.watchContractEvent({
-    address: CONTRACT_ADDRESS,
-    abi,
-    eventName: 'PointsAdded',
-    onLogs: (logs) => {
-      console.log("PointsAdded event detected:")
-      for (const log of logs) {
-        console.log("User:", log.args?.user)
-        console.log("Points:", log.args?.points?.toString())
-        console.log("------------------------")
-      }
-    },
-  })
+  client.watchEvent({
+  onLogs: (logs) => {
+    console.log("RAW LOGS:", logs)
+  }
+})
 
-  console.log("Watching for PointsAdded events...")
+client.watchContractEvent({
+  address: CONTRACT_ADDRESS,
+  abi,
+  eventName: 'InviteChanged',
+  pollingInterval: 1000,
+  fromBlock: 0n,  // optional, only needed to replay past logs
+  onLogs: (logs) => {
+    console.log("InviteChanged event detected:")
+    for (const log of logs) {
+      console.log("InviteId:", log.args?.inviteId)
+      console.log("Referrer:", log.args?.referrer)
+      console.log("Status:", log.args?.status)
+    }
+  },
+})
+
+  console.log("Watching for InviteChanged events...")
 }
 
 main().catch(console.error)

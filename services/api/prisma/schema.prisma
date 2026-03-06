@@ -72,3 +72,16 @@ model ChainSyncState {
   lastProcessedBlock BigInt
   lastProcessedLogIndex Int
 }
+
+//Keeps track of the users invites
+model Invite {
+  inviteId   String   @id @db.VarChar(66) // bytes32 hex string
+  referrer   String   @db.VarChar(42)     // wallet address
+  status     Int                          // enum value from solidity
+  points     Int
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([referrer])
+}

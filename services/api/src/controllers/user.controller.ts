@@ -248,3 +248,39 @@ export async function verifyEmail(req: Request, res: Response): Promise<void> {
     res.redirect(`${FRONTEND_URL}/referrals/email-verified?error=server`);
   }
 }
+
+
+/**
+ * GET /api/users/invites
+ * Get current user's invites
+ */
+export async function getInvites(req: Request, res: Response): Promise<void> {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    const invites = await prisma.invite.findMany({
+      where: { referrer: req.user.walletAddress.toLowerCase() },
+      select: {
+        inviteId: true,
+        referrer: true ,
+        status: true,
+        points: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    if (!invites) {
+      res.status(404).json({ error: 'No invites found' });
+      return;
+    }
+
+    res.json({ invites });
+  } catch (error) {
+    console.error('Get invites error:', error);
+    res.status(500).json({ error: 'Failed to get invites' });
+  }
+}

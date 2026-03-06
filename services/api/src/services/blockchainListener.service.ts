@@ -6,7 +6,8 @@ import { log } from "console";
 
 
 export class BlockchainListenerService {
-    private isListening: boolean = false;
+    private isListeningToPointsAdded: boolean = false;
+    private isListeningToInviteChanged: boolean = false;
     private publicClient: PublicClient = createWebSocketClient(process.env.CHAIN_TYPE as 'localhost' | 'sepolia').publicClient;
     private readReferralContractService = new ReadReferralContractService({ publicClient: this.publicClient }); 
 
@@ -18,6 +19,7 @@ export class BlockchainListenerService {
 
             await this.syncToChain();
             await this.startPointsAddedListener();
+            await this.startInviteChangedListener();
 
             console.log("Blockchain listener initialized successfully.");
         } catch (error) {
@@ -25,8 +27,10 @@ export class BlockchainListenerService {
         }
     }
 
+
+    // Starts listening to the PointsAdded event from the referral contract and updates the database accordingly
     private async startPointsAddedListener(): Promise<void>{
-        if (this.isListening) {
+        if (this.isListeningToPointsAdded) {
             return;
         }
 
@@ -65,11 +69,57 @@ export class BlockchainListenerService {
                 console.log(`Updated points for user ${normalizedAddress} to ${points}`);
             });
 
-            this.isListening = true;
+            this.isListeningToPointsAdded = true;
         } catch (error) {
             throw new Error(`Could not start blockchain listener: ${error instanceof Error ? error.message : String(error)}`);
         }
      }
+
+
+    // Starts listening to the InviteChanged event from the referral contract and updates the database accordingly
+    private async startInviteChangedListener(): Promise<void>{
+        if (this.isListeningToInviteChanged) {
+            return;
+        }
+
+        try {
+
+            await this.readReferralContractService.listenToInviteChangedEvent(
+                async ({ inviteId, status, referrer, blockNumber, logIndex }) => {
+                    console.log(`InviteChanged event detected for invite ${inviteId} with status ${status}`);
+
+                    const normalizedReferrer = referrer.toLowerCase();
+
+                    try {
+                    
+
+                    console.log(`Invite ${inviteId} stored with status ${status} for referrer ${normalizedReferrer}`);
+                    } catch (err) {
+                    console.error(`Failed to update invite ${inviteId}`, err);
+                    }
+
+                    // Save new last processed block
+                    await prisma.chainSyncState.upsert({
+                    where: { id: 1 },
+                    update: {
+                        lastProcessedBlock: blockNumber,
+                        lastProcessedLogIndex: logIndex
+                    },
+                    create: {
+                        id: 1,
+                        lastProcessedBlock: blockNumber,
+                        lastProcessedLogIndex: logIndex
+                    }
+                    });
+                }
+                );
+            this.isListeningToInviteChanged = true;
+        } catch (error) {
+            throw new Error(`Could not start blockchain listener: ${error instanceof Error ? error.message : String(error)}`);
+        }
+
+    }
+
 
     private async syncToChain(): Promise<void> {
         console.log("synchronising the DB to the chain state...");
@@ -149,9 +199,9 @@ export class BlockchainListenerService {
     }
 
     stop(): void {
-        if (this.isListening) {
+        if (this.isListeningToPointsAdded) {
             this.readReferralContractService.stopListeningToPointsAddedEvent();
-            this.isListening = false;
+            this.isListeningToPointsAdded = false;
             console.log('Blockchain listener stopped');
         }
     }
