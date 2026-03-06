@@ -44,6 +44,11 @@ export class BlockchainListenerService {
                     where: { walletAddress: normalizedAddress },
                     data: { earnedPoints: Number(points) }
                 });
+                    // Mark pending referral as completed now that on-chain event confirmed
+                    await prisma.referral.updateMany({
+                        where: { refereeId: existingUser.id, status: 'pending' },
+                        data: { status: 'completed' },
+                    });
                 } else {
                     console.warn(`User ${normalizedAddress} not found in DB, skipping points update`);
                 }
@@ -117,6 +122,11 @@ export class BlockchainListenerService {
                 await prisma.user.update({
                     where: { walletAddress: normalizedAddress },
                     data: { earnedPoints: Number(points) }
+                });
+                // Mark pending referral as completed now that on-chain event confirmed
+                await prisma.referral.updateMany({
+                    where: { refereeId: existingUser.id, status: 'pending' },
+                    data: { status: 'completed' },
                 });
             }
 

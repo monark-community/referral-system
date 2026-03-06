@@ -12,7 +12,7 @@ import {
  */
 export async function walletAuth(req: Request, res: Response): Promise<void> {
   try {
-    const { walletAddress, signature, message } = req.body;
+    const { walletAddress, signature, message, referralCode: incomingReferralCode } = req.body;
 
     // Verify the signature
     const isValid = verifyWalletSignature(message, signature, walletAddress);
@@ -31,6 +31,7 @@ export async function walletAuth(req: Request, res: Response): Promise<void> {
     });
 
     let isNewUser = false;
+    let referrerWalletAddress: string | undefined;
 
     // Create new user if not found
     if (!user) {
@@ -52,15 +53,40 @@ export async function walletAuth(req: Request, res: Response): Promise<void> {
         }
       }
 
+      // Look up referrer if a referral code was provided
+      let referredBy: string | undefined;
+      if (incomingReferralCode) {
+        const referrer = await prisma.user.findUnique({
+          where: { referralCode: incomingReferralCode.toUpperCase() },
+          select: { id: true, walletAddress: true },
+        });
+        if (referrer) {
+          referredBy = referrer.id;
+          referrerWalletAddress = referrer.walletAddress;
+        }
+      }
+
       user = await prisma.user.create({
         data: {
           walletAddress: normalizedAddress,
           referralCode,
+          referredBy,
           termsAcceptedAt: new Date(),
         },
       });
 
-      console.log(`New user created: ${user.id} (${normalizedAddress})`);
+      // Create a Referral record to track this individual referral
+      if (referredBy) {
+        await prisma.referral.create({
+          data: {
+            referrerId: referredBy,
+            refereeId: user.id,
+            status: 'pending',
+          },
+        });
+      }
+
+      console.log(`New user created: ${user.id} (${normalizedAddress})${referredBy ? ` referred by ${referredBy}` : ''}`);
     }
 
     // Generate JWT token
@@ -83,6 +109,7 @@ export async function walletAuth(req: Request, res: Response): Promise<void> {
       },
       token,
       isNewUser,
+      ...(referrerWalletAddress && { referrerWalletAddress }),
     });
   } catch (error) {
     console.error('Wallet auth error:', error);

@@ -173,6 +173,36 @@ export async function sendVerificationEmail(req: Request, res: Response): Promis
 }
 
 /**
+ * GET /api/users/referral/:code
+ * Validate a referral code and return the referrer's wallet address
+ */
+export async function validateReferralCode(req: Request, res: Response): Promise<void> {
+  try {
+    const code = req.params.code as string;
+
+    if (!code) {
+      res.status(400).json({ error: 'Referral code is required' });
+      return;
+    }
+
+    const referrer = await prisma.user.findUnique({
+      where: { referralCode: code.toUpperCase() },
+      select: { id: true, walletAddress: true },
+    });
+
+    if (!referrer) {
+      res.status(404).json({ error: 'Invalid referral code' });
+      return;
+    }
+
+    res.json({ walletAddress: referrer.walletAddress });
+  } catch (error) {
+    console.error('Validate referral code error:', error);
+    res.status(500).json({ error: 'Failed to validate referral code' });
+  }
+}
+
+/**
  * GET /api/users/verify-email/:token
  * Verify email from link
  */

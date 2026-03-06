@@ -3,7 +3,8 @@ import {
   getProfile,
   updateProfile,
   sendVerificationEmail,
-  verifyEmail
+  verifyEmail,
+  validateReferralCode,
 } from '../controllers/user.controller.js';
 import { authMiddleware } from '../middlewares/auth.middleware.js';
 import { validateProfileUpdate } from '../middlewares/validation.middleware.js';
@@ -18,6 +19,9 @@ router.put('/profile', authMiddleware, validateProfileUpdate, updateProfile);
 
 // POST /api/users/verify-email/send - Send email verification
 router.post('/verify-email/send', authMiddleware, sendVerificationEmail);
+
+// GET /api/users/referral/:code - Validate referral code
+router.get('/referral/:code', validateReferralCode);
 
 // GET /api/users/verify-email/:token - Verify email from link
 router.get('/verify-email/:token', verifyEmail);

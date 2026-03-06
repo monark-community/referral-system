@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useConnect, useAccount, useSignMessage, useDisconnect, useWriteContract } from 'wagmi';
+import { useConnect, useAccount, useSignMessage, useDisconnect, useWriteContract, useSwitchChain } from 'wagmi';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -9,7 +9,7 @@ import { Wallet } from 'lucide-react';
 import { walletAuth } from '@/lib/api/auth';
 import { useAuth } from '@/contexts/auth-context';
 import { WriteReferralContractHelper } from '@reffinity/blockchain-connector/writeReferralContractHelper';
-import { join } from 'path';
+import { hardhat } from 'wagmi/chains';
 
 interface WalletConnectStepProps {
   onSuccess: () => void;
@@ -26,7 +26,7 @@ export function WalletConnectStep({ onSuccess, onReturningUser }: WalletConnectS
   const { connectors, connect, isPending: isConnecting } = useConnect();
   const { signMessageAsync } = useSignMessage();
   const { writeContract } = useWriteContract();
-  
+  const { switchChainAsync } = useSwitchChain();
 
   // Get MetaMask connector
   const metaMaskConnector = connectors.find(
@@ -63,8 +63,14 @@ export function WalletConnectStep({ onSuccess, onReturningUser }: WalletConnectS
       // Request signature from wallet
       const signature = await signMessageAsync({ message });
 
+      // Check for stored referral code from invite link
+      const referralCode = localStorage.getItem('referralCode') || undefined;
+
       // Send to backend for verification
-      const response = await walletAuth(address, signature, message);
+      const response = await walletAuth(address, signature, message, referralCode);
+
+      // Clear the stored referral code after use
+      localStorage.removeItem('referralCode');
 
       // Store token and user data
       login(response.token, response.user);
@@ -75,12 +81,25 @@ export function WalletConnectStep({ onSuccess, onReturningUser }: WalletConnectS
         return;
       }
 
-      const joinProgramContext = await WriteReferralContractHelper.joinProgramContext();
+      // Ensure MetaMask is on the Hardhat chain before sending the tx
+      await switchChainAsync({ chainId: hardhat.id });
 
-      writeContract({
-        ...joinProgramContext,
-        args: [],
-      })
+      // If referred, call acceptInvite with referrer's address; otherwise joinProgram
+      if (response.referrerWalletAddress) {
+        const acceptInviteContext = await WriteReferralContractHelper.acceptInviteContext();
+        writeContract({
+          ...acceptInviteContext,
+          chainId: hardhat.id,
+          args: [response.referrerWalletAddress as `0x${string}`],
+        });
+      } else {
+        const joinProgramContext = await WriteReferralContractHelper.joinProgramContext();
+        writeContract({
+          ...joinProgramContext,
+          chainId: hardhat.id,
+          args: [],
+        });
+      }
 
       // Move to next step
       onSuccess();
