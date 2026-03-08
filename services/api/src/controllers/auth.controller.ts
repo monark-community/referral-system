@@ -1,10 +1,10 @@
-import { Request, Response } from 'express';
-import { prisma } from '../lib/prisma.js';
+import { Request, Response } from "express";
+import { prisma } from "../lib/prisma.js";
 import {
   generateJWT,
   verifyWalletSignature,
   generateReferralCode,
-} from '../services/auth.service.js';
+} from "../services/auth.service.js";
 
 /**
  * POST /api/auth/wallet
@@ -12,13 +12,18 @@ import {
  */
 export async function walletAuth(req: Request, res: Response): Promise<void> {
   try {
-    const { walletAddress, signature, message, referralCode: incomingReferralCode } = req.body;
+    const {
+      walletAddress,
+      signature,
+      message,
+      referralCode: incomingReferralCode,
+    } = req.body;
 
     // Verify the signature
     const isValid = verifyWalletSignature(message, signature, walletAddress);
 
     if (!isValid) {
-      res.status(401).json({ error: 'Invalid signature' });
+      res.status(401).json({ error: "Invalid signature" });
       return;
     }
 
@@ -81,12 +86,14 @@ export async function walletAuth(req: Request, res: Response): Promise<void> {
           data: {
             referrerId: referredBy,
             refereeId: user.id,
-            status: 'pending',
+            status: 0,
           },
         });
       }
 
-      console.log(`New user created: ${user.id} (${normalizedAddress})${referredBy ? ` referred by ${referredBy}` : ''}`);
+      console.log(
+        `New user created: ${user.id} (${normalizedAddress})${referredBy ? ` referred by ${referredBy}` : ""}`,
+      );
     }
 
     // Generate JWT token
@@ -112,8 +119,8 @@ export async function walletAuth(req: Request, res: Response): Promise<void> {
       ...(referrerWalletAddress && { referrerWalletAddress }),
     });
   } catch (error) {
-    console.error('Wallet auth error:', error);
-    res.status(500).json({ error: 'Authentication failed' });
+    console.error("Wallet auth error:", error);
+    res.status(500).json({ error: "Authentication failed" });
   }
 }
 
@@ -124,7 +131,7 @@ export async function walletAuth(req: Request, res: Response): Promise<void> {
 export async function getMe(req: Request, res: Response): Promise<void> {
   try {
     if (!req.user) {
-      res.status(401).json({ error: 'Not authenticated' });
+      res.status(401).json({ error: "Not authenticated" });
       return;
     }
 
@@ -146,14 +153,14 @@ export async function getMe(req: Request, res: Response): Promise<void> {
     });
 
     if (!user) {
-      res.status(404).json({ error: 'User not found' });
+      res.status(404).json({ error: "User not found" });
       return;
     }
 
     res.json({ user });
   } catch (error) {
-    console.error('Get me error:', error);
-    res.status(500).json({ error: 'Failed to get user' });
+    console.error("Get me error:", error);
+    res.status(500).json({ error: "Failed to get user" });
   }
 }
 
@@ -164,5 +171,5 @@ export async function getMe(req: Request, res: Response): Promise<void> {
 export async function logout(_req: Request, res: Response): Promise<void> {
   // With JWT, logout is mainly handled client-side by removing the token
   // This endpoint can be used for future session invalidation features
-  res.json({ success: true, message: 'Logged out successfully' });
+  res.json({ success: true, message: "Logged out successfully" });
 }

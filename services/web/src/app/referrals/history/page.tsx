@@ -1,90 +1,46 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Search } from "lucide-react";
+import { Pen, Search } from "lucide-react";
 import { PageHeader } from "@/components/referral";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { getInvites } from '@/lib/api/user';
+import type { Invite } from "@/lib/api/user";
 
-type InviteStatus = "action_required" | "pending" | "earned" | "cancelled";
 
-interface Invite {
-  id: string;
-  username: string;
-  status: InviteStatus;
-  date: string;
-  points?: number;
-  statusDetail?: string;
+
+enum InviteStatus {
+    Pending,
+    Accepted,
+    Closed
 }
 
-const mockInvites: Invite[] = [
-  {
-    id: "1",
-    username: "zk8a01__aaa00a0",
-    status: "action_required",
-    date: "January 2nd 2026",
-    statusDetail: "Pending Network Approval",
-  },
-  {
-    id: "2",
-    username: "Vincent Grenier",
-    status: "pending",
-    date: "December 31st 2025",
-    statusDetail: "Pending Response",
-  },
-  {
-    id: "3",
-    username: "Loucas Pelletier",
-    status: "earned",
-    date: "December 14th 2025",
-    points: 5000,
-  },
-  {
-    id: "4",
-    username: "Adam Anderson",
-    status: "earned",
-    date: "December 13th 2025",
-    points: 5000,
-  },
-  {
-    id: "5",
-    username: "Bernard Branson",
-    status: "earned",
-    date: "December 12th 2025",
-    points: 5000,
-  },
-];
+
 
 const filterTabs = [
-  { id: "all", label: "All" },
-  { id: "action_required", label: "Action Required" },
-  { id: "pending", label: "Pending" },
-  { id: "earned", label: "Earned" },
-  { id: "cancelled", label: "Cancelled" },
+  { id: -1, label: "All" },
+  { id: InviteStatus.Pending, label: "Pending" },
+  { id: InviteStatus.Accepted, label: "Earned" },
+  { id: InviteStatus.Closed, label: "Cancelled" },
 ] as const;
 
 function getStatusBadge(status: InviteStatus, points?: number, statusDetail?: string) {
   switch (status) {
-    case "action_required":
-      return (
-        <Badge variant="warning" className="text-xs">
-          {statusDetail || "Action Required"}
-        </Badge>
-      );
-    case "pending":
+    case InviteStatus.Pending:
       return (
         <Badge variant="secondary" className="text-xs">
           {statusDetail || "Pending"}
         </Badge>
       );
-    case "earned":
+    case InviteStatus.Accepted:
       return (
         <Badge variant="success" className="text-xs">
           {points ? `${points.toLocaleString().replace(/,/g, "'")} Points Earned` : "Earned"}
         </Badge>
       );
-    case "cancelled":
+    case InviteStatus.Closed:
       return (
         <Badge variant="destructive" className="text-xs">
           Cancelled
@@ -98,13 +54,11 @@ function getStatusBadge(status: InviteStatus, points?: number, statusDetail?: st
 function InviteItem({ invite }: { invite: Invite }) {
   const getDateLabel = (status: InviteStatus) => {
     switch (status) {
-      case "action_required":
-        return "Referral code used on";
-      case "pending":
+      case InviteStatus.Pending:
         return "Invited";
-      case "earned":
+      case InviteStatus.Accepted:
         return "Joined";
-      case "cancelled":
+      case InviteStatus.Closed:
         return "Cancelled";
       default:
         return "";
@@ -116,7 +70,7 @@ function InviteItem({ invite }: { invite: Invite }) {
       {/* Avatar */}
       <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center flex-shrink-0">
         <span className="text-sm font-medium text-muted-foreground">
-          {invite.username.charAt(0).toUpperCase()}
+          {invite.referee?.name?.charAt(0).toUpperCase()}
         </span>
       </div>
 
@@ -124,12 +78,12 @@ function InviteItem({ invite }: { invite: Invite }) {
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2">
           <span className="text-sm font-medium text-foreground truncate">
-            {invite.username}
+            {invite.referee?.name || "Unknown User"}
           </span>
-          {getStatusBadge(invite.status, invite.points, invite.statusDetail)}
+          {getStatusBadge(invite.status, invite.points)}
         </div>
         <p className="text-xs text-muted-foreground mt-0.5">
-          {getDateLabel(invite.status)} {invite.date}
+          {getDateLabel(invite.status)} {invite.createdAt}
         </p>
       </div>
     </div>
@@ -138,26 +92,44 @@ function InviteItem({ invite }: { invite: Invite }) {
 
 export default function InvitesHistoryPage() {
   const router = useRouter();
+  const [inviteData, setInviteData] = useState<Invite[] | null>(null);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeFilter, setActiveFilter] = useState<string>("all");
+  const [activeFilter, setActiveFilter] = useState<number>(-1);
 
-  const filteredInvites = mockInvites.filter((invite) => {
-    const matchesSearch = invite.username
-      .toLowerCase()
-      .includes(searchQuery.toLowerCase());
+    console.log("Component rendered");
+
+    useEffect(() => {
+      console.log("Loading invites...");
+      getInvites()
+        .then((res) => { setInviteData(res.invites); console.log("Invites loaded:", res.invites); })
+        .catch((err) => {
+          console.error("Failed to load invites:", err);
+          router.push("/referrals/welcome");
+        })
+        .finally(() => setLoading(false));
+    }, [router]);
+
+    useEffect(() => {
+      console.log("inviteData updated:", inviteData);
+    }, [inviteData]);
+
+
+  const filteredInvites = inviteData?.filter((invite) => {
+    const matchesSearch = invite.referee?.name?.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesFilter =
-      activeFilter === "all" || invite.status === activeFilter;
+      activeFilter === -1|| invite.status === activeFilter;
     return matchesSearch && matchesFilter;
   });
 
-  const groupedInvites = filteredInvites.reduce(
+  const groupedInvites = filteredInvites?.reduce(
     (acc, invite) => {
-      const group = invite.status === "action_required" ? "action_required" : invite.status;
+      const group = invite.status;
       if (!acc[group]) acc[group] = [];
       acc[group].push(invite);
       return acc;
     },
-    {} as Record<string, Invite[]>
+    {} as Record<number, Invite[]>
   );
 
   return (
@@ -203,46 +175,34 @@ export default function InvitesHistoryPage() {
 
           {/* Invites List */}
           <div className="space-y-4">
-            {groupedInvites.action_required && groupedInvites.action_required.length > 0 && (
-              <section>
-                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                  Action Required
-                </h3>
-                <div className="space-y-1">
-                  {groupedInvites.action_required.map((invite) => (
-                    <InviteItem key={invite.id} invite={invite} />
-                  ))}
-                </div>
-              </section>
-            )}
 
-            {groupedInvites.pending && groupedInvites.pending.length > 0 && (
+            {groupedInvites?.[InviteStatus.Pending] && groupedInvites[InviteStatus.Pending].length > 0 && (
               <section>
                 <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
                   Pending
                 </h3>
                 <div className="space-y-1">
-                  {groupedInvites.pending.map((invite) => (
+                  {groupedInvites[InviteStatus.Pending].map((invite) => (
                     <InviteItem key={invite.id} invite={invite} />
                   ))}
                 </div>
               </section>
             )}
 
-            {groupedInvites.earned && groupedInvites.earned.length > 0 && (
+            {groupedInvites?.[InviteStatus.Accepted] && groupedInvites[InviteStatus.Accepted].length > 0 && (
               <section>
                 <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
                   Earned
                 </h3>
                 <div className="space-y-1">
-                  {groupedInvites.earned.map((invite) => (
+                  {groupedInvites[InviteStatus.Accepted].map((invite) => (
                     <InviteItem key={invite.id} invite={invite} />
                   ))}
                 </div>
               </section>
             )}
 
-            {filteredInvites.length === 0 && (
+            {filteredInvites?.length === 0 && (
               <div className="text-center py-8">
                 <p className="text-muted-foreground">No invites found</p>
               </div>

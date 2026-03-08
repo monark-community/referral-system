@@ -1,8 +1,8 @@
-import { Request, Response } from 'express';
-import { prisma } from '../lib/prisma.js';
-import { generateEmailVerificationToken } from '../services/auth.service.js';
+import { Request, Response } from "express";
+import { prisma } from "../lib/prisma.js";
+import { generateEmailVerificationToken } from "../services/auth.service.js";
 
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
+const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
 
 /**
  * GET /api/users/profile
@@ -11,7 +11,7 @@ const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 export async function getProfile(req: Request, res: Response): Promise<void> {
   try {
     if (!req.user) {
-      res.status(401).json({ error: 'Not authenticated' });
+      res.status(401).json({ error: "Not authenticated" });
       return;
     }
 
@@ -33,14 +33,14 @@ export async function getProfile(req: Request, res: Response): Promise<void> {
     });
 
     if (!user) {
-      res.status(404).json({ error: 'User not found' });
+      res.status(404).json({ error: "User not found" });
       return;
     }
 
     res.json({ user });
   } catch (error) {
-    console.error('Get profile error:', error);
-    res.status(500).json({ error: 'Failed to get profile' });
+    console.error("Get profile error:", error);
+    res.status(500).json({ error: "Failed to get profile" });
   }
 }
 
@@ -48,10 +48,13 @@ export async function getProfile(req: Request, res: Response): Promise<void> {
  * PUT /api/users/profile
  * Update user profile (name, email, phone)
  */
-export async function updateProfile(req: Request, res: Response): Promise<void> {
+export async function updateProfile(
+  req: Request,
+  res: Response,
+): Promise<void> {
   try {
     if (!req.user) {
-      res.status(401).json({ error: 'Not authenticated' });
+      res.status(401).json({ error: "Not authenticated" });
       return;
     }
 
@@ -67,7 +70,7 @@ export async function updateProfile(req: Request, res: Response): Promise<void> 
       });
 
       if (existingUser) {
-        res.status(400).json({ error: 'Email already in use' });
+        res.status(400).json({ error: "Email already in use" });
         return;
       }
     }
@@ -77,7 +80,8 @@ export async function updateProfile(req: Request, res: Response): Promise<void> 
       where: { id: req.user.id },
     });
 
-    const emailChanged = currentUser?.email?.toLowerCase() !== email?.toLowerCase();
+    const emailChanged =
+      currentUser?.email?.toLowerCase() !== email?.toLowerCase();
 
     // Update profile
     const updatedUser = await prisma.user.update({
@@ -113,8 +117,8 @@ export async function updateProfile(req: Request, res: Response): Promise<void> 
       emailChanged,
     });
   } catch (error) {
-    console.error('Update profile error:', error);
-    res.status(500).json({ error: 'Failed to update profile' });
+    console.error("Update profile error:", error);
+    res.status(500).json({ error: "Failed to update profile" });
   }
 }
 
@@ -122,10 +126,13 @@ export async function updateProfile(req: Request, res: Response): Promise<void> 
  * POST /api/users/verify-email/send
  * Send email verification link
  */
-export async function sendVerificationEmail(req: Request, res: Response): Promise<void> {
+export async function sendVerificationEmail(
+  req: Request,
+  res: Response,
+): Promise<void> {
   try {
     if (!req.user) {
-      res.status(401).json({ error: 'Not authenticated' });
+      res.status(401).json({ error: "Not authenticated" });
       return;
     }
 
@@ -134,17 +141,19 @@ export async function sendVerificationEmail(req: Request, res: Response): Promis
     });
 
     if (!user) {
-      res.status(404).json({ error: 'User not found' });
+      res.status(404).json({ error: "User not found" });
       return;
     }
 
     if (!user.email) {
-      res.status(400).json({ error: 'Email not set. Please update your profile first.' });
+      res
+        .status(400)
+        .json({ error: "Email not set. Please update your profile first." });
       return;
     }
 
     if (user.emailVerified) {
-      res.status(400).json({ error: 'Email already verified' });
+      res.status(400).json({ error: "Email already verified" });
       return;
     }
 
@@ -162,13 +171,14 @@ export async function sendVerificationEmail(req: Request, res: Response): Promis
     });
 
     // Send verification email
-    const { sendVerificationEmail: sendEmail } = await import('../services/email.service.js');
+    const { sendVerificationEmail: sendEmail } =
+      await import("../services/email.service.js");
     await sendEmail(user.email, token, user.name);
 
-    res.json({ success: true, message: 'Verification email sent' });
+    res.json({ success: true, message: "Verification email sent" });
   } catch (error) {
-    console.error('Send verification email error:', error);
-    res.status(500).json({ error: 'Failed to send verification email' });
+    console.error("Send verification email error:", error);
+    res.status(500).json({ error: "Failed to send verification email" });
   }
 }
 
@@ -176,12 +186,15 @@ export async function sendVerificationEmail(req: Request, res: Response): Promis
  * GET /api/users/referral/:code
  * Validate a referral code and return the referrer's wallet address
  */
-export async function validateReferralCode(req: Request, res: Response): Promise<void> {
+export async function validateReferralCode(
+  req: Request,
+  res: Response,
+): Promise<void> {
   try {
     const code = req.params.code as string;
 
     if (!code) {
-      res.status(400).json({ error: 'Referral code is required' });
+      res.status(400).json({ error: "Referral code is required" });
       return;
     }
 
@@ -191,14 +204,14 @@ export async function validateReferralCode(req: Request, res: Response): Promise
     });
 
     if (!referrer) {
-      res.status(404).json({ error: 'Invalid referral code' });
+      res.status(404).json({ error: "Invalid referral code" });
       return;
     }
 
     res.json({ walletAddress: referrer.walletAddress });
   } catch (error) {
-    console.error('Validate referral code error:', error);
-    res.status(500).json({ error: 'Failed to validate referral code' });
+    console.error("Validate referral code error:", error);
+    res.status(500).json({ error: "Failed to validate referral code" });
   }
 }
 
@@ -211,7 +224,7 @@ export async function verifyEmail(req: Request, res: Response): Promise<void> {
     const token = req.params.token as string;
 
     if (!token) {
-      res.status(400).json({ error: 'Token is required' });
+      res.status(400).json({ error: "Token is required" });
       return;
     }
 
@@ -244,11 +257,10 @@ export async function verifyEmail(req: Request, res: Response): Promise<void> {
     // Redirect to frontend success page
     res.redirect(`${FRONTEND_URL}/referrals/email-verified?success=true`);
   } catch (error) {
-    console.error('Verify email error:', error);
+    console.error("Verify email error:", error);
     res.redirect(`${FRONTEND_URL}/referrals/email-verified?error=server`);
   }
 }
-
 
 /**
  * GET /api/users/invites
@@ -257,15 +269,18 @@ export async function verifyEmail(req: Request, res: Response): Promise<void> {
 export async function getInvites(req: Request, res: Response): Promise<void> {
   try {
     if (!req.user) {
-      res.status(401).json({ error: 'Not authenticated' });
+      res.status(401).json({ error: "Not authenticated" });
       return;
     }
 
-    const invites = await prisma.invite.findMany({
-      where: { referrer: req.user.walletAddress.toLowerCase() },
+    const invites = await prisma.referral.findMany({
+      where: {
+        referrer: { walletAddress: req.user.walletAddress.toLowerCase() },
+      },
       select: {
-        inviteId: true,
-        referrer: true ,
+        id: true,
+        referrer: true,
+        referee: true,
         status: true,
         points: true,
         createdAt: true,
@@ -274,13 +289,13 @@ export async function getInvites(req: Request, res: Response): Promise<void> {
     });
 
     if (!invites) {
-      res.status(404).json({ error: 'No invites found' });
+      res.status(404).json({ error: "No invites found" });
       return;
     }
 
     res.json({ invites });
   } catch (error) {
-    console.error('Get invites error:', error);
-    res.status(500).json({ error: 'Failed to get invites' });
+    console.error("Get invites error:", error);
+    res.status(500).json({ error: "Failed to get invites" });
   }
 }
