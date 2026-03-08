@@ -87,6 +87,7 @@ export async function walletAuth(req: Request, res: Response): Promise<void> {
             referrerId: referredBy,
             refereeId: user.id,
             status: 0,
+            points: 0,
           },
         });
       }
