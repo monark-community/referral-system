@@ -84,6 +84,10 @@ export default function ReferralsPage() {
               isActive
             />
             <NavMenuItem
+              label="My Profile"
+              onClick={() => router.push("/referrals/profile")}
+            />
+            <NavMenuItem
               label="How it Works"
               onClick={() => router.push("/referrals/how-it-works")}
             />
