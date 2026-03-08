@@ -52,10 +52,25 @@ async function main() {
         address: receipt.contractAddress,
         abi: artifact.abi,
         functionName: "setPointsForAction",
-        args: [1, 50], // args mean for action 0 (referring) you get 100 points
+        args: [1, 50], // args mean for action 1 (accepting invite) you get 50 points
     }))
     var hash = await walletClient.writeContract(request)
     await publicClient.waitForTransactionReceipt({ hash });
+
+    // Set up milestone thresholds on-chain
+    const milestoneThresholds = [500, 1500, 5000, 10000];
+    for (const threshold of milestoneThresholds) {
+        ({ request } = await publicClient.simulateContract({
+            account: account,
+            address: receipt.contractAddress,
+            abi: artifact.abi,
+            functionName: "addNewMilestone",
+            args: [threshold],
+        }));
+        var hash = await walletClient.writeContract(request);
+        await publicClient.waitForTransactionReceipt({ hash });
+    }
+    console.log("Milestones set:", milestoneThresholds);
 }
 
 main().catch((error) => {

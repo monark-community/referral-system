@@ -30,6 +30,9 @@ model User {
   earnedPoints  Int @default(0) @map("earned_points")
   pendingPoints Int @default(0) @map("pending_points")
 
+  // Milestone tracking (cached from blockchain)
+  milestoneLevel Int @default(0) @map("milestone_level")
+
   // Timestamps
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -74,6 +77,16 @@ model ChainSyncState {
   id                    Int    @id @default(1)
   lastProcessedBlock    BigInt
   lastProcessedLogIndex Int
+}
+
+// Milestone tier definitions
+model MilestoneTier {
+  level          Int    @id // 0-indexed milestone level
+  name           String // e.g. "Bronze", "Silver"
+  pointsRequired Int    @map("points_required")
+  benefits       String[] // list of benefit descriptions
+
+  @@map("milestone_tiers")
 }
 
 //Keeps track of the users invites

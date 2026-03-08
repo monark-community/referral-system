@@ -47,9 +47,26 @@ export class BlockchainListenerService {
             where: { walletAddress: normalizedAddress },
           });
           if (existingUser) {
+            // Read milestone level from chain
+            let milestoneLevel = existingUser.milestoneLevel;
+            try {
+              const chainMilestone =
+                await this.readReferralContractService.getUserCurrentMilestone(
+                  user,
+                );
+              milestoneLevel = Number(chainMilestone);
+            } catch (err) {
+              console.warn(
+                `Could not read milestone for ${normalizedAddress}, keeping existing`,
+              );
+            }
+
             await prisma.user.update({
               where: { walletAddress: normalizedAddress },
-              data: { earnedPoints: Number(points) },
+              data: {
+                earnedPoints: Number(points),
+                milestoneLevel,
+              },
             });
           } else {
             console.warn(
@@ -195,9 +212,24 @@ export class BlockchainListenerService {
         });
 
         if (existingUser) {
+          // Read milestone level from chain
+          let milestoneLevel = existingUser.milestoneLevel;
+          try {
+            const chainMilestone =
+              await this.readReferralContractService.getUserCurrentMilestone(
+                user,
+              );
+            milestoneLevel = Number(chainMilestone);
+          } catch {
+            // Keep existing milestone level on error
+          }
+
           await prisma.user.update({
             where: { walletAddress: normalizedAddress },
-            data: { earnedPoints: Number(points) },
+            data: {
+              earnedPoints: Number(points),
+              milestoneLevel,
+            },
           });
         }
       } else if ("inviteId" in event.args) {

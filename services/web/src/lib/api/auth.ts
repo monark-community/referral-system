@@ -10,6 +10,7 @@ export interface User {
   referralCode: string;
   earnedPoints: number;
   pendingPoints: number;
+  milestoneLevel: number;
   createdAt: string;
   updatedAt: string;
 }

@@ -12,6 +12,7 @@
     "lint": "eslint src --ext .ts",
     "db:migrate": "prisma migrate dev",
     "db:generate": "prisma generate",
+    "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio"
   },
   "dependencies": {

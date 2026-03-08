@@ -67,3 +67,35 @@ export async function sendVerificationEmail(): Promise<{
 export async function getInvites(): Promise<GetInvitesResponse> {
   return apiClient<GetInvitesResponse>("/users/referrals");
 }
+
+export interface MilestoneTier {
+  level: number;
+  name: string;
+  pointsRequired: number;
+  benefits: string[];
+}
+
+export interface GetMilestoneTiersResponse {
+  tiers: MilestoneTier[];
+}
+
+export interface UserMilestoneResponse {
+  milestoneLevel: number;
+  earnedPoints: number;
+  currentTier: MilestoneTier | null;
+  nextTier: MilestoneTier | null;
+}
+
+/**
+ * Get all milestone tier definitions
+ */
+export async function getMilestoneTiers(): Promise<GetMilestoneTiersResponse> {
+  return apiClient<GetMilestoneTiersResponse>("/milestones/tiers");
+}
+
+/**
+ * Get current user's milestone progress
+ */
+export async function getUserMilestone(): Promise<UserMilestoneResponse> {
+  return apiClient<UserMilestoneResponse>("/milestones/user");
+}

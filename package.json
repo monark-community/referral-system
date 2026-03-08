@@ -11,7 +11,8 @@
     "services/web"
   ],
   "scripts": {
-    "setup": "docker-compose up -d && npm install && npm run build:packages && npm run db:generate && npm run db:migrate",
+    "setup": "docker-compose up -d && npm install && npm run build:packages && npm run db:generate && npm run db:migrate && npm run db:seed",
+    "db:seed": "npm run db:seed -w reffinity-api",
     "build:packages": "npm run build -w @reffinity/common-contracts && npm run build -w @reffinity/blockchain-connector",
     "build": "npm run build:packages && npm run build -w reffinity-api && npm run build -w reffinity-web",
     "dev": "npm run build:packages && concurrently \"npm run dev:api\" \"npm run dev:web\"",
