@@ -6,6 +6,7 @@ import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import "./ReferralRelationships.sol";
 import "./ReferralPoints.sol";
 import "./ReferralMilestone.sol";
+import "./ReferralInvites.sol";
 
 contract ReferralProgram is AccessControl {
     using EnumerableSet for EnumerableSet.AddressSet;
@@ -13,6 +14,7 @@ contract ReferralProgram is AccessControl {
     ReferralRelationships private relationships;
     ReferralPoints private points;
     ReferralMilestone private milestones;
+    ReferralInvites private invites;
 
     EnumerableSet.AddressSet users;
 
@@ -20,6 +22,7 @@ contract ReferralProgram is AccessControl {
         relationships = new ReferralRelationships(msg.sender, address(this));
         points = new ReferralPoints(msg.sender, address(this));
         milestones = new ReferralMilestone(msg.sender, address(this));
+        invites = new ReferralInvites(msg.sender, address(this));
 
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
     }
@@ -85,5 +88,49 @@ contract ReferralProgram is AccessControl {
         uint256 milestoneToUpdate
     ) public onlyRole(DEFAULT_ADMIN_ROLE) {
         milestones.updateMilestone(value, milestoneToUpdate);
+    }
+
+    // -- Functions for invites and statuses
+
+    function createInvite(bytes32 inviteID, ReferralInvites.InviteStatus status) public {
+        require(uint8(status) <= uint8(ReferralInvites.InviteStatus.Closed), "Invalid status");
+        invites.createInvite(inviteID, msg.sender, status);
+        emit ReferralInvites.InviteChanged(inviteID, msg.sender, status);
+    }
+
+    
+    function updateInviteStatus(bytes32 inviteID, ReferralInvites.InviteStatus newStatus) public {
+        address referrer = invites.updateInviteStatus(inviteID, newStatus);
+        emit ReferralInvites.InviteChanged(inviteID, referrer, newStatus);
+    }
+
+    function getInviteStatus(bytes32 inviteID) public view returns (ReferralInvites.InviteStatus) {
+        return invites.getInviteStatus(inviteID);
+    }
+
+    function getInviteReferrer(bytes32 inviteID) public view returns (address) {
+        return invites.getInviteReferrer(inviteID);
+    }
+
+    struct ReferrerInviteSummary {
+        bytes32 inviteId;
+        ReferralInvites.InviteStatus status;
+        uint256 points;
+        address referrer;
+    }
+
+    function getReferrerInvites(address user) public view returns (ReferrerInviteSummary[] memory) {
+        ReferralInvites.InviteSummary[] memory inviteSummaries = invites.getReferrerInvites(user);
+        ReferrerInviteSummary[] memory summaries = new ReferrerInviteSummary[](inviteSummaries.length);
+        for (uint256 i = 0; i < inviteSummaries.length; i++) {
+            summaries[i] = ReferrerInviteSummary({
+                inviteId: inviteSummaries[i].inviteId,
+                status: inviteSummaries[i].status,
+                points: points.getPointsForAction(ReferralPoints.Action.ReferredNewUser),
+                referrer: inviteSummaries[i].referrer
+            });
+        }
+
+        return summaries;
     }
 }

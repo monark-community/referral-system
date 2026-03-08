@@ -1,5 +1,5 @@
 import hre from "hardhat";
-import { createWalletClient, createPublicClient, http } from "viem";
+import { createWalletClient, createPublicClient, http, stringToHex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import artifact from "../artifacts/contracts/ReferralProgram.sol/ReferralProgram.json";
 
@@ -24,8 +24,8 @@ async function main() {
       account,
       address: '0x5fbdb2315678afecb367f032d93f642f64180aa3',
       abi: artifact.abi,
-      functionName: 'acceptInvite',
-      args: ['0x70997970c51812dc3a010c7d01b50e0d17dc79c8'],
+      functionName: "createInvite",
+      args: [stringToHex("invite11", {size: 32}), 2],
       })
       const receipt = await publicClient.waitForTransactionReceipt({ hash });
 

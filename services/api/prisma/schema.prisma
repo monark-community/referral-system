@@ -8,13 +8,13 @@ datasource db {
 }
 
 model User {
-  id                String    @id @default(uuid())
-  walletAddress     String    @unique @map("wallet_address")
+  id            String @id @default(uuid())
+  walletAddress String @unique @map("wallet_address")
 
   // Profile fields (nullable until profile completion)
-  name              String?
-  email             String?   @unique
-  phone             String?
+  name  String?
+  email String? @unique
+  phone String?
 
   // Email verification
   emailVerified     Boolean   @default(false) @map("email_verified")
@@ -22,53 +22,69 @@ model User {
   emailVerifyExpiry DateTime? @map("email_verify_expiry")
 
   // Referral program
-  referralCode      String    @unique @map("referral_code")
-  referredBy        String?   @map("referred_by")
-  termsAcceptedAt   DateTime? @map("terms_accepted_at")
+  referralCode    String    @unique @map("referral_code")
+  referredBy      String?   @map("referred_by")
+  termsAcceptedAt DateTime? @map("terms_accepted_at")
 
   // Points tracking (cached from blockchain)
-  earnedPoints      Int       @default(0) @map("earned_points")
-  pendingPoints     Int       @default(0) @map("pending_points")
+  earnedPoints  Int @default(0) @map("earned_points")
+  pendingPoints Int @default(0) @map("pending_points")
 
   // Timestamps
-  createdAt         DateTime  @default(now()) @map("created_at")
-  updatedAt         DateTime  @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   // Self-referential relation for referrals
-  referrer          User?     @relation("Referrals", fields: [referredBy], references: [id])
-  referrals         User[]    @relation("Referrals")
+  referrer  User?  @relation("Referrals", fields: [referredBy], references: [id])
+  referrals User[] @relation("Referrals")
 
   // Referral records where this user is the referrer
-  sentReferrals     Referral[] @relation("SentReferrals")
+  sentReferrals    Referral[] @relation("SentReferrals")
   // Referral record where this user is the referee
-  receivedReferral  Referral?  @relation("ReceivedReferral")
+  receivedReferral Referral?  @relation("ReceivedReferral")
 
   @@map("users")
 }
 
 model Referral {
-  id          String   @id @default(uuid())
+  id String @id @default(uuid())
 
   // The user who shared the referral link
-  referrerId  String   @map("referrer_id")
-  referrer    User     @relation("SentReferrals", fields: [referrerId], references: [id])
+  referrerId String @map("referrer_id")
+  referrer   User   @relation("SentReferrals", fields: [referrerId], references: [id])
 
   // The user who signed up via the referral link
-  refereeId   String   @unique @map("referee_id")
-  referee     User     @relation("ReceivedReferral", fields: [refereeId], references: [id])
+  refereeId String @unique @map("referee_id")
+  referee   User   @relation("ReceivedReferral", fields: [refereeId], references: [id])
 
   // Status: pending (signed up) -> completed (on-chain confirmed)
-  status      String   @default("pending")
+  status Int @default(0)
 
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  //points associated with the action
+  points Int 
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("referrals")
 }
 
 //Used for the listener service to determine the last block updated_at
 model ChainSyncState {
-  id                 Int     @id @default(1)
-  lastProcessedBlock BigInt
+  id                    Int    @id @default(1)
+  lastProcessedBlock    BigInt
   lastProcessedLogIndex Int
+}
+
+//Keeps track of the users invites
+model Invite {
+  inviteId String @id @db.VarChar(66) // bytes32 hex string
+  referrer String @db.VarChar(42) // wallet address
+  status   Int // enum value from solidity
+  points   Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([referrer])
 }

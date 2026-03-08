@@ -30,6 +30,31 @@ export const RefferalABI = [
       "inputs": [
         {
           "indexed": true,
+          "internalType": "bytes32",
+          "name": "inviteId",
+          "type": "bytes32"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "referrer",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "enum ReferralInvites.InviteStatus",
+          "name": "status",
+          "type": "uint8"
+        }
+      ],
+      "name": "InviteChanged",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
           "internalType": "address",
           "name": "user",
           "type": "address"
@@ -161,6 +186,24 @@ export const RefferalABI = [
     {
       "inputs": [
         {
+          "internalType": "bytes32",
+          "name": "inviteID",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "enum ReferralInvites.InviteStatus",
+          "name": "status",
+          "type": "uint8"
+        }
+      ],
+      "name": "createInvite",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
           "internalType": "address",
           "name": "user",
           "type": "address"
@@ -172,6 +215,85 @@ export const RefferalABI = [
           "internalType": "uint256",
           "name": "",
           "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "inviteID",
+          "type": "bytes32"
+        }
+      ],
+      "name": "getInviteReferrer",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "inviteID",
+          "type": "bytes32"
+        }
+      ],
+      "name": "getInviteStatus",
+      "outputs": [
+        {
+          "internalType": "enum ReferralInvites.InviteStatus",
+          "name": "",
+          "type": "uint8"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "user",
+          "type": "address"
+        }
+      ],
+      "name": "getReferrerInvites",
+      "outputs": [
+        {
+          "components": [
+            {
+              "internalType": "bytes32",
+              "name": "inviteId",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "enum ReferralInvites.InviteStatus",
+              "name": "status",
+              "type": "uint8"
+            },
+            {
+              "internalType": "uint256",
+              "name": "points",
+              "type": "uint256"
+            },
+            {
+              "internalType": "address",
+              "name": "referrer",
+              "type": "address"
+            }
+          ],
+          "internalType": "struct ReferralProgram.ReferrerInviteSummary[]",
+          "name": "",
+          "type": "tuple[]"
         }
       ],
       "stateMutability": "view",
@@ -316,6 +438,24 @@ export const RefferalABI = [
         }
       ],
       "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "inviteID",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "enum ReferralInvites.InviteStatus",
+          "name": "newStatus",
+          "type": "uint8"
+        }
+      ],
+      "name": "updateInviteStatus",
+      "outputs": [],
+      "stateMutability": "nonpayable",
       "type": "function"
     },
     {

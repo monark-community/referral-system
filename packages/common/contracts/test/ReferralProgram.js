@@ -5,7 +5,8 @@ import {
   createPublicClient,
   createWalletClient,
   http,
-  zeroAddress
+  zeroAddress,
+  stringToHex
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
@@ -172,6 +173,84 @@ test("user achieves a milestone", async () => {
     assert.equal(referreeMilestone, 1n); // referree has crossed the first milestone (25 points) after referring 
 });
 
+test("user can have have a invite created", async () => {
+    await addPointsForActions();
+
+    await setMilestones()
+
+    await addReferrerAndReferree();
+
+    await createInvitesForUser(referrerAccount);
+
+    const userinvites = await publicClient.readContract({
+        address: contractAddress,
+        abi,
+        functionName: "getReferrerInvites",
+        args: [referrerAccount.address],
+    });
+
+    assert.equal(userinvites.length, 3);
+
+    assert.equal(userinvites[0].inviteId, stringToHex("invite1", {size: 32}));
+    assert.equal(userinvites[0].status, 0); // pending 
+    assert.equal(userinvites[0].points, 100n); // points for referring
+
+    assert.equal(userinvites[1].inviteId, stringToHex("invite2", {size: 32}));
+    assert.equal(userinvites[1].status, 1); // accepted 
+    assert.equal(userinvites[1].points, 100n); // points for referring
+
+    assert.equal(userinvites[2].inviteId, stringToHex("invite3", {size: 32}));
+    assert.equal(userinvites[2].status, 2); // closed 
+    assert.equal(userinvites[2].points, 100n); // points for referring
+    
+});
+
+test("user invite status can be updated", async () => {
+    await addPointsForActions();
+
+    await setMilestones()
+
+    await addReferrerAndReferree();
+
+    await createInvitesForUser(referrerAccount);
+
+    const userinvites = await publicClient.readContract({
+        address: contractAddress,
+        abi,
+        functionName: "getReferrerInvites",
+        args: [referrerAccount.address],
+    });
+
+    assert.equal(userinvites.length, 3);
+
+    assert.equal(userinvites[0].inviteId, stringToHex("invite1", {size: 32}));
+    assert.equal(userinvites[0].status, 0); // pending 
+    assert.equal(userinvites[0].points, 100n); // points for referring
+
+    let request;
+
+    // joinProgram
+    ({ request } = await publicClient.simulateContract({
+        account: referrerAccount,
+        address: contractAddress,
+        abi: abi,
+        functionName: "updateInviteStatus",
+        args: [userinvites[0].inviteId, 1], // update invite status to accepted
+    }))
+    var hash = await referreeWalletClient.writeContract(request)
+    await publicClient.waitForTransactionReceipt({ hash });
+
+    const newStatus = await publicClient.readContract({
+        address: contractAddress,
+        abi,
+        functionName: "getInviteStatus",
+        args: [userinvites[0].inviteId],
+    });
+
+    assert.equal(newStatus, 1); // status should be accepted now
+    
+});
+
 
 
 /*Helper functions that complete common functions in many tests*/
@@ -246,6 +325,40 @@ async function setMilestones(){
         abi: abi,
         functionName: "addNewMilestone",
         args: [100], // add a new milestone at 100 points
+    }))
+    var hash = await referreeWalletClient.writeContract(request)
+    await publicClient.waitForTransactionReceipt({ hash });
+}
+
+async function createInvitesForUser(user) {
+    let request;
+    // set the milestone amounts
+    ({ request } = await publicClient.simulateContract({
+        account: referrerAccount,
+        address: contractAddress,
+        abi: abi,
+        functionName: "createInvite",
+        args: [stringToHex("invite1", {size: 32}), 0], // add a invite with status pending
+    }))
+    var hash = await referreeWalletClient.writeContract(request)
+    await publicClient.waitForTransactionReceipt({ hash });
+
+    ({ request } = await publicClient.simulateContract({
+        account: referrerAccount,
+        address: contractAddress,
+        abi: abi,
+        functionName: "createInvite",
+        args: [stringToHex("invite2", {size: 32}), 1], // add a invite with status Accepted
+    }))
+    var hash = await referreeWalletClient.writeContract(request)
+    await publicClient.waitForTransactionReceipt({ hash });
+
+    ({ request } = await publicClient.simulateContract({
+        account: referrerAccount,
+        address: contractAddress,
+        abi: abi,
+        functionName: "createInvite",
+        args: [stringToHex("invite3", {size: 32}), 2], // add a invite with status Closed
     }))
     var hash = await referreeWalletClient.writeContract(request)
     await publicClient.waitForTransactionReceipt({ hash });
