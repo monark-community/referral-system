@@ -50,7 +50,7 @@ export async function authMiddleware(
     }
 
     // Check if account is disabled (allow enable and profile endpoints through)
-    if (user.disabledAt && !req.path.endsWith('/enable') && !req.path.endsWith('/profile')) {
+    if (user.disabledAt && !req.path.endsWith('/enable') && !req.path.endsWith('/profile') && !req.path.endsWith('/me')) {
       res.status(403).json({ error: 'Account is disabled' });
       return;
     }
