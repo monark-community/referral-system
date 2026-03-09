@@ -13,7 +13,14 @@ import { useAuth } from "@/contexts/auth-context";
 
 export default function ReferralsPage() {
   const router = useRouter();
-  const { user: userData, isAuthenticated, isLoading } = useAuth();
+  const { user: userData, isAuthenticated, isLoading, refreshUser } = useAuth();
+
+  // Refresh user data on mount so points reflect latest blockchain state
+  useEffect(() => {
+    if (isAuthenticated) {
+      refreshUser();
+    }
+  }, [isAuthenticated, refreshUser]);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {

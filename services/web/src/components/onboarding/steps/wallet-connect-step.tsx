@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useConnect, useAccount, useSignMessage, useDisconnect, useWriteContract, useSwitchChain } from 'wagmi';
+import { waitForTransactionReceipt } from '@wagmi/core';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -10,6 +11,7 @@ import { walletAuth } from '@/lib/api/auth';
 import { useAuth } from '@/contexts/auth-context';
 import { WriteReferralContractHelper } from '@reffinity/blockchain-connector/writeReferralContractHelper';
 import { hardhat } from 'wagmi/chains';
+import { wagmiConfig } from '@/lib/wagmi/config';
 
 interface WalletConnectStepProps {
   onSuccess: () => void;
@@ -25,7 +27,7 @@ export function WalletConnectStep({ onSuccess, onReturningUser }: WalletConnectS
   const { disconnect } = useDisconnect();
   const { connectors, connect, isPending: isConnecting } = useConnect();
   const { signMessageAsync } = useSignMessage();
-  const { writeContract } = useWriteContract();
+  const { writeContractAsync } = useWriteContract();
   const { switchChainAsync } = useSwitchChain();
 
   // Get MetaMask connector
@@ -85,21 +87,25 @@ export function WalletConnectStep({ onSuccess, onReturningUser }: WalletConnectS
       await switchChainAsync({ chainId: hardhat.id });
 
       // If referred, call acceptInvite with referrer's address; otherwise joinProgram
+      let txHash: `0x${string}`;
       if (response.referrerWalletAddress) {
         const acceptInviteContext = await WriteReferralContractHelper.acceptInviteContext();
-        writeContract({
+        txHash = await writeContractAsync({
           ...acceptInviteContext,
           chainId: hardhat.id,
           args: [response.referrerWalletAddress as `0x${string}`],
         });
       } else {
         const joinProgramContext = await WriteReferralContractHelper.joinProgramContext();
-        writeContract({
+        txHash = await writeContractAsync({
           ...joinProgramContext,
           chainId: hardhat.id,
           args: [],
         });
       }
+
+      // Wait for the transaction to be mined so the blockchain listener can pick up the events
+      await waitForTransactionReceipt(wagmiConfig, { hash: txHash });
 
       // Move to next step
       onSuccess();
