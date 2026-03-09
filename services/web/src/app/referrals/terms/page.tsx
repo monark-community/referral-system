@@ -12,7 +12,7 @@ import { useAuth } from "@/contexts/auth-context";
 export default function TermsPage() {
   const router = useRouter();
   const [accepted, setAccepted] = useState(false);
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
   const {
     isOpen,
     step,
@@ -24,6 +24,7 @@ export default function TermsPage() {
   } = useOnboarding();
 
   const handleContinue = () => {
+    if (isLoading) return; // Wait for auth check to complete
     if (isAuthenticated) {
       // User already authenticated, go directly to dashboard
       router.push("/referrals");
@@ -166,7 +167,7 @@ export default function TermsPage() {
           </Button>
           <Button
             className="flex-1"
-            disabled={!accepted}
+            disabled={!accepted || isLoading}
             onClick={handleContinue}
           >
             Continue

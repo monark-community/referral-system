@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   PageHeader,
@@ -9,25 +9,19 @@ import {
   NavMenuItem,
 } from "@/components/referral";
 
-import { getProfile } from '@/lib/api/user';
-import type { User } from "@/lib/api/auth";
+import { useAuth } from "@/contexts/auth-context";
 
 export default function ReferralsPage() {
   const router = useRouter();
-  const [userData, setUserData] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { user: userData, isAuthenticated, isLoading } = useAuth();
 
   useEffect(() => {
-    getProfile()
-      .then((res) => setUserData(res.user))
-      .catch((err) => {
-        console.error("Failed to load profile:", err);
-        router.push("/referrals/welcome");
-      })
-      .finally(() => setLoading(false));
-  }, [router]);
+    if (!isLoading && !isAuthenticated) {
+      router.push("/referrals/welcome");
+    }
+  }, [isLoading, isAuthenticated, router]);
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="h-screen bg-background flex items-center justify-center">
         <p>Loading...</p>
@@ -55,6 +49,25 @@ export default function ReferralsPage() {
       {/* Main Content */}
       <main className="flex-1 min-h-0 overflow-y-auto">
         <div className="p-4 space-y-6">
+          {/* Disabled Account Banner */}
+          {userData.disabledAt && (
+            <div className="rounded-lg border border-orange-500/50 bg-orange-500/10 p-3">
+              <p className="text-sm font-medium text-orange-400">
+                Your account is disabled
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Re-enable your account in{" "}
+                <button
+                  onClick={() => router.push("/referrals/preferences")}
+                  className="underline text-primary"
+                >
+                  Preferences
+                </button>{" "}
+                to resume earning rewards.
+              </p>
+            </div>
+          )}
+
           {/* Points Section */}
           <section className="space-y-3">
             <div className="flex gap-3">
