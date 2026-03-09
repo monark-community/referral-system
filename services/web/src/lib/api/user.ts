@@ -68,6 +68,20 @@ export async function getInvites(): Promise<GetInvitesResponse> {
   return apiClient<GetInvitesResponse>("/users/referrals");
 }
 
+/**
+ * Disable the current user's account
+ */
+export async function disableAccount(): Promise<{ success: boolean; disabledAt: string }> {
+  return apiClient("/users/disable", { method: "POST" });
+}
+
+/**
+ * Re-enable the current user's account
+ */
+export async function enableAccount(): Promise<{ success: boolean }> {
+  return apiClient("/users/enable", { method: "POST" });
+}
+
 export interface MilestoneTier {
   level: number;
   name: string;

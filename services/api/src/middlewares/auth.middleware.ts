@@ -41,11 +41,17 @@ export async function authMiddleware(
     // Check if user still exists
     const user = await prisma.user.findUnique({
       where: { id: payload.userId },
-      select: { id: true, walletAddress: true },
+      select: { id: true, walletAddress: true, disabledAt: true },
     });
 
     if (!user) {
       res.status(401).json({ error: 'User not found' });
+      return;
+    }
+
+    // Check if account is disabled (allow enable and profile endpoints through)
+    if (user.disabledAt && !req.path.endsWith('/enable') && !req.path.endsWith('/profile')) {
+      res.status(403).json({ error: 'Account is disabled' });
       return;
     }
 

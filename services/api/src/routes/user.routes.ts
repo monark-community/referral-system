@@ -6,6 +6,8 @@ import {
   verifyEmail,
   validateReferralCode,
   getInvites,
+  disableAccount,
+  enableAccount,
 } from '../controllers/user.controller.js';
 import { authMiddleware } from '../middlewares/auth.middleware.js';
 import { validateProfileUpdate } from '../middlewares/validation.middleware.js';
@@ -28,5 +30,11 @@ router.get('/referral/:code', validateReferralCode);
 router.get('/verify-email/:token', verifyEmail);
 
 router.get('/referrals', authMiddleware, getInvites);
+
+// POST /api/users/disable - Disable account
+router.post('/disable', authMiddleware, disableAccount);
+
+// POST /api/users/enable - Re-enable account
+router.post('/enable', authMiddleware, enableAccount);
 
 export default router;

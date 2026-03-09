@@ -11,6 +11,7 @@ export interface User {
   earnedPoints: number;
   pendingPoints: number;
   milestoneLevel: number;
+  disabledAt: string | null;
   createdAt: string;
   updatedAt: string;
 }

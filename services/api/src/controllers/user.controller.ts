@@ -28,6 +28,7 @@ export async function getProfile(req: Request, res: Response): Promise<void> {
         earnedPoints: true,
         pendingPoints: true,
         milestoneLevel: true,
+        disabledAt: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -109,6 +110,7 @@ export async function updateProfile(
         earnedPoints: true,
         pendingPoints: true,
         milestoneLevel: true,
+        disabledAt: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -261,6 +263,53 @@ export async function verifyEmail(req: Request, res: Response): Promise<void> {
   } catch (error) {
     console.error("Verify email error:", error);
     res.redirect(`${FRONTEND_URL}/referrals/email-verified?error=server`);
+  }
+}
+
+/**
+ * POST /api/users/disable
+ * Disable the current user's account
+ */
+export async function disableAccount(req: Request, res: Response): Promise<void> {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: "Not authenticated" });
+      return;
+    }
+
+    const user = await prisma.user.update({
+      where: { id: req.user.id },
+      data: { disabledAt: new Date() },
+      select: { id: true, disabledAt: true },
+    });
+
+    res.json({ success: true, disabledAt: user.disabledAt });
+  } catch (error) {
+    console.error("Disable account error:", error);
+    res.status(500).json({ error: "Failed to disable account" });
+  }
+}
+
+/**
+ * POST /api/users/enable
+ * Re-enable the current user's account
+ */
+export async function enableAccount(req: Request, res: Response): Promise<void> {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: "Not authenticated" });
+      return;
+    }
+
+    await prisma.user.update({
+      where: { id: req.user.id },
+      data: { disabledAt: null },
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Enable account error:", error);
+    res.status(500).json({ error: "Failed to enable account" });
   }
 }
 
