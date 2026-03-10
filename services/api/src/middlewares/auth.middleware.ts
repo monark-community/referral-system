@@ -49,8 +49,9 @@ export async function authMiddleware(
       return;
     }
 
-    // Check if account is disabled (allow enable and profile endpoints through)
-    if (user.disabledAt && !req.path.endsWith('/enable') && !req.path.endsWith('/profile') && !req.path.endsWith('/me')) {
+    // Disabled accounts can still read their data; only block write actions
+    // that would earn new rewards (e.g. verify-email, disable again, etc.)
+    if (user.disabledAt && req.method !== 'GET' && !req.path.endsWith('/enable') && !req.path.includes('/verify-email')) {
       res.status(403).json({ error: 'Account is disabled' });
       return;
     }
