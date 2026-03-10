@@ -1,4 +1,4 @@
-import { apiClient } from './client';
+import { apiClient } from "./client";
 
 export interface User {
   id: string;
@@ -20,6 +20,7 @@ export interface AuthResponse {
   user: User;
   token: string;
   isNewUser: boolean;
+  bytesInviteId?: string;
   referrerWalletAddress?: string;
 }
 
@@ -36,8 +37,8 @@ export async function walletAuth(
   message: string,
   referralCode?: string,
 ): Promise<AuthResponse> {
-  return apiClient<AuthResponse>('/auth/wallet', {
-    method: 'POST',
+  return apiClient<AuthResponse>("/auth/wallet", {
+    method: "POST",
     body: JSON.stringify({ walletAddress, signature, message, referralCode }),
   });
 }
@@ -46,14 +47,14 @@ export async function walletAuth(
  * Get current authenticated user
  */
 export async function getCurrentUser(): Promise<GetMeResponse> {
-  return apiClient<GetMeResponse>('/auth/me');
+  return apiClient<GetMeResponse>("/auth/me");
 }
 
 /**
  * Logout (client-side token removal)
  */
 export function logout(): void {
-  if (typeof window !== 'undefined') {
-    localStorage.removeItem('token');
+  if (typeof window !== "undefined") {
+    localStorage.removeItem("token");
   }
 }

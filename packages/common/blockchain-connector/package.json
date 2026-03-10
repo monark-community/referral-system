@@ -18,6 +18,10 @@
     "./clients": {
       "import": "./dist/clients.js",
       "types": "./dist/clients.d.ts"
+    },
+    "./uuidBytesConverter": {
+      "import": "./dist/uuidBytesConverter.js",
+      "types": "./dist/uuidBytesConverter.d.ts"
     }
   },
   "scripts": {
