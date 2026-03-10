@@ -58,6 +58,10 @@ export function WalletConnectStep({ onSuccess, onReturningUser }: WalletConnectS
     setIsAuthenticating(true);
 
     try {
+      // Clear any stale token from a previous DB session so it doesn't
+      // interfere with the fresh walletAuth request.
+      localStorage.removeItem('token');
+
       // Create a message for signing
       const timestamp = Date.now();
       const message = `Sign this message to authenticate with Reffinity.\n\nTimestamp: ${timestamp}\nWallet: ${address}`;
@@ -77,8 +81,10 @@ export function WalletConnectStep({ onSuccess, onReturningUser }: WalletConnectS
       // Store token and user data
       login(response.token, response.user);
 
-      // If returning user, skip onboarding and go to dashboard
-      if (!response.isNewUser && onReturningUser) {
+      // If returning user who has completed their profile, skip onboarding
+      // and go to dashboard. Users without a name haven't finished onboarding
+      // (e.g. previous attempt failed mid-way or DB was reset).
+      if (!response.isNewUser && response.user.name && onReturningUser) {
         onReturningUser();
         return;
       }
