@@ -33,7 +33,7 @@ contract ReferralProgram is AccessControl {
     }
 
     //adds someone to the program using a referral
-    function acceptInvite(address referrer) public {
+    function acceptInvite(address referrer, bytes32 inviteId) public {
         require(users.contains(referrer), "Referrer not in system");
         require(!users.contains(msg.sender), "Referree already in system");
         users.add(msg.sender);
@@ -52,6 +52,7 @@ contract ReferralProgram is AccessControl {
             referrer,
             referrerPoints
         );
+        createInvite(inviteId, referrer, ReferralInvites.InviteStatus.Accepted);
     }
 
     function viewReferrals(address user) public view returns (address[] memory) {
@@ -92,10 +93,10 @@ contract ReferralProgram is AccessControl {
 
     // -- Functions for invites and statuses
 
-    function createInvite(bytes32 inviteID, ReferralInvites.InviteStatus status) public {
+    function createInvite(bytes32 inviteID, address referrer, ReferralInvites.InviteStatus status) public {
         require(uint8(status) <= uint8(ReferralInvites.InviteStatus.Closed), "Invalid status");
-        invites.createInvite(inviteID, msg.sender, status);
-        emit ReferralInvites.InviteChanged(inviteID, msg.sender, status);
+        invites.createInvite(inviteID, referrer, status);
+        emit ReferralInvites.InviteChanged(inviteID, referrer, status);
     }
 
     

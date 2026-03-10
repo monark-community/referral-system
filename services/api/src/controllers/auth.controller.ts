@@ -5,6 +5,7 @@ import {
   verifyWalletSignature,
   generateReferralCode,
 } from "../services/auth.service.js";
+import { uuidToBytes32 } from "@reffinity/blockchain-connector/uuidBytesConverter";
 
 /**
  * POST /api/auth/wallet
@@ -37,6 +38,7 @@ export async function walletAuth(req: Request, res: Response): Promise<void> {
 
     let isNewUser = false;
     let referrerWalletAddress: string | undefined;
+    let bytesInviteId: string | undefined;
 
     // Create new user if not found
     if (!user) {
@@ -80,9 +82,11 @@ export async function walletAuth(req: Request, res: Response): Promise<void> {
         },
       });
 
+      var inviteId: string | undefined;
+
       // Create a Referral record to track this individual referral
       if (referredBy) {
-        await prisma.referral.create({
+        let invite = await prisma.referral.create({
           data: {
             referrerId: referredBy,
             refereeId: user.id,
@@ -90,7 +94,11 @@ export async function walletAuth(req: Request, res: Response): Promise<void> {
             points: 0,
           },
         });
+        inviteId = invite.id;
       }
+
+      bytesInviteId = inviteId ? uuidToBytes32(inviteId) : "";
+      console.log(inviteId, bytesInviteId);
 
       console.log(
         `New user created: ${user.id} (${normalizedAddress})${referredBy ? ` referred by ${referredBy}` : ""}`,
@@ -119,6 +127,7 @@ export async function walletAuth(req: Request, res: Response): Promise<void> {
       },
       token,
       isNewUser,
+      bytesInviteId,
       ...(referrerWalletAddress && { referrerWalletAddress }),
     });
   } catch (error) {

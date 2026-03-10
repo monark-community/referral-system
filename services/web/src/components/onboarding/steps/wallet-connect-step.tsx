@@ -12,6 +12,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { WriteReferralContractHelper } from '@reffinity/blockchain-connector/writeReferralContractHelper';
 import { hardhat } from 'wagmi/chains';
 import { wagmiConfig } from '@/lib/wagmi/config';
+import { stringToHex } from 'viem';
 
 interface WalletConnectStepProps {
   onSuccess: () => void;
@@ -94,12 +95,17 @@ export function WalletConnectStep({ onSuccess, onReturningUser }: WalletConnectS
 
       // If referred, call acceptInvite with referrer's address; otherwise joinProgram
       let txHash: `0x${string}`;
+      const inviteId = response.bytesInviteId;
       if (response.referrerWalletAddress) {
+        if(!inviteId) {
+          throw new Error('Invite ID is missing for referred user');
+        }
+
         const acceptInviteContext = await WriteReferralContractHelper.acceptInviteContext();
         txHash = await writeContractAsync({
           ...acceptInviteContext,
           chainId: hardhat.id,
-          args: [response.referrerWalletAddress as `0x${string}`],
+          args: [response.referrerWalletAddress as `0x${string}`, inviteId as `0x${string}`],
         });
       } else {
         const joinProgramContext = await WriteReferralContractHelper.joinProgramContext();

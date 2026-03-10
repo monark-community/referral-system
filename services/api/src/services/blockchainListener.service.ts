@@ -3,6 +3,7 @@ import type { PublicClient } from "viem";
 import { ReadReferralContractService } from "@reffinity/blockchain-connector/readReferralContract";
 import { createWebSocketClient } from "@reffinity/blockchain-connector/clients";
 import { log } from "console";
+import { bytes32ToUuid } from "@reffinity/blockchain-connector/uuidBytesConverter";
 
 export class BlockchainListenerService {
   private isListeningToPointsAdded: boolean = false;
@@ -68,11 +69,6 @@ export class BlockchainListenerService {
                 milestoneLevel,
               },
             });
-            // Mark pending referral as completed now that on-chain event confirmed
-            await prisma.referral.updateMany({
-              where: { refereeId: existingUser.id, status: 0 },
-              data: { status: 1 },
-            });
           } else {
             console.warn(
               `User ${normalizedAddress} not found in DB, skipping points update`,
@@ -122,7 +118,7 @@ export class BlockchainListenerService {
 
           try {
             await prisma.referral.updateMany({
-              where: { id: inviteId },
+              where: { id: bytes32ToUuid(inviteId) },
               data: { status: status },
             });
 
@@ -236,18 +232,13 @@ export class BlockchainListenerService {
               milestoneLevel,
             },
           });
-          // Mark pending referral as completed now that on-chain event confirmed
-          await prisma.referral.updateMany({
-            where: { refereeId: existingUser.id, status: 0 },
-            data: { status: 1 },
-          });
         }
       } else if ("inviteId" in event.args) {
         // InviteChanged event
         const { inviteId, referrer, status } = event.args;
 
         await prisma.referral.updateMany({
-          where: { id: inviteId },
+          where: { id: bytes32ToUuid(inviteId) },
           data: { status: status },
         });
         console.log(

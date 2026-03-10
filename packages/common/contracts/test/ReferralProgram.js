@@ -189,19 +189,26 @@ test("user can have have a invite created", async () => {
         args: [referrerAccount.address],
     });
 
-    assert.equal(userinvites.length, 3);
+    assert.equal(userinvites.length, 4);
 
-    assert.equal(userinvites[0].inviteId, stringToHex("invite1", {size: 32}));
-    assert.equal(userinvites[0].status, 0); // pending 
+    // invite from accepting invite
+    assert.equal(userinvites[0].inviteId, stringToHex("invite0", {size: 32}));
+    assert.equal(userinvites[0].status, 1); // accepted
     assert.equal(userinvites[0].points, 100n); // points for referring
 
-    assert.equal(userinvites[1].inviteId, stringToHex("invite2", {size: 32}));
-    assert.equal(userinvites[1].status, 1); // accepted 
+
+    //Added invites
+    assert.equal(userinvites[1].inviteId, stringToHex("invite1", {size: 32}));
+    assert.equal(userinvites[1].status, 0); // pending 
     assert.equal(userinvites[1].points, 100n); // points for referring
 
-    assert.equal(userinvites[2].inviteId, stringToHex("invite3", {size: 32}));
-    assert.equal(userinvites[2].status, 2); // closed 
+    assert.equal(userinvites[2].inviteId, stringToHex("invite2", {size: 32}));
+    assert.equal(userinvites[2].status, 1); // accepted 
     assert.equal(userinvites[2].points, 100n); // points for referring
+
+    assert.equal(userinvites[3].inviteId, stringToHex("invite3", {size: 32}));
+    assert.equal(userinvites[3].status, 2); // closed 
+    assert.equal(userinvites[3].points, 100n); // points for referring
     
 });
 
@@ -221,21 +228,20 @@ test("user invite status can be updated", async () => {
         args: [referrerAccount.address],
     });
 
-    assert.equal(userinvites.length, 3);
+    assert.equal(userinvites.length, 4);
 
-    assert.equal(userinvites[0].inviteId, stringToHex("invite1", {size: 32}));
-    assert.equal(userinvites[0].status, 0); // pending 
-    assert.equal(userinvites[0].points, 100n); // points for referring
+    assert.equal(userinvites[1].inviteId, stringToHex("invite1", {size: 32}));
+    assert.equal(userinvites[1].status, 0); // pending 
+    assert.equal(userinvites[1].points, 100n); // points for referring
 
     let request;
 
-    // joinProgram
     ({ request } = await publicClient.simulateContract({
         account: referrerAccount,
         address: contractAddress,
         abi: abi,
         functionName: "updateInviteStatus",
-        args: [userinvites[0].inviteId, 1], // update invite status to accepted
+        args: [userinvites[1].inviteId, 1], // update invite status to accepted
     }))
     var hash = await referreeWalletClient.writeContract(request)
     await publicClient.waitForTransactionReceipt({ hash });
@@ -244,7 +250,7 @@ test("user invite status can be updated", async () => {
         address: contractAddress,
         abi,
         functionName: "getInviteStatus",
-        args: [userinvites[0].inviteId],
+        args: [userinvites[1].inviteId],
     });
 
     assert.equal(newStatus, 1); // status should be accepted now
@@ -274,7 +280,7 @@ async function addReferrerAndReferree(){
         address: contractAddress,
         abi: abi,
         functionName: "acceptInvite",
-        args: [referrerAccount.address],
+        args: [referrerAccount.address, stringToHex("invite0", {size: 32})],
     }))
     hash = await referreeWalletClient.writeContract(request)
     await publicClient.waitForTransactionReceipt({ hash });
@@ -338,7 +344,7 @@ async function createInvitesForUser(user) {
         address: contractAddress,
         abi: abi,
         functionName: "createInvite",
-        args: [stringToHex("invite1", {size: 32}), 0], // add a invite with status pending
+        args: [stringToHex("invite1", {size: 32}), referrerAccount.address, 0], // add a invite with status pending
     }))
     var hash = await referreeWalletClient.writeContract(request)
     await publicClient.waitForTransactionReceipt({ hash });
@@ -348,7 +354,7 @@ async function createInvitesForUser(user) {
         address: contractAddress,
         abi: abi,
         functionName: "createInvite",
-        args: [stringToHex("invite2", {size: 32}), 1], // add a invite with status Accepted
+        args: [stringToHex("invite2", {size: 32}), referrerAccount.address, 1], // add a invite with status Accepted
     }))
     var hash = await referreeWalletClient.writeContract(request)
     await publicClient.waitForTransactionReceipt({ hash });
@@ -358,7 +364,7 @@ async function createInvitesForUser(user) {
         address: contractAddress,
         abi: abi,
         functionName: "createInvite",
-        args: [stringToHex("invite3", {size: 32}), 2], // add a invite with status Closed
+        args: [stringToHex("invite3", {size: 32}), referrerAccount.address, 2], // add a invite with status Closed
     }))
     var hash = await referreeWalletClient.writeContract(request)
     await publicClient.waitForTransactionReceipt({ hash });
