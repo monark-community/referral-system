@@ -107,7 +107,9 @@ referral-system/
 
 ## Getting Started
 
-TODO
+For first time setup you need to [setup metamask wallet for the app](https://github.com/monark-community/referral-system/wiki/Setting-up-Metamask-for-Use-in-the-App)
+
+For running the app go to [setup.md](./setup.md)
 
 ## Available Scripts
 
