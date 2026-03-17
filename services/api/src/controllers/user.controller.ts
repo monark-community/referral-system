@@ -1,6 +1,10 @@
 import { Request, Response } from "express";
 import { prisma } from "../lib/prisma.js";
-import { generateEmailVerificationToken } from "../services/auth.service.js";
+import {
+  generateEmailVerificationToken,
+  generateInviteCode,
+} from "../services/auth.service.js";
+import { uuidToBytes32 } from "@reffinity/blockchain-connector/uuidBytesConverter";
 
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
 
@@ -308,7 +312,10 @@ export async function acceptTerms(req: Request, res: Response): Promise<void> {
  * POST /api/users/disable
  * Disable the current user's account
  */
-export async function disableAccount(req: Request, res: Response): Promise<void> {
+export async function disableAccount(
+  req: Request,
+  res: Response,
+): Promise<void> {
   try {
     if (!req.user) {
       res.status(401).json({ error: "Not authenticated" });
@@ -332,7 +339,10 @@ export async function disableAccount(req: Request, res: Response): Promise<void>
  * POST /api/users/enable
  * Re-enable the current user's account
  */
-export async function enableAccount(req: Request, res: Response): Promise<void> {
+export async function enableAccount(
+  req: Request,
+  res: Response,
+): Promise<void> {
   try {
     if (!req.user) {
       res.status(401).json({ error: "Not authenticated" });
@@ -386,5 +396,52 @@ export async function getInvites(req: Request, res: Response): Promise<void> {
   } catch (error) {
     console.error("Get invites error:", error);
     res.status(500).json({ error: "Failed to get invites" });
+  }
+}
+
+export async function createPrivateInvite(
+  req: Request,
+  res: Response,
+): Promise<void> {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: "Not authenticated" });
+      return;
+    }
+    var { description } = req.body;
+
+    if (!description) {
+      var numberOfReferrals = await prisma.referral.count({
+        where: {
+          referrer: { walletAddress: req.user.walletAddress.toLowerCase() },
+        },
+      });
+      numberOfReferrals++;
+      description = "Invite Number " + numberOfReferrals;
+    }
+
+    const inviteCode = generateInviteCode();
+
+    const invite = await prisma.referral.create({
+      data: {
+        referrerId: req.user.id,
+        status: 0,
+        points: 0,
+        isPrivate: true,
+        description: description,
+        inviteCode: inviteCode,
+      },
+    });
+    const inviteId = invite.id;
+    const bytesInviteId = inviteId ? uuidToBytes32(inviteId) : "";
+
+    res.json({
+      bytesinviteId: bytesInviteId,
+      referralCode: req.user.referralCode,
+      inviteCode: inviteCode,
+    });
+  } catch (error) {
+    console.error("Create Private Invite error:", error);
+    res.status(500).json({ error: "Failed to create a private invites" });
   }
 }

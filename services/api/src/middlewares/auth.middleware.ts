@@ -1,6 +1,6 @@
-import { Request, Response, NextFunction } from 'express';
-import { verifyJWT } from '../services/auth.service.js';
-import { prisma } from '../lib/prisma.js';
+import { Request, Response, NextFunction } from "express";
+import { verifyJWT } from "../services/auth.service.js";
+import { prisma } from "../lib/prisma.js";
 
 // Extend Express Request type to include user
 declare global {
@@ -9,6 +9,7 @@ declare global {
       user?: {
         id: string;
         walletAddress: string;
+        referralCode?: string;
       };
     }
   }
@@ -17,42 +18,52 @@ declare global {
 export async function authMiddleware(
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> {
   try {
     // Get token from Authorization header
     const authHeader = req.headers.authorization;
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      res.status(401).json({ error: 'No token provided' });
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      res.status(401).json({ error: "No token provided" });
       return;
     }
 
-    const token = authHeader.split(' ')[1];
+    const token = authHeader.split(" ")[1];
 
     // Verify token
     const payload = verifyJWT(token);
 
     if (!payload) {
-      res.status(401).json({ error: 'Invalid token' });
+      res.status(401).json({ error: "Invalid token" });
       return;
     }
 
     // Check if user still exists
     const user = await prisma.user.findUnique({
       where: { id: payload.userId },
-      select: { id: true, walletAddress: true, disabledAt: true },
+      select: {
+        id: true,
+        walletAddress: true,
+        disabledAt: true,
+        referralCode: true,
+      },
     });
 
     if (!user) {
-      res.status(401).json({ error: 'User not found' });
+      res.status(401).json({ error: "User not found" });
       return;
     }
 
     // Disabled accounts can still read their data; only block write actions
     // that would earn new rewards (e.g. verify-email, disable again, etc.)
-    if (user.disabledAt && req.method !== 'GET' && !req.path.endsWith('/enable') && !req.path.includes('/verify-email')) {
-      res.status(403).json({ error: 'Account is disabled' });
+    if (
+      user.disabledAt &&
+      req.method !== "GET" &&
+      !req.path.endsWith("/enable") &&
+      !req.path.includes("/verify-email")
+    ) {
+      res.status(403).json({ error: "Account is disabled" });
       return;
     }
 
@@ -60,7 +71,7 @@ export async function authMiddleware(
     req.user = user;
     next();
   } catch (error) {
-    console.error('Auth middleware error:', error);
-    res.status(401).json({ error: 'Authentication failed' });
+    console.error("Auth middleware error:", error);
+    res.status(401).json({ error: "Authentication failed" });
   }
 }

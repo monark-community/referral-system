@@ -7,8 +7,10 @@ import {
   disableAccount,
   enableAccount,
   getInvites,
+  createPrivateInvite,
 } from "@/controllers/user.controller.js";
 import { prisma } from "@/lib/prisma.js";
+import { uuidToBytes32 } from "@reffinity/blockchain-connector/uuidBytesConverter";
 import { verify } from "crypto";
 import { id } from "ethers";
 import { body } from "express-validator";
@@ -25,9 +27,18 @@ jest.mock("@/lib/prisma", () => ({
     referral: {
       create: jest.fn(),
       findMany: jest.fn(),
+      count: jest.fn(),
     },
   },
 }));
+
+jest.mock(
+  "@reffinity/blockchain-connector/uuidBytesConverter",
+  () => ({
+    uuidToBytes32: jest.fn(),
+  }),
+  { virtual: true },
+);
 
 var res: any;
 var req: any;
@@ -467,7 +478,7 @@ describe("User Controller test", () => {
   });
 
   test("getInvites should 404 on no invites", async () => {
-    req = {user: { id: "user1", walletAddress: "abcd-1234-defg-5678" }};
+    req = { user: { id: "user1", walletAddress: "abcd-1234-defg-5678" } };
 
     (prisma.referral.findMany as jest.Mock).mockReturnValue(null);
 
@@ -511,6 +522,93 @@ describe("User Controller test", () => {
           id: "user1",
         },
       ],
+    });
+  });
+
+  test("createPrivateInvite should fail on non authenticated user", async () => {
+    req = {};
+
+    await createPrivateInvite(req, res);
+
+    expect(res.json).toHaveBeenCalledWith({
+      error: "Not authenticated",
+    });
+    expect(res.status).toHaveBeenCalledWith(401);
+  });
+
+  test("createPrivateInvite should create new Invite with pending status", async () => {
+    req = {
+      user: {
+        id: "user1",
+        referralCode: "ABCDEFGHIJ",
+        walletAddress: "0x9876543210",
+      },
+      body: {
+        description: null,
+      },
+    };
+
+    (prisma.referral.count as jest.Mock).mockReturnValue(0);
+    (uuidToBytes32 as jest.Mock).mockReturnValue("0x012345678");
+    (prisma.referral.create as jest.Mock).mockReturnValue({
+      id: "user2",
+    });
+
+    await createPrivateInvite(req, res);
+
+    expect(prisma.referral.create).toHaveBeenCalledWith({
+      data: {
+        referrerId: req.user.id,
+        status: 0,
+        points: 0,
+        isPrivate: true,
+        description: "Invite Number 1",
+        inviteCode: expect.any(String),
+      },
+    });
+
+    expect(res.json).toHaveBeenCalledWith({
+      bytesinviteId: "0x012345678",
+      referralCode: req.user.referralCode,
+      inviteCode: expect.any(String),
+    });
+  });
+
+  test("createPrivateInvite should create new Invite with pending status", async () => {
+    req = {
+      user: {
+        id: "user1",
+        referralCode: "ABCDEFGHIJ",
+        walletAddress: "0x9876543210",
+      },
+      body: {
+        description: "my description",
+      },
+    };
+
+    (prisma.referral.count as jest.Mock).mockReturnValue(0);
+    (uuidToBytes32 as jest.Mock).mockReturnValue("0x012345678");
+    (prisma.referral.create as jest.Mock).mockReturnValue({
+      id: "user2",
+    });
+
+    await createPrivateInvite(req, res);
+
+    expect(prisma.referral.create).toHaveBeenCalledWith({
+      data: {
+        referrerId: req.user.id,
+        status: 0,
+        points: 0,
+        isPrivate: true,
+        description: "my description",
+        inviteCode: expect.any(String),
+      },
+    });
+
+    expect(res.json).toHaveBeenCalledWith({
+      bytesinviteId: "0x012345678",
+      referralCode: req.user.referralCode,
+      inviteCode: expect.any(String),
     });
   });
 });
