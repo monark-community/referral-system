@@ -69,6 +69,15 @@ export async function getInvites(): Promise<GetInvitesResponse> {
 }
 
 /**
+ * Accept terms of service
+ */
+export async function acceptTerms(): Promise<{ user: User }> {
+  return apiClient<{ user: User }>("/users/accept-terms", {
+    method: "POST",
+  });
+}
+
+/**
  * Disable the current user's account
  */
 export async function disableAccount(): Promise<{ success: boolean; disabledAt: string }> {

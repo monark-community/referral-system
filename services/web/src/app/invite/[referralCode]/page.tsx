@@ -12,7 +12,7 @@ export default function InvitePage() {
     if (referralCode) {
       localStorage.setItem('referralCode', referralCode);
     }
-    router.replace('/referrals/terms');
+    router.replace('/referrals/welcome');
   }, [referralCode, router]);
 
   return (

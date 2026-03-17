@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react';
 
-export type OnboardingStep = 'wallet' | 'profile' | 'verify-email' | 'success';
+export type OnboardingStep = 'wallet' | 'terms' | 'profile' | 'verify-email' | 'success';
 
 interface UseOnboardingReturn {
   step: OnboardingStep;
@@ -15,7 +15,7 @@ interface UseOnboardingReturn {
   reset: () => void;
 }
 
-const STEPS: OnboardingStep[] = ['wallet', 'profile', 'verify-email', 'success'];
+const STEPS: OnboardingStep[] = ['wallet', 'terms', 'profile', 'verify-email', 'success'];
 
 export function useOnboarding(): UseOnboardingReturn {
   const [step, setStep] = useState<OnboardingStep>('wallet');

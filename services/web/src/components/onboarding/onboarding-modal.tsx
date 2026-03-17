@@ -8,6 +8,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { WalletConnectStep } from './steps/wallet-connect-step';
+import { TermsStep } from './steps/terms-step';
 import { ProfileStep } from './steps/profile-step';
 import { EmailVerifyStep } from './steps/email-verify-step';
 import { SuccessStep } from './steps/success-step';
@@ -23,22 +24,28 @@ interface OnboardingModalProps {
   onReturningUser?: () => void;
 }
 
+const STEPS: OnboardingStep[] = ['wallet', 'terms', 'profile', 'verify-email', 'success'];
+
 const stepConfig: Record<OnboardingStep, { title: string; description: string }> = {
   wallet: {
     title: 'Connect Wallet',
-    description: 'Step 1 of 4',
+    description: 'Step 1 of 5',
+  },
+  terms: {
+    title: 'Terms of Service',
+    description: 'Step 2 of 5',
   },
   profile: {
     title: 'Your Profile',
-    description: 'Step 2 of 4',
+    description: 'Step 3 of 5',
   },
   'verify-email': {
     title: 'Email Verification',
-    description: 'Step 3 of 4',
+    description: 'Step 4 of 5',
   },
   success: {
     title: 'All Done!',
-    description: 'Step 4 of 4',
+    description: 'Step 5 of 5',
   },
 };
 
@@ -55,7 +62,7 @@ export function OnboardingModal({
 
   // Determine if close button should be shown
   // Don't show on wallet step to prevent accidental close
-  const showCloseButton = step !== 'wallet';
+  const showCloseButton = step !== 'wallet' && step !== 'terms';
 
   const handleSkipEmailVerification = () => {
     // Skip to success step
@@ -76,28 +83,30 @@ export function OnboardingModal({
 
         {/* Progress Indicator */}
         <div className="flex gap-1.5 py-2">
-          {(['wallet', 'profile', 'verify-email', 'success'] as OnboardingStep[]).map(
-            (s, index) => {
-              const currentIndex = ['wallet', 'profile', 'verify-email', 'success'].indexOf(step);
-              const isCompleted = index < currentIndex;
-              const isCurrent = s === step;
+          {STEPS.map((s, index) => {
+            const currentIndex = STEPS.indexOf(step);
+            const isCompleted = index < currentIndex;
+            const isCurrent = s === step;
 
-              return (
-                <div
-                  key={s}
-                  className={`h-1 flex-1 rounded-full transition-colors ${
-                    isCompleted || isCurrent
-                      ? 'bg-primary'
-                      : 'bg-secondary'
-                  }`}
-                />
-              );
-            }
-          )}
+            return (
+              <div
+                key={s}
+                className={`h-1 flex-1 rounded-full transition-colors ${
+                  isCompleted || isCurrent
+                    ? 'bg-primary'
+                    : 'bg-secondary'
+                }`}
+              />
+            );
+          })}
         </div>
 
         {/* Step Content */}
         {step === 'wallet' && <WalletConnectStep onSuccess={onNextStep} onReturningUser={onReturningUser} />}
+
+        {step === 'terms' && (
+          <TermsStep onSuccess={onNextStep} onBack={onPreviousStep} />
+        )}
 
         {step === 'profile' && (
           <ProfileStep onSuccess={onNextStep} onBack={onPreviousStep} />
