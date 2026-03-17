@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Gift, Link2, Shield, Sparkles, X } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { LoginModal } from "@/components/login/login-modal";
+import { OnboardingModal } from "@/components/onboarding";
+import { useOnboarding } from "@/hooks/use-onboarding";
 
 const features = [
   {
@@ -34,6 +36,24 @@ export default function WelcomePage() {
   const router = useRouter();
   const { isAuthenticated, isLoading } = useAuth();
   const [isLoginOpen, setIsLoginOpen] = useState(false);
+  const {
+    isOpen: isOnboardingOpen,
+    step,
+    openOnboarding,
+    closeOnboarding,
+    nextStep,
+    previousStep,
+    goToStep,
+  } = useOnboarding();
+
+  const handleOnboardingClose = () => {
+    closeOnboarding();
+  };
+
+  const handleReturningUser = () => {
+    closeOnboarding();
+    router.push("/referrals");
+  };
 
   return (
     <div className="h-screen bg-background flex flex-col max-w-md mx-auto overflow-hidden">
@@ -123,7 +143,7 @@ export default function WelcomePage() {
             <Button
               className="flex-1"
               disabled={isLoading}
-              onClick={() => router.push("/referrals/terms")}
+              onClick={() => openOnboarding()}
             >
               Join the Program
             </Button>
@@ -134,6 +154,16 @@ export default function WelcomePage() {
       <LoginModal
         isOpen={isLoginOpen}
         onClose={() => setIsLoginOpen(false)}
+      />
+
+      <OnboardingModal
+        isOpen={isOnboardingOpen}
+        step={step}
+        onClose={handleOnboardingClose}
+        onNextStep={nextStep}
+        onPreviousStep={previousStep}
+        onGoToStep={goToStep}
+        onReturningUser={handleReturningUser}
       />
     </div>
   );

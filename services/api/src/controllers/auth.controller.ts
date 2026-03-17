@@ -78,7 +78,7 @@ export async function walletAuth(req: Request, res: Response): Promise<void> {
           walletAddress: normalizedAddress,
           referralCode,
           referredBy,
-          termsAcceptedAt: new Date(),
+          termsAcceptedAt: null,
         },
       });
 

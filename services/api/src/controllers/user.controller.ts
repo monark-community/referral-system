@@ -267,6 +267,44 @@ export async function verifyEmail(req: Request, res: Response): Promise<void> {
 }
 
 /**
+ * POST /api/users/accept-terms
+ * Record that the user has accepted the terms of service
+ */
+export async function acceptTerms(req: Request, res: Response): Promise<void> {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: "Not authenticated" });
+      return;
+    }
+
+    const user = await prisma.user.update({
+      where: { id: req.user.id },
+      data: { termsAcceptedAt: new Date() },
+      select: {
+        id: true,
+        walletAddress: true,
+        name: true,
+        email: true,
+        phone: true,
+        emailVerified: true,
+        referralCode: true,
+        earnedPoints: true,
+        pendingPoints: true,
+        milestoneLevel: true,
+        disabledAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    res.json({ user });
+  } catch (error) {
+    console.error("Accept terms error:", error);
+    res.status(500).json({ error: "Failed to accept terms" });
+  }
+}
+
+/**
  * POST /api/users/disable
  * Disable the current user's account
  */

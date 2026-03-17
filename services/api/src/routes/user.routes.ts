@@ -6,6 +6,7 @@ import {
   verifyEmail,
   validateReferralCode,
   getInvites,
+  acceptTerms,
   disableAccount,
   enableAccount,
 } from '../controllers/user.controller.js';
@@ -22,6 +23,9 @@ router.put('/profile', authMiddleware, validateProfileUpdate, updateProfile);
 
 // POST /api/users/verify-email/send - Send email verification
 router.post('/verify-email/send', authMiddleware, sendVerificationEmail);
+
+// POST /api/users/accept-terms - Accept terms of service
+router.post('/accept-terms', authMiddleware, acceptTerms);
 
 // GET /api/users/referral/:code - Validate referral code
 router.get('/referral/:code', validateReferralCode);

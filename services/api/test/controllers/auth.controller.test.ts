@@ -55,7 +55,7 @@ describe("Test auth controller", () => {
       walletAddress: "0x1234567890123456789012345678901234567890",
       referralCode: "REFERRAL123",
       referredBy: "referrer123",
-      termsAcceptedAt: expect.any(Date),
+      termsAcceptedAt: null,
     });
     (prisma.referral.create as jest.Mock).mockReturnValue({
       id: "referral1",
@@ -110,7 +110,7 @@ describe("Test auth controller", () => {
         walletAddress: req.body.walletAddress.toLowerCase(),
         referralCode: "REFERRAL123",
         referredBy: mockReferrer.id,
-        termsAcceptedAt: expect.any(Date),
+        termsAcceptedAt: null,
       },
     });
 
