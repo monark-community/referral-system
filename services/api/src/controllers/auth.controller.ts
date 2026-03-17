@@ -98,7 +98,6 @@ export async function walletAuth(req: Request, res: Response): Promise<void> {
       }
 
       bytesInviteId = inviteId ? uuidToBytes32(inviteId) : "";
-      console.log(inviteId, bytesInviteId);
 
       console.log(
         `New user created: ${user.id} (${normalizedAddress})${referredBy ? ` referred by ${referredBy}` : ""}`,

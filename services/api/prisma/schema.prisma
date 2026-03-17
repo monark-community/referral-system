@@ -55,19 +55,28 @@ model User {
 model Referral {
   id String @id @default(uuid())
 
+  // A code to a private invite if it exists
+  inviteCode String? @map("invite_code")
+
   // The user who shared the referral link
   referrerId String @map("referrer_id")
   referrer   User   @relation("SentReferrals", fields: [referrerId], references: [id])
 
   // The user who signed up via the referral link
-  refereeId String @unique @map("referee_id")
-  referee   User   @relation("ReceivedReferral", fields: [refereeId], references: [id])
+  refereeId String? @unique @map("referee_id")
+  referee   User?   @relation("ReceivedReferral", fields: [refereeId], references: [id])
 
   // Status: pending (signed up) -> completed (on-chain confirmed)
   status Int @default(0)
 
   //points associated with the action
-  points Int 
+  points Int
+
+  // If the refferal is private or not
+  isPrivate Boolean @default(false) @map("is_private")
+
+  // Short description of referral
+  description String @default("") @map("description")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -84,23 +93,10 @@ model ChainSyncState {
 
 // Milestone tier definitions
 model MilestoneTier {
-  level          Int    @id // 0-indexed milestone level
+  level          Int      @id // 0-indexed milestone level
   name           String // e.g. "Bronze", "Silver"
-  pointsRequired Int    @map("points_required")
+  pointsRequired Int      @map("points_required")
   benefits       String[] // list of benefit descriptions
 
   @@map("milestone_tiers")
-}
-
-//Keeps track of the users invites
-model Invite {
-  inviteId String @id @db.VarChar(66) // bytes32 hex string
-  referrer String @db.VarChar(42) // wallet address
-  status   Int // enum value from solidity
-  points   Int
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([referrer])
 }
