@@ -571,6 +571,7 @@ describe("User Controller test", () => {
       bytesinviteId: "0x012345678",
       referralCode: req.user.referralCode,
       inviteCode: expect.any(String),
+      referrerWallet: "0x9876543210",
     });
   });
 
@@ -609,6 +610,7 @@ describe("User Controller test", () => {
       bytesinviteId: "0x012345678",
       referralCode: req.user.referralCode,
       inviteCode: expect.any(String),
+      referrerWallet: "0x9876543210",
     });
   });
 });

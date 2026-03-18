@@ -78,6 +78,9 @@ model Referral {
   // Short description of referral
   description String @default("") @map("description")
 
+  //Whether the referral is a verified in the chain
+  isVerified Boolean @default(false) @map("is_verified")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 

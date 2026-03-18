@@ -119,7 +119,10 @@ export class BlockchainListenerService {
           try {
             await prisma.referral.updateMany({
               where: { id: bytes32ToUuid(inviteId) },
-              data: { status: status },
+              data: {
+                status: status,
+                isVerified: true,
+              },
             });
 
             console.log(

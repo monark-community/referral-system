@@ -22,12 +22,25 @@ export interface Invite {
   referee: User;
   status: number;
   points: number;
+  isVerified: boolean;
+  description: string;
   createdAt: string;
   updatedAt: string;
 }
 
 export interface GetInvitesResponse {
   invites: Invite[];
+}
+
+export interface PrivateInviteRequest {
+  description: string | null;
+}
+
+export interface PrivateInviteResponse {
+  bytesinviteId: string;
+  referralCode: string;
+  inviteCode: string;
+  referrerWallet: string;
 }
 
 /**
@@ -80,7 +93,10 @@ export async function acceptTerms(): Promise<{ user: User }> {
 /**
  * Disable the current user's account
  */
-export async function disableAccount(): Promise<{ success: boolean; disabledAt: string }> {
+export async function disableAccount(): Promise<{
+  success: boolean;
+  disabledAt: string;
+}> {
   return apiClient("/users/disable", { method: "POST" });
 }
 
@@ -121,4 +137,17 @@ export async function getMilestoneTiers(): Promise<GetMilestoneTiersResponse> {
  */
 export async function getUserMilestone(): Promise<UserMilestoneResponse> {
   return apiClient<UserMilestoneResponse>("/milestones/user");
+}
+
+/*
+Create a new private invite for the user
+*/
+export async function createPrivateInvite(
+  description: string | null,
+): Promise<PrivateInviteResponse> {
+  var data: PrivateInviteRequest = { description: description };
+  return apiClient<PrivateInviteResponse>("/users/referrals/private", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
 }

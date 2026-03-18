@@ -382,6 +382,8 @@ export async function getInvites(req: Request, res: Response): Promise<void> {
         referee: true,
         status: true,
         points: true,
+        isVerified: true,
+        description: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -439,6 +441,7 @@ export async function createPrivateInvite(
       bytesinviteId: bytesInviteId,
       referralCode: req.user.referralCode,
       inviteCode: inviteCode,
+      referrerWallet: req.user.walletAddress,
     });
   } catch (error) {
     console.error("Create Private Invite error:", error);
