@@ -33,4 +33,12 @@ export class WriteReferralContractHelper {
             functionName: 'addNewMilestone',
         }
     }
+
+    static async createInviteContext() {
+        return {
+            abi: contracts.referral.abi,
+            address: contracts.referral.address.local,
+            functionName: 'createInvite',
+        }
+    }
 }
