@@ -105,7 +105,7 @@ export function ReferralLinkCard({ referralLink, onShare }: ReferralLinkCardProp
 
       {/* Share Options (shown when native share is unavailable) */}
       {showShareOptions && (
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           <button
             onClick={shareViaEmail}
             className="flex flex-col items-center gap-1 p-3 rounded-lg border border-border bg-card hover:bg-secondary transition-colors"

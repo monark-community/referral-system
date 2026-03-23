@@ -36,7 +36,7 @@ export default function HowItWorksPage() {
   const router = useRouter();
 
   return (
-    <div className="h-screen bg-background flex flex-col max-w-md mx-auto overflow-hidden">
+    <div className="h-screen bg-background flex flex-col max-w-md md:max-w-lg mx-auto overflow-hidden">
       <PageHeader
         subtitle="Referrals Program"
         title="How it Works"
