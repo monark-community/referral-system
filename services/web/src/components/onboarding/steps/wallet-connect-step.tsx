@@ -17,9 +17,10 @@ import { stringToHex } from 'viem';
 interface WalletConnectStepProps {
   onSuccess: () => void;
   onReturningUser?: () => void;
+  onNeedsVerification?: () => void;
 }
 
-export function WalletConnectStep({ onSuccess, onReturningUser }: WalletConnectStepProps) {
+export function WalletConnectStep({ onSuccess, onReturningUser, onNeedsVerification }: WalletConnectStepProps) {
   const [error, setError] = useState<string | null>(null);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
 
@@ -86,6 +87,11 @@ export function WalletConnectStep({ onSuccess, onReturningUser }: WalletConnectS
       // and go to dashboard. Users without a name haven't finished onboarding
       // (e.g. previous attempt failed mid-way or DB was reset).
       if (!response.isNewUser && response.user.name && onReturningUser) {
+        // If email is set but not verified, go to verification step instead
+        if (response.user.email && !response.user.emailVerified && onNeedsVerification) {
+          onNeedsVerification();
+          return;
+        }
         onReturningUser();
         return;
       }

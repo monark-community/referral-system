@@ -64,9 +64,9 @@ export function OnboardingModal({
   // Don't show on wallet step to prevent accidental close
   const showCloseButton = step !== 'wallet' && step !== 'terms';
 
-  const handleSkipEmailVerification = () => {
-    // Skip to success step
-    onGoToStep('success');
+  const handleNeedsVerification = () => {
+    // Returning user with unverified email - jump to verify step
+    onGoToStep('verify-email');
   };
 
   return (
@@ -102,7 +102,7 @@ export function OnboardingModal({
         </div>
 
         {/* Step Content */}
-        {step === 'wallet' && <WalletConnectStep onSuccess={onNextStep} onReturningUser={onReturningUser} />}
+        {step === 'wallet' && <WalletConnectStep onSuccess={onNextStep} onReturningUser={onReturningUser} onNeedsVerification={handleNeedsVerification} />}
 
         {step === 'terms' && (
           <TermsStep onSuccess={onNextStep} onBack={onPreviousStep} />
@@ -113,7 +113,7 @@ export function OnboardingModal({
         )}
 
         {step === 'verify-email' && (
-          <EmailVerifyStep onSuccess={onNextStep} onSkip={handleSkipEmailVerification} />
+          <EmailVerifyStep onSuccess={onNextStep} />
         )}
 
         {step === 'success' && <SuccessStep onComplete={onClose} />}

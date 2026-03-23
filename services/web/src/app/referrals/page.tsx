@@ -8,12 +8,32 @@ import {
   ReferralLinkCard,
   NavMenuItem,
 } from "@/components/referral";
+import { OnboardingModal } from "@/components/onboarding";
+import { useOnboarding } from "@/hooks/use-onboarding";
 
 import { useAuth } from "@/contexts/auth-context";
 
 export default function ReferralsPage() {
   const router = useRouter();
   const { user: userData, isAuthenticated, isLoading, refreshUser } = useAuth();
+  const {
+    isOpen,
+    step,
+    openOnboarding,
+    closeOnboarding,
+    previousStep,
+    goToStep,
+  } = useOnboarding();
+
+  const needsVerification = userData && userData.email && !userData.emailVerified;
+
+  // Auto-open verification modal if email not verified
+  useEffect(() => {
+    if (!isLoading && isAuthenticated && needsVerification) {
+      goToStep("verify-email");
+      openOnboarding();
+    }
+  }, [isLoading, isAuthenticated, needsVerification, goToStep, openOnboarding]);
 
   // Refresh user data on mount so points reflect latest blockchain state
   useEffect(() => {
@@ -27,6 +47,16 @@ export default function ReferralsPage() {
       router.push("/referrals/welcome");
     }
   }, [isLoading, isAuthenticated, router]);
+
+  const handleVerificationClose = () => {
+    if (needsVerification) return;
+    closeOnboarding();
+  };
+
+  const handleVerificationSuccess = () => {
+    closeOnboarding();
+    refreshUser();
+  };
 
   if (isLoading) {
     return (
@@ -131,6 +161,16 @@ export default function ReferralsPage() {
           </section>
         </div>
       </main>
+
+      {/* Email Verification Modal - blocks dashboard until verified */}
+      <OnboardingModal
+        isOpen={isOpen}
+        step={step}
+        onClose={handleVerificationClose}
+        onNextStep={handleVerificationSuccess}
+        onPreviousStep={previousStep}
+        onGoToStep={goToStep}
+      />
     </div>
   );
 }
