@@ -1,15 +1,10 @@
-import { Resend } from 'resend';
 import nodemailer from 'nodemailer';
 import type { Transporter } from 'nodemailer';
 
 const API_URL = process.env.API_URL || 'http://localhost:3001';
-const EMAIL_PROVIDER = process.env.EMAIL_PROVIDER || 'console'; // 'resend', 'smtp', or 'console'
+const EMAIL_PROVIDER = process.env.EMAIL_PROVIDER || 'console'; // 'smtp' or 'console'
 const FROM_EMAIL = process.env.FROM_EMAIL || 'noreply@reffinity.io';
 const FROM_NAME = process.env.FROM_NAME || 'Reffinity';
-
-// Resend setup
-const RESEND_API_KEY = process.env.RESEND_API_KEY;
-const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;
 
 // SMTP setup
 const SMTP_HOST = process.env.SMTP_HOST;
@@ -145,60 +140,32 @@ export async function sendVerificationEmail(
   const subject = 'Verify your email for Reffinity';
 
   // Console mode (development/testing)
-  if (EMAIL_PROVIDER === 'console' || (!resend && !smtpTransporter)) {
+  if (EMAIL_PROVIDER === 'console' || !smtpTransporter) {
     console.log('\n========================================');
-    console.log('📧 EMAIL VERIFICATION (Console Mode)');
+    console.log('EMAIL VERIFICATION (Console Mode)');
     console.log('========================================');
     console.log(`To: ${email}`);
     console.log(`From: ${FROM_NAME} <${FROM_EMAIL}>`);
     console.log(`Name: ${name || 'User'}`);
     console.log(`Subject: ${subject}`);
     console.log('----------------------------------------');
-    console.log(`🔗 Verification Link: ${verificationUrl}`);
+    console.log(`Verification Link: ${verificationUrl}`);
     console.log('========================================\n');
-    console.log('ℹ️  To send real emails, configure one of the following in .env:');
-    console.log('   1. SMTP: Set SMTP_HOST, SMTP_USER, SMTP_PASS');
-    console.log('   2. Resend: Set RESEND_API_KEY');
-    console.log('   Then set EMAIL_PROVIDER=smtp or EMAIL_PROVIDER=resend\n');
+    console.log('To send real emails, configure SMTP in .env:');
+    console.log('   Set SMTP_HOST, SMTP_USER, SMTP_PASS');
+    console.log('   Then set EMAIL_PROVIDER=smtp\n');
     return;
   }
 
   try {
-    // Send via SMTP
-    if (EMAIL_PROVIDER === 'smtp' && smtpTransporter) {
-      const info = await smtpTransporter.sendMail({
-        from: `"${FROM_NAME}" <${FROM_EMAIL}>`,
-        to: email,
-        subject,
-        html: emailHtml,
-      });
+    const info = await smtpTransporter.sendMail({
+      from: `"${FROM_NAME}" <${FROM_EMAIL}>`,
+      to: email,
+      subject,
+      html: emailHtml,
+    });
 
-      console.log(`✅ Verification email sent via SMTP to ${email} (ID: ${info.messageId})`);
-      return;
-    }
-
-    // Send via Resend
-    if (EMAIL_PROVIDER === 'resend' && resend) {
-      const { data, error } = await resend.emails.send({
-        from: `${FROM_NAME} <${FROM_EMAIL}>`,
-        to: email,
-        subject,
-        html: emailHtml,
-      });
-
-      if (error) {
-        console.error('Resend error:', error);
-        throw new Error(`Failed to send email: ${error.message}`);
-      }
-
-      console.log(`✅ Verification email sent via Resend to ${email} (ID: ${data?.id})`);
-      return;
-    }
-
-    // If we get here, configuration is incomplete
-    throw new Error(
-      `Email provider "${EMAIL_PROVIDER}" is not properly configured. Check your .env file.`
-    );
+    console.log(`Verification email sent via SMTP to ${email} (ID: ${info.messageId})`);
   } catch (error) {
     console.error('Failed to send verification email:', error);
     throw error;

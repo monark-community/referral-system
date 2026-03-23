@@ -40,4 +40,7 @@ coverage/
 
 # Environment
 .env.*
-!.env.example.claude/
+!.env.example
+
+# Claude Code
+.claude/

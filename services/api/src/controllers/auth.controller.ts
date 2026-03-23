@@ -12,7 +12,7 @@ import {
  */
 export async function walletAuth(req: Request, res: Response): Promise<void> {
   try {
-    const { walletAddress, signature, message } = req.body;
+    const { walletAddress, signature, message, mode } = req.body;
 
     // Verify the signature
     const isValid = verifyWalletSignature(message, signature, walletAddress);
@@ -34,6 +34,12 @@ export async function walletAuth(req: Request, res: Response): Promise<void> {
 
     // Create new user if not found
     if (!user) {
+      // In login mode, don't create a new user — just reject
+      if (mode === 'login') {
+        res.status(404).json({ error: 'No account found for this wallet. Please use "Join the Program" to sign up.' });
+        return;
+      }
+
       isNewUser = true;
 
       // Generate a unique referral code

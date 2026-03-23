@@ -45,7 +45,7 @@ export default function ReferralsPage() {
     goToStep,
   } = useOnboarding();
 
-  const needsVerification = user && !user.emailVerified;
+  const needsVerification = user && user.email && !user.emailVerified;
 
   // Auto-open verification modal if email not verified
   useEffect(() => {

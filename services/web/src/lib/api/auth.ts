@@ -30,11 +30,12 @@ export interface GetMeResponse {
 export async function walletAuth(
   walletAddress: string,
   signature: string,
-  message: string
+  message: string,
+  mode?: 'login' | 'signup'
 ): Promise<AuthResponse> {
   return apiClient<AuthResponse>('/auth/wallet', {
     method: 'POST',
-    body: JSON.stringify({ walletAddress, signature, message }),
+    body: JSON.stringify({ walletAddress, signature, message, mode }),
   });
 }
 

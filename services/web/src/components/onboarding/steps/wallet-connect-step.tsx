@@ -76,11 +76,14 @@ export function WalletConnectStep({ onSuccess, onReturningUser, onNeedsVerificat
         return;
       }
 
-      // Returning user with unverified email - go to verification step
-      if (!response.isNewUser && !response.user.emailVerified && onNeedsVerification) {
+      // Returning user with email set but not verified - go to verification step
+      if (!response.isNewUser && response.user.email && !response.user.emailVerified && onNeedsVerification) {
         onNeedsVerification();
         return;
       }
+
+      // User exists but has no email (e.g. deleted account, re-signed up) - treat as new user
+      // Falls through to onSuccess() below to go to profile step
 
       const joinProgramContext = await WriteReferralContractHelper.joinProgramContext();
 

@@ -64,12 +64,7 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
       const message = `Sign this message to authenticate with Reffinity.\n\nTimestamp: ${timestamp}\nWallet: ${address}`;
 
       const signature = await signMessageAsync({ message });
-      const response = await walletAuth(address, signature, message);
-
-      if (response.isNewUser) {
-        setError('No existing account found for this wallet. Please use "Join the Program" to sign up.');
-        return;
-      }
+      const response = await walletAuth(address, signature, message, 'login');
 
       login(response.token, response.user);
       onClose();
