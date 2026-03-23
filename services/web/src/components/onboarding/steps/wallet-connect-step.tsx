@@ -80,13 +80,10 @@ export function WalletConnectStep({ onSuccess, onReturningUser, onNeedsVerificat
       // Clear the stored referral code after use
       localStorage.removeItem('referralCode');
 
-      // Store token and user data
-      login(response.token, response.user);
-
-      // If returning user who has completed their profile, skip onboarding
-      // and go to dashboard. Users without a name haven't finished onboarding
-      // (e.g. previous attempt failed mid-way or DB was reset).
+      // Returning user who has completed their profile — login immediately
+      // and skip onboarding. Users without a name haven't finished onboarding.
       if (!response.isNewUser && response.user.name && onReturningUser) {
+        login(response.token, response.user);
         // If email is set but not verified, go to verification step instead
         if (response.user.email && !response.user.emailVerified && onNeedsVerification) {
           onNeedsVerification();
@@ -96,6 +93,7 @@ export function WalletConnectStep({ onSuccess, onReturningUser, onNeedsVerificat
         return;
       }
 
+      // New user — complete blockchain registration before storing the token
       // Ensure MetaMask is on the Hardhat chain before sending the tx
       await switchChainAsync({ chainId: hardhat.id });
 
@@ -124,6 +122,9 @@ export function WalletConnectStep({ onSuccess, onReturningUser, onNeedsVerificat
 
       // Wait for the transaction to be mined so the blockchain listener can pick up the events
       await waitForTransactionReceipt(wagmiConfig, { hash: txHash });
+
+      // Contract call succeeded — now safe to login
+      login(response.token, response.user);
 
       // Move to next step
       onSuccess();
