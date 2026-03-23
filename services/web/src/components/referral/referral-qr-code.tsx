@@ -59,6 +59,7 @@ export function ReferralQRCode({ referralLink }: ReferralQRCodeProps) {
               size={200}
               level="M"
               includeMargin
+              className="w-full h-auto max-w-[200px]"
             />
           </div>
           <p className="text-xs text-muted-foreground text-center">
