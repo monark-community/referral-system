@@ -73,12 +73,14 @@ export function WalletConnectStep({ onSuccess, onReturningUser, onNeedsVerificat
 
       // Check for stored referral code from invite link
       const referralCode = localStorage.getItem('referralCode') || undefined;
+      const inviteCode = localStorage.getItem('inviteCode') || undefined;
 
       // Send to backend for verification
-      const response = await walletAuth(address, signature, message, referralCode);
+      const response = await walletAuth(address, signature, message, referralCode, inviteCode);
 
       // Clear the stored referral code after use
       localStorage.removeItem('referralCode');
+      localStorage.removeItem('inviteCode');
 
       // Returning user who has completed their profile — login immediately
       // and skip onboarding. Users without a name haven't finished onboarding.

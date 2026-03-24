@@ -18,6 +18,7 @@ export async function walletAuth(req: Request, res: Response): Promise<void> {
       signature,
       message,
       referralCode: incomingReferralCode,
+      inviteCode: incomingInviteCode,
     } = req.body;
 
     // Verify the signature
@@ -84,8 +85,21 @@ export async function walletAuth(req: Request, res: Response): Promise<void> {
 
       var inviteId: string | undefined;
 
+      //If this is a private invite then we use that existing invite
+      if (incomingInviteCode) {
+        let privateInvite = await prisma.referral.update({
+          where: { inviteCode: incomingInviteCode },
+          data: {
+            referrerId: referredBy,
+            refereeId: user.id,
+            status: 0,
+            points: 0,
+          },
+        });
+        inviteId = privateInvite?.id
+      }    
       // Create a Referral record to track this individual referral
-      if (referredBy) {
+      else if (referredBy) {
         let invite = await prisma.referral.create({
           data: {
             referrerId: referredBy,

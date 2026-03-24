@@ -1,14 +1,17 @@
 import { prisma } from "../lib/prisma.js";
-import type { PublicClient } from "viem";
+import { type PublicClient } from "viem";
 import { ReadReferralContractService } from "@reffinity/blockchain-connector/readReferralContract";
-import { createWebSocketClient } from "@reffinity/blockchain-connector/clients";
+import {
+  createWebSocketClient,
+  createClient,
+} from "@reffinity/blockchain-connector/clients";
 import { log } from "console";
 import { bytes32ToUuid } from "@reffinity/blockchain-connector/uuidBytesConverter";
 
 export class BlockchainListenerService {
   private isListeningToPointsAdded: boolean = false;
   private isListeningToInviteChanged: boolean = false;
-  private publicClient: PublicClient = createWebSocketClient(
+  private publicClient: any = createClient(
     process.env.CHAIN_TYPE as "localhost" | "sepolia",
   ).publicClient;
   private readReferralContractService = new ReadReferralContractService({
@@ -38,7 +41,7 @@ export class BlockchainListenerService {
 
     try {
       await this.readReferralContractService.listenToPointsAddedEvent(
-        async ({ user, points, blockNumber, logIndex }) => {
+        async ({ user, points, isPending, blockNumber, logIndex }) => {
           console.log(
             `PointsAdded event detected for user ${user} with points ${points}`,
           );
@@ -62,13 +65,23 @@ export class BlockchainListenerService {
               );
             }
 
-            await prisma.user.update({
-              where: { walletAddress: normalizedAddress },
-              data: {
-                earnedPoints: Number(points),
-                milestoneLevel,
-              },
-            });
+            if (!isPending) {
+              await prisma.user.update({
+                where: { walletAddress: normalizedAddress },
+                data: {
+                  earnedPoints: Number(points),
+                  milestoneLevel,
+                },
+              });
+            } else {
+              await prisma.user.update({
+                where: { walletAddress: normalizedAddress },
+                data: {
+                  pendingPoints: Number(points),
+                  milestoneLevel,
+                },
+              });
+            }
           } else {
             console.warn(
               `User ${normalizedAddress} not found in DB, skipping points update`,
@@ -91,6 +104,7 @@ export class BlockchainListenerService {
             `Updated points for user ${normalizedAddress} to ${points}`,
           );
         },
+        10000,
       );
 
       this.isListeningToPointsAdded = true;
@@ -146,6 +160,7 @@ export class BlockchainListenerService {
             },
           });
         },
+        10000,
       );
       this.isListeningToInviteChanged = true;
     } catch (error) {
@@ -208,7 +223,7 @@ export class BlockchainListenerService {
       // Determine event type by existence of fields
       if ("points" in event.args) {
         // PointsAdded event
-        const { user, points } = event.args;
+        const { user, points, isPending } = event.args;
         const normalizedAddress = user.toLowerCase();
 
         const existingUser = await prisma.user.findUnique({
@@ -228,13 +243,23 @@ export class BlockchainListenerService {
             // Keep existing milestone level on error
           }
 
-          await prisma.user.update({
-            where: { walletAddress: normalizedAddress },
-            data: {
-              earnedPoints: Number(points),
-              milestoneLevel,
-            },
-          });
+          if (!isPending) {
+            await prisma.user.update({
+              where: { walletAddress: normalizedAddress },
+              data: {
+                earnedPoints: Number(points),
+                milestoneLevel,
+              },
+            });
+          } else {
+            await prisma.user.update({
+              where: { walletAddress: normalizedAddress },
+              data: {
+                pendingPoints: Number(points),
+                milestoneLevel,
+              },
+            });
+          }
         }
       } else if ("inviteId" in event.args) {
         // InviteChanged event
@@ -242,7 +267,7 @@ export class BlockchainListenerService {
 
         await prisma.referral.updateMany({
           where: { id: bytes32ToUuid(inviteId) },
-          data: { status: status },
+          data: { status: status, isVerified: true },
         });
         console.log(
           `InviteChanged: inviteId=${inviteId}, referrer=${referrer}, status=${status}`,

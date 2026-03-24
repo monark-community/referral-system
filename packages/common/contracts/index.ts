@@ -65,6 +65,12 @@ export const RefferalABI = [
         name: "points",
         type: "uint256",
       },
+      {
+        indexed: false,
+        internalType: "bool",
+        name: "isPending",
+        type: "bool",
+      },
     ],
     name: "PointsAdded",
     type: "event",
@@ -184,6 +190,24 @@ export const RefferalABI = [
       },
     ],
     name: "addNewMilestone",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        internalType: "bytes32",
+        name: "inviteID",
+        type: "bytes32",
+      },
+      {
+        internalType: "address",
+        name: "referrer",
+        type: "address",
+      },
+    ],
+    name: "completeInvite",
     outputs: [],
     stateMutability: "nonpayable",
     type: "function",

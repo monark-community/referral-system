@@ -422,7 +422,21 @@ export async function createPrivateInvite(
       description = "Invite Number " + numberOfReferrals;
     }
 
-    const inviteCode = generateInviteCode();
+    // Generate a unique referral code
+    let inviteCode = generateInviteCode();
+    let codeExists = true;
+
+    // Ensure referral code is unique
+    while (codeExists) {
+      const existing = await prisma.referral.findUnique({
+        where: { inviteCode },
+      });
+      if (!existing) {
+        codeExists = false;
+      } else {
+        inviteCode = generateInviteCode();
+      }
+    }
 
     const invite = await prisma.referral.create({
       data: {
