@@ -43,7 +43,7 @@ client.watchContractEvent({
   pollingInterval: 1000,
   fromBlock: 0n,  // optional, only needed to replay past logs
   onLogs: (logs) => {
-    console.log("InviteChanged event detected:")
+    console.log(logs)
     for (const log of logs) {
       console.log("InviteId:", log.args?.inviteId)
       console.log("Referrer:", log.args?.referrer)

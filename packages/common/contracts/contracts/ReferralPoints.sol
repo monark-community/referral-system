@@ -15,10 +15,12 @@ contract ReferralPoints is AccessControl {
         AcceptedInvite
     }
 
-    event PointsAdded(address indexed user, uint256 points);
+    event PointsAdded(address indexed user, uint256 points, bool isPending);
 
     mapping(Action => uint256) pointsForAction;
     mapping(address => mapping(Action => uint256)) public userActionCounts;
+    mapping(address => mapping(Action => uint256))
+        public userPendingActionCounts;
 
     //Gives the role of access to the contract provided, and admin to the user provided
     constructor(address admin_role, address access_role) {
@@ -56,13 +58,48 @@ contract ReferralPoints is AccessControl {
             "getUserPoints: caller lacks ACCESS_ROLE"
         );
         uint256 usersPointAmount = 0;
-        
 
         for (uint256 i = 0; i <= uint256(type(Action).max); i++) {
-        Action action = Action(i);
-        uint256 completedAmount = userActionCounts[user][action];
-        usersPointAmount += completedAmount * pointsForAction[action];
+            Action action = Action(i);
+            uint256 completedAmount = userActionCounts[user][action];
+            usersPointAmount += completedAmount * pointsForAction[action];
+        }
+
+        return usersPointAmount;
     }
+
+    function addPendingAction(Action action, address user) public {
+        require(
+            hasRole(ACCESS_ROLE, msg.sender),
+            "completeAction: caller lacks ACCESS_ROLE"
+        );
+        userPendingActionCounts[user][action] += 1;
+    }
+
+    function completePendingAction(Action action, address user) public {
+        require(
+            hasRole(ACCESS_ROLE, msg.sender),
+            "completeAction: caller lacks ACCESS_ROLE"
+        );
+        if (userPendingActionCounts[user][action] > 0) {
+            userPendingActionCounts[user][action] -= 1;
+        }
+    }
+
+    function getPendingUserPoints(
+        address user
+    ) public view onlyRole(ACCESS_ROLE) returns (uint256) {
+        require(
+            hasRole(ACCESS_ROLE, msg.sender),
+            "getUserPoints: caller lacks ACCESS_ROLE"
+        );
+        uint256 usersPointAmount = 0;
+
+        for (uint256 i = 0; i <= uint256(type(Action).max); i++) {
+            Action action = Action(i);
+            uint256 completedAmount = userPendingActionCounts[user][action];
+            usersPointAmount += completedAmount * pointsForAction[action];
+        }
 
         return usersPointAmount;
     }

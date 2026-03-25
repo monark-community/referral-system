@@ -2,15 +2,21 @@
 
 import { useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { parseLinkCode } from '@/lib/utils';
 
 export default function InvitePage() {
   const params = useParams();
   const router = useRouter();
-  const referralCode = params.referralCode as string;
+  const linkCode = params.linkCode as string;
+
+  const {referralCode, inviteCode} = parseLinkCode(linkCode);
 
   useEffect(() => {
     if (referralCode) {
       localStorage.setItem('referralCode', referralCode);
+      if (inviteCode){
+        localStorage.setItem('inviteCode', inviteCode);
+      }
     }
     router.replace('/referrals/welcome');
   }, [referralCode, router]);

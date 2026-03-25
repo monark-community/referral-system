@@ -36,10 +36,17 @@ export async function walletAuth(
   signature: string,
   message: string,
   referralCode?: string,
+  inviteCode?: string,
 ): Promise<AuthResponse> {
   return apiClient<AuthResponse>("/auth/wallet", {
     method: "POST",
-    body: JSON.stringify({ walletAddress, signature, message, referralCode }),
+    body: JSON.stringify({
+      walletAddress,
+      signature,
+      message,
+      referralCode,
+      inviteCode,
+    }),
   });
 }
 
