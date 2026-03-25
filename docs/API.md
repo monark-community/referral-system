@@ -358,6 +358,8 @@ Get all referrals (invites) sent by the current user.
       },
       "status": 0,
       "points": 0,
+      "isVerified": true,
+      "description": "desc",
       "createdAt": "2025-01-01T00:00:00.000Z",
       "updatedAt": "2025-01-01T00:00:00.000Z"
     }
@@ -374,6 +376,41 @@ Get all referrals (invites) sent by the current user.
 | 2 | Closed |
 
 ---
+
+### `POST /api/users/referrals/private`
+
+Create a private invite for single use only attached to a specific user
+
+**Auth required:** Yes
+
+**Request body:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `description` | string | No | A description of the Invite |
+
+**Example request:**
+
+```json
+{
+  "description": "Desc",
+}
+```
+
+**Response (200):**
+
+```json
+{
+  "bytesinviteId": "0x...",
+  "referralCode": "ABCDEFGHIJ",
+  "inviteCode": "01234567",
+  "referrerWallet": "0xAsad...",
+}
+```
+
+
+---
+
 
 ## Terms of Service
 
