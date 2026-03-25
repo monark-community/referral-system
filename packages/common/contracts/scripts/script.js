@@ -40,7 +40,7 @@ async function main() {
       args: ['0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266', '0x072afdc01e0e41adb47739bee18aa87600000000000000000000000000000000'],
     });
 
-    const receipt = await publicClient.waitForTransactionReceipt({ txHash });
+    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
 
     console.log(receipt.logs)
 

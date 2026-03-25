@@ -575,7 +575,7 @@ describe("User Controller test", () => {
     });
   });
 
-  test("createPrivateInvite should create new Invite with pending status", async () => {
+  test("createPrivateInvite should create new Invite with pending status with custom description", async () => {
     req = {
       user: {
         id: "user1",
