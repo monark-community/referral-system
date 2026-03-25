@@ -72,7 +72,7 @@ export function OnboardingModal({
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent
-        className="max-w-md"
+        className="max-w-md lg:max-w-lg"
         onClose={showCloseButton ? onClose : undefined}
         showCloseButton={showCloseButton}
       >

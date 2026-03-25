@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Pen, Search } from "lucide-react";
-import { PageHeader } from "@/components/referral";
+import { ResponsiveShell } from "@/components/layout";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { getInvites } from '@/lib/api/user';
@@ -133,16 +133,12 @@ export default function InvitesHistoryPage() {
   );
 
   return (
-    <div className="h-screen bg-background flex flex-col max-w-md md:max-w-lg mx-auto overflow-hidden">
-      <PageHeader
-        subtitle="Referrals Program"
-        title="Invites History"
-        onBack={() => router.push("/referrals")}
-        onClose={() => router.push("/referrals")}
-      />
-
-      <main className="flex-1 min-h-0 overflow-y-auto">
-        <div className="p-4 space-y-4">
+    <ResponsiveShell
+      title="Invites History"
+      onBack={() => router.push("/referrals")}
+      onClose={() => router.push("/referrals")}
+    >
+        <div className="space-y-4">
           {/* Search */}
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -209,7 +205,6 @@ export default function InvitesHistoryPage() {
             )}
           </div>
         </div>
-      </main>
-    </div>
+    </ResponsiveShell>
   );
 }

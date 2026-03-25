@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { PageHeader } from "@/components/referral";
+import { ResponsiveShell } from "@/components/layout";
 import { cn } from "@/lib/utils";
 import { getProfile, disableAccount, enableAccount } from "@/lib/api/user";
 import { useAuth } from "@/contexts/auth-context";
@@ -151,16 +151,12 @@ export default function PreferencesPage() {
   }
 
   return (
-    <div className="h-screen bg-background flex flex-col max-w-md md:max-w-lg mx-auto overflow-hidden">
-      <PageHeader
-        subtitle="Referrals Program"
-        title="Preferences"
-        onBack={() => router.push("/referrals")}
-        onClose={() => router.push("/referrals")}
-      />
-
-      <main className="flex-1 min-h-0 overflow-y-auto">
-        <div className="p-4 space-y-6">
+    <ResponsiveShell
+      title="Preferences"
+      onBack={() => router.push("/referrals")}
+      onClose={() => router.push("/referrals")}
+    >
+        <div className="space-y-6">
           {/* Account Status Section */}
           <section>
             <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
@@ -241,7 +237,6 @@ export default function PreferencesPage() {
             </div>
           </section>
         </div>
-      </main>
-    </div>
+    </ResponsiveShell>
   );
 }

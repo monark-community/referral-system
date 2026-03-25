@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { PageHeader } from "@/components/referral";
+import { ResponsiveShell } from "@/components/layout";
 import { Button } from "@/components/ui/button";
 
 const steps = [
@@ -35,16 +35,31 @@ const steps = [
 export default function HowItWorksPage() {
   const router = useRouter();
 
-  return (
-    <div className="h-screen bg-background flex flex-col max-w-md md:max-w-lg mx-auto overflow-hidden">
-      <PageHeader
-        subtitle="Referrals Program"
-        title="How it Works"
-        onBack={() => router.push("/referrals/welcome")}
-        onClose={() => router.push("/referrals/welcome")}
-      />
+  const footerContent = (
+    <footer className="p-4 border-t border-border lg:border-t-0 lg:pt-0 lg:px-0">
+      <div className="flex gap-3">
+        <Button
+          variant="secondary"
+          className="flex-1"
+          onClick={() => router.push("/referrals/welcome")}
+        >
+          Got it!
+        </Button>
+        <Button className="flex-1" onClick={() => router.push("/referrals/terms")}>
+          Join the Program
+        </Button>
+      </div>
+    </footer>
+  );
 
-      <main className="flex-1 min-h-0 overflow-y-auto">
+  return (
+    <ResponsiveShell
+      title="How it Works"
+      onBack={() => router.push("/referrals/welcome")}
+      onClose={() => router.push("/referrals/welcome")}
+      showSidebar={false}
+      footer={footerContent}
+    >
         <div className="p-4 space-y-6">
           {steps.map((step) => (
             <div key={step.number} className="flex gap-4">
@@ -83,23 +98,6 @@ export default function HowItWorksPage() {
             </svg>
           </button>
         </div>
-      </main>
-
-      {/* Footer Actions */}
-      <footer className="p-4 border-t border-border">
-        <div className="flex gap-3">
-          <Button
-            variant="secondary"
-            className="flex-1"
-            onClick={() => router.push("/referrals/welcome")}
-          >
-            Got it!
-          </Button>
-          <Button className="flex-1" onClick={() => router.push("/referrals/terms")}>
-            Join the Program
-          </Button>
-        </div>
-      </footer>
-    </div>
+    </ResponsiveShell>
   );
 }

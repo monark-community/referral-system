@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { PageHeader } from "@/components/referral";
+import { ResponsiveShell } from "@/components/layout";
 import { Gift, Trophy, Star, Zap, Loader2 } from "lucide-react";
 import { cn, formatPoints } from "@/lib/utils";
 import { getMilestoneTiers, getUserMilestone } from "@/lib/api/user";
@@ -110,16 +110,12 @@ export default function RewardsPage() {
   }, []);
 
   return (
-    <div className="h-screen bg-background flex flex-col max-w-md md:max-w-lg mx-auto overflow-hidden">
-      <PageHeader
-        subtitle="Referrals Program"
-        title="Rewards"
-        onBack={() => router.push("/referrals")}
-        onClose={() => router.push("/referrals")}
-      />
-
-      <main className="flex-1 min-h-0 overflow-y-auto">
-        <div className="p-4 space-y-4">
+    <ResponsiveShell
+      title="Rewards"
+      onBack={() => router.push("/referrals")}
+      onClose={() => router.push("/referrals")}
+    >
+        <div className="space-y-4">
           <p className="text-sm text-muted-foreground">
             Earn points through referrals and unlock exclusive rewards. The more
             you refer, the higher your tier and benefits!
@@ -142,7 +138,7 @@ export default function RewardsPage() {
                 </p>
               </div>
 
-              <div className="space-y-3">
+              <div className="space-y-3 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0">
                 {tiers.map((tier) => (
                   <RewardTierCard
                     key={tier.level}
@@ -154,7 +150,6 @@ export default function RewardsPage() {
             </>
           )}
         </div>
-      </main>
-    </div>
+    </ResponsiveShell>
   );
 }

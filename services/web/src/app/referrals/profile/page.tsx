@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { PageHeader } from "@/components/referral";
+import { ResponsiveShell } from "@/components/layout";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -210,16 +210,12 @@ export default function ProfilePage() {
   const tierName = milestone?.currentTier?.name || "Starter";
 
   return (
-    <div className="h-screen bg-background flex flex-col max-w-md md:max-w-lg mx-auto overflow-hidden">
-      <PageHeader
-        subtitle="Referrals Program"
-        title="My Profile"
-        onBack={() => router.push("/referrals")}
-        onClose={() => router.push("/referrals")}
-      />
-
-      <main className="flex-1 min-h-0 overflow-y-auto">
-        <div className="p-4 space-y-4">
+    <ResponsiveShell
+      title="My Profile"
+      onBack={() => router.push("/referrals")}
+      onClose={() => router.push("/referrals")}
+    >
+        <div className="space-y-4">
           {/* Success Message */}
           {successMessage && (
             <Alert className="border-primary/50 bg-primary/5">
@@ -264,6 +260,9 @@ export default function ProfilePage() {
               </p>
             </div>
           </div>
+
+          {/* Profile & Milestone — side by side on desktop */}
+          <div className="lg:grid lg:grid-cols-2 lg:gap-6 space-y-4 lg:space-y-0">
 
           {/* Profile Fields */}
           <div className="space-y-1">
@@ -504,8 +503,9 @@ export default function ProfilePage() {
               </div>
             </div>
           )}
+
+          </div>{/* end lg:grid */}
         </div>
-      </main>
-    </div>
+    </ResponsiveShell>
   );
 }

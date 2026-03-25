@@ -56,7 +56,7 @@ export default function WelcomePage() {
   };
 
   return (
-    <div className="h-screen bg-background flex flex-col max-w-md md:max-w-lg mx-auto overflow-hidden">
+    <div className="h-screen bg-background flex flex-col max-w-md lg:max-w-2xl mx-auto overflow-hidden">
       <header className="flex items-center justify-between px-4 py-3 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div>
           <p className="text-xs text-muted-foreground">LedgerLift</p>
@@ -83,18 +83,18 @@ export default function WelcomePage() {
       </header>
 
       <main className="flex-1 min-h-0 overflow-y-auto">
-        <div className="p-4 space-y-6">
+        <div className="p-4 lg:p-8 space-y-6">
           {/* Hero Section */}
-          <div className="relative rounded-2xl bg-gradient-to-br from-primary/20 via-primary/10 to-transparent border border-primary/30 p-6 overflow-hidden">
+          <div className="relative rounded-2xl bg-gradient-to-br from-primary/20 via-primary/10 to-transparent border border-primary/30 p-6 lg:p-8 overflow-hidden">
             {/* Background decoration */}
             <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-3xl" />
             <div className="absolute bottom-0 left-0 w-24 h-24 bg-primary/5 rounded-full blur-2xl" />
 
             <div className="relative space-y-3">
-              <h1 className="text-2xl font-bold text-foreground leading-tight">
+              <h1 className="text-2xl lg:text-3xl font-bold text-foreground leading-tight">
                 Invite Friends, Boost your Network & Earn Together.
               </h1>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm lg:text-base text-muted-foreground">
                 Gain <span className="text-primary font-semibold">5,000 points</span> for every
                 referral while increasing your{" "}
                 <span className="text-primary font-semibold">Monark network score</span>. They
@@ -104,7 +104,7 @@ export default function WelcomePage() {
           </div>
 
           {/* Features Grid */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             {features.map((feature, index) => (
               <div
                 key={index}

@@ -102,7 +102,7 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-md" onClose={handleClose}>
+      <DialogContent className="max-w-md lg:max-w-lg" onClose={handleClose}>
         <DialogHeader>
           <DialogTitle>Welcome Back</DialogTitle>
           <DialogDescription>

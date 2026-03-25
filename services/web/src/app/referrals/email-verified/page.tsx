@@ -63,7 +63,7 @@ export default function EmailVerifiedPage() {
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <div className="max-w-md w-full text-center">
+      <div className="max-w-md lg:max-w-lg w-full text-center">
         {/* Icon */}
         <div className={`mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full ${config.bgClass}`}>
           <Icon className={`h-10 w-10 ${config.iconClass}`} />
