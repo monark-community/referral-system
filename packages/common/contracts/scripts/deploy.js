@@ -3,18 +3,22 @@ import { createWalletClient, createPublicClient, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
 async function main() {
+
+  const rpcUrl = process.env.HARDHAT_NODE_URL || "http://127.0.0.1:8545";
+  console.log("Connecting to Hardhat node at:", rpcUrl);
+
   // Hardhat local private key (account #0)
   const account = privateKeyToAccount(
     "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
   );
 
   const publicClient = createPublicClient({
-    transport: http("http://127.0.0.1:8545"),
+    transport: http(rpcUrl),
   });
 
   const walletClient = createWalletClient({
     account,
-    transport: http("http://127.0.0.1:8545"),
+    transport: http(rpcUrl),
   });
 
   // Get compiled artifact

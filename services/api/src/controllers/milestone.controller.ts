@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { prisma } from "../lib/prisma.js";
+import { MilestoneTier } from "@prisma/client";
 
 /**
  * GET /api/milestones/tiers
@@ -53,8 +54,11 @@ export async function getUserMilestone(
       orderBy: { level: "asc" },
     });
 
-    const currentTier = tiers.find((t) => t.level === user.milestoneLevel) || null;
-    const nextTier = tiers.find((t) => t.pointsRequired > user.earnedPoints) || null;
+    const currentTier =
+      tiers.find((t: MilestoneTier) => t.level === user.milestoneLevel) || null;
+    const nextTier =
+      tiers.find((t: MilestoneTier) => t.pointsRequired > user.earnedPoints) ||
+      null;
 
     res.json({
       milestoneLevel: user.milestoneLevel,
