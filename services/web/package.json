@@ -17,6 +17,7 @@
     "qrcode.react": "^4.2.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "recharts": "^3.8.1",
     "tailwind-merge": "^2.6.0",
     "viem": "^2.21.54",
     "wagmi": "^2.14.1"

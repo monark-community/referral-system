@@ -11,17 +11,21 @@ import {
   Gift,
   FileText,
   LogOut,
+  ChevronRight,
 } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 
 const navItems = [
-  { label: "Referral Program", href: "/referrals", icon: Home },
-  { label: "My Profile", href: "/referrals/profile", icon: User },
+  { label: "Home", href: "/referrals", icon: Home },
+  { label: "Profile", href: "/referrals/profile", icon: User },
   { label: "How it Works", href: "/referrals/how-it-works", icon: HelpCircle },
-  { label: "Invites History", href: "/referrals/history", icon: History },
-  { label: "Preferences", href: "/referrals/preferences", icon: Settings },
+  { label: "History", href: "/referrals/history", icon: History },
   { label: "Rewards", href: "/referrals/rewards", icon: Gift },
-  { label: "Terms & Conditions", href: "/referrals/terms", icon: FileText },
+];
+
+const secondaryItems = [
+  { label: "Preferences", href: "/referrals/preferences", icon: Settings },
+  { label: "Terms", href: "/referrals/terms", icon: FileText },
 ];
 
 export function SidebarNav() {
@@ -35,15 +39,26 @@ export function SidebarNav() {
   };
 
   return (
-    <aside className="hidden lg:flex lg:flex-col lg:w-64 lg:shrink-0 border-r border-border bg-card h-screen sticky top-0">
+    <aside className="hidden lg:flex lg:flex-col lg:w-[260px] lg:shrink-0 border-r border-border/60 bg-background h-screen sticky top-0">
       {/* Brand */}
-      <div className="p-5 border-b border-border">
-        <p className="text-xs text-muted-foreground">LedgerLift</p>
-        <h1 className="text-lg font-semibold text-foreground">Referrals Program</h1>
+      <div className="px-6 pt-7 pb-6">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-primary/15 flex items-center justify-center">
+            <span className="text-primary font-bold text-sm">R</span>
+          </div>
+          <div>
+            <h1 className="text-[15px] font-semibold text-foreground leading-tight">
+              Reffinity
+            </h1>
+            <p className="text-[11px] text-muted-foreground leading-tight">
+              Referral Program
+            </p>
+          </div>
+        </div>
       </div>
 
-      {/* Nav Items */}
-      <nav className="flex-1 overflow-y-auto p-3 space-y-1">
+      {/* Primary Nav */}
+      <nav className="flex-1 overflow-y-auto px-3 space-y-0.5">
         {navItems.map((item) => {
           const isActive = pathname === item.href;
           const Icon = item.icon;
@@ -52,14 +67,40 @@ export function SidebarNav() {
               key={item.href}
               onClick={() => router.push(item.href)}
               className={cn(
-                "flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
+                "flex items-center gap-3 w-full px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150",
                 isActive
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                  ? "bg-secondary text-foreground"
+                  : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
               )}
             >
-              <Icon className="w-4 h-4 shrink-0" />
-              {item.label}
+              <Icon className="w-[18px] h-[18px] shrink-0" />
+              <span className="flex-1 text-left">{item.label}</span>
+              {isActive && (
+                <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
+              )}
+            </button>
+          );
+        })}
+
+        {/* Divider */}
+        <div className="!my-3 border-t border-border/50" />
+
+        {secondaryItems.map((item) => {
+          const isActive = pathname === item.href;
+          const Icon = item.icon;
+          return (
+            <button
+              key={item.href}
+              onClick={() => router.push(item.href)}
+              className={cn(
+                "flex items-center gap-3 w-full px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150",
+                isActive
+                  ? "bg-secondary text-foreground"
+                  : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+              )}
+            >
+              <Icon className="w-[18px] h-[18px] shrink-0" />
+              <span className="flex-1 text-left">{item.label}</span>
             </button>
           );
         })}
@@ -67,20 +108,27 @@ export function SidebarNav() {
 
       {/* User section */}
       {user && (
-        <div className="p-3 border-t border-border space-y-2">
-          <div className="px-3 py-2">
-            <p className="text-sm font-medium text-foreground truncate">
-              {user.name || "Unnamed User"}
-            </p>
-            <p className="text-xs text-muted-foreground truncate">
-              {user.walletAddress.slice(0, 6)}...{user.walletAddress.slice(-4)}
-            </p>
+        <div className="px-3 py-4 border-t border-border/50">
+          <div className="flex items-center gap-3 px-3 py-2">
+            <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center shrink-0">
+              <span className="text-xs font-semibold text-foreground">
+                {(user.name || "U").charAt(0).toUpperCase()}
+              </span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[13px] font-medium text-foreground truncate">
+                {user.name || "Unnamed User"}
+              </p>
+              <p className="text-[11px] text-muted-foreground truncate">
+                {user.walletAddress.slice(0, 6)}...{user.walletAddress.slice(-4)}
+              </p>
+            </div>
           </div>
           <button
             onClick={handleLogout}
-            className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+            className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-[13px] font-medium text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-all duration-150 mt-1"
           >
-            <LogOut className="w-4 h-4 shrink-0" />
+            <LogOut className="w-[18px] h-[18px] shrink-0" />
             Sign Out
           </button>
         </div>

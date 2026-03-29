@@ -18,6 +18,10 @@ interface ResponsiveShellProps {
   footer?: ReactNode;
   /** Whether to show the sidebar (set false for unauthenticated pages) */
   showSidebar?: boolean;
+  /** Desktop page title override (defaults to title prop) */
+  desktopTitle?: string;
+  /** Desktop subtitle shown below the title */
+  desktopSubtitle?: string;
 }
 
 export function ResponsiveShell({
@@ -28,6 +32,8 @@ export function ResponsiveShell({
   onClose,
   footer,
   showSidebar = true,
+  desktopTitle,
+  desktopSubtitle,
 }: ResponsiveShellProps) {
   if (!showSidebar) {
     // Unauthenticated layout: centered column on both mobile and desktop
@@ -63,16 +69,22 @@ export function ResponsiveShell({
           />
         </div>
 
-        {/* Desktop header — simple title bar */}
-        <header className="hidden lg:flex items-center justify-between px-8 py-5 border-b border-border">
-          <div>
-            <h1 className="text-xl font-semibold text-foreground">{title}</h1>
-          </div>
-        </header>
-
         {/* Scrollable content */}
         <main className="flex-1 min-h-0 overflow-y-auto">
-          <div className="p-4 lg:p-8 lg:max-w-3xl">
+          <div className="p-4 lg:px-10 lg:py-8 lg:max-w-4xl">
+            {/* Desktop page header */}
+            {(desktopTitle || title) && (
+              <div className="hidden lg:block mb-8">
+                <h1 className="text-2xl font-semibold text-foreground tracking-tight">
+                  {desktopTitle || title}
+                </h1>
+                {desktopSubtitle && (
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {desktopSubtitle}
+                  </p>
+                )}
+              </div>
+            )}
             {children}
           </div>
         </main>
