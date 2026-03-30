@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
@@ -45,10 +46,14 @@ export function SidebarNav() {
     <aside className="hidden lg:flex lg:flex-col lg:w-[260px] lg:shrink-0 bg-background h-screen sticky top-0" style={{ boxShadow: "1px 0 0 0 hsl(0 0% 100% / 0.06)" }}>
       {/* Brand */}
       <div className="px-6 pt-7 pb-6">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-primary/15 flex items-center justify-center">
-            <span className="text-primary font-bold text-sm">R</span>
-          </div>
+        <div className="flex items-center gap-3">
+          <Image
+            src="/favicon.ico"
+            alt="Reffinity icon"
+            width={32}
+            height={32}
+            className="h-8 w-8 shrink-0"
+          />
           <div>
             <h1 className="text-[15px] font-semibold text-foreground leading-tight">
               Reffinity
