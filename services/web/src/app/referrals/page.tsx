@@ -11,7 +11,7 @@ import {
 } from "@/components/referral";
 import { ResponsiveShell } from "@/components/layout";
 import { useAuth } from "@/contexts/auth-context";
-import { getInvites } from "@/lib/api/user";
+import { useInvites } from "@/lib/api/hooks";
 import { formatPoints } from "@/lib/utils";
 import type { Invite } from "@/lib/api/user";
 
@@ -176,17 +176,9 @@ function RecentActivityCard({
 
 export default function ReferralsPage() {
   const router = useRouter();
-  const { user: userData, isAuthenticated, isLoading, refreshUser } = useAuth();
-  const [invites, setInvites] = useState<Invite[]>([]);
-
-  useEffect(() => {
-    if (isAuthenticated) {
-      refreshUser();
-      getInvites()
-        .then((res) => setInvites(res.invites || []))
-        .catch(() => {});
-    }
-  }, [isAuthenticated, refreshUser]);
+  const { user: userData, isAuthenticated, isLoading } = useAuth();
+  const { data: invitesData } = useInvites();
+  const invites = invitesData?.invites || [];
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {

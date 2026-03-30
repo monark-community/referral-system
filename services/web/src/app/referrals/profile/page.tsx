@@ -25,9 +25,8 @@ import {
   ShieldCheck,
   ShieldAlert,
 } from "lucide-react";
-import { getProfile, updateProfile, sendVerificationEmail } from "@/lib/api/user";
-import { getUserMilestone } from "@/lib/api/user";
-import type { User as UserType } from "@/lib/api/auth";
+import { updateProfile, sendVerificationEmail } from "@/lib/api/user";
+import { useProfile, useUserMilestone } from "@/lib/api/hooks";
 import type { UserMilestoneResponse } from "@/lib/api/user";
 import { cn, formatPoints } from "@/lib/utils";
 import { useAuth } from "@/contexts/auth-context";
@@ -51,9 +50,12 @@ function truncateAddress(address: string): string {
 export default function ProfilePage() {
   const router = useRouter();
   const { updateUser } = useAuth();
-  const [userData, setUserData] = useState<UserType | null>(null);
-  const [milestone, setMilestone] = useState<UserMilestoneResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { data: profileData, isLoading: profileLoading, refetch: refetchProfile } = useProfile();
+  const { data: milestoneData, isLoading: milestoneLoading } = useUserMilestone();
+
+  const userData = profileData?.user ?? null;
+  const milestone = milestoneData ?? null;
+  const loading = profileLoading && !profileData;
 
   // Edit mode
   const [isEditing, setIsEditing] = useState(false);
@@ -70,29 +72,16 @@ export default function ProfilePage() {
   const [sendingVerification, setSendingVerification] = useState(false);
   const [verificationSent, setVerificationSent] = useState(false);
 
+  // Sync form data when profile loads
   useEffect(() => {
-    async function fetchData() {
-      try {
-        const [profileRes, milestoneRes] = await Promise.all([
-          getProfile(),
-          getUserMilestone(),
-        ]);
-        setUserData(profileRes.user);
-        setMilestone(milestoneRes);
-        setFormData({
-          name: profileRes.user.name || "",
-          email: profileRes.user.email || "",
-          phone: profileRes.user.phone || "",
-        });
-      } catch (error) {
-        console.error("Failed to fetch profile data:", error);
-        router.push("/referrals/welcome");
-      } finally {
-        setLoading(false);
-      }
+    if (userData) {
+      setFormData({
+        name: userData.name || "",
+        email: userData.email || "",
+        phone: userData.phone || "",
+      });
     }
-    fetchData();
-  }, [router]);
+  }, [userData]);
 
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {};
@@ -131,8 +120,8 @@ export default function ProfilePage() {
         phone: formData.phone.trim() || undefined,
       });
 
-      setUserData(response.user);
       updateUser(response.user);
+      refetchProfile();
       setIsEditing(false);
       setSuccessMessage("Profile updated successfully");
 

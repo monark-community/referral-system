@@ -1,23 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Pen, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import { ResponsiveShell } from "@/components/layout";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { getInvites } from '@/lib/api/user';
+import { useInvites } from "@/lib/api/hooks";
 import type { Invite } from "@/lib/api/user";
-
-
 
 enum InviteStatus {
     Pending,
     Accepted,
     Closed
 }
-
-
 
 const filterTabs = [
   { id: -1, label: "All" },
@@ -92,28 +88,12 @@ function InviteItem({ invite }: { invite: Invite }) {
 
 export default function InvitesHistoryPage() {
   const router = useRouter();
-  const [inviteData, setInviteData] = useState<Invite[] | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { data: invitesData, isLoading } = useInvites();
+  const inviteData = invitesData?.invites ?? null;
+  const loading = isLoading && !invitesData;
+
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<number>(-1);
-
-    console.log("Component rendered");
-
-    useEffect(() => {
-      console.log("Loading invites...");
-      getInvites()
-        .then((res) => { setInviteData(res.invites); console.log("Invites loaded:", res.invites); })
-        .catch((err) => {
-          console.error("Failed to load invites:", err);
-          router.push("/referrals/welcome");
-        })
-        .finally(() => setLoading(false));
-    }, [router]);
-
-    useEffect(() => {
-      console.log("inviteData updated:", inviteData);
-    }, [inviteData]);
-
 
   const filteredInvites = inviteData?.filter((invite) => {
     const matchesSearch = invite.referee?.name?.toLowerCase().includes(searchQuery.toLowerCase());

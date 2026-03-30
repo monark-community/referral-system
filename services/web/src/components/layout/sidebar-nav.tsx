@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
@@ -63,9 +64,10 @@ export function SidebarNav() {
           const isActive = pathname === item.href;
           const Icon = item.icon;
           return (
-            <button
+            <Link
               key={item.href}
-              onClick={() => router.push(item.href)}
+              href={item.href}
+              prefetch={true}
               className={cn(
                 "flex items-center gap-3 w-full px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150",
                 isActive
@@ -78,7 +80,7 @@ export function SidebarNav() {
               {isActive && (
                 <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
               )}
-            </button>
+            </Link>
           );
         })}
 
@@ -89,9 +91,10 @@ export function SidebarNav() {
           const isActive = pathname === item.href;
           const Icon = item.icon;
           return (
-            <button
+            <Link
               key={item.href}
-              onClick={() => router.push(item.href)}
+              href={item.href}
+              prefetch={true}
               className={cn(
                 "flex items-center gap-3 w-full px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150",
                 isActive
@@ -101,7 +104,7 @@ export function SidebarNav() {
             >
               <Icon className="w-[18px] h-[18px] shrink-0" />
               <span className="flex-1 text-left">{item.label}</span>
-            </button>
+            </Link>
           );
         })}
       </nav>

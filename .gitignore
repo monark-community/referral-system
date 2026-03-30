@@ -41,3 +41,4 @@ coverage/
 # Environment
 .env.*
 !.env.example.claude/
+.claude/settings.json

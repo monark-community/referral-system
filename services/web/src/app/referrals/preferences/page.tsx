@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ResponsiveShell } from "@/components/layout";
 import { cn } from "@/lib/utils";
@@ -82,8 +82,7 @@ function PreferenceItem({
 export default function PreferencesPage() {
   const router = useRouter();
   const { user, updateUser } = useAuth();
-  const [isAccountActive, setIsAccountActive] = useState(true);
-  const [loading, setLoading] = useState(true);
+  const [isAccountActive, setIsAccountActive] = useState(!user?.disabledAt);
   const [toggling, setToggling] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [preferences, setPreferences] = useState({
@@ -91,15 +90,6 @@ export default function PreferencesPage() {
     autoBlockSuspicious: true,
     autoRemoveCompromised: true,
   });
-
-  useEffect(() => {
-    getProfile()
-      .then((res) => {
-        setIsAccountActive(!res.user.disabledAt);
-      })
-      .catch((err) => console.error("Failed to load profile:", err))
-      .finally(() => setLoading(false));
-  }, []);
 
   const handleToggleAccount = async (activate: boolean) => {
     if (!activate) {
@@ -111,7 +101,6 @@ export default function PreferencesPage() {
     try {
       await enableAccount();
       setIsAccountActive(true);
-      // Refresh user context
       const res = await getProfile();
       updateUser(res.user);
     } catch (err) {
@@ -127,7 +116,6 @@ export default function PreferencesPage() {
     try {
       const res = await disableAccount();
       setIsAccountActive(false);
-      // Update user context locally (can't call getProfile since account is now disabled)
       if (user) {
         updateUser({ ...user, disabledAt: res.disabledAt });
       }
@@ -141,14 +129,6 @@ export default function PreferencesPage() {
   const updatePreference = (key: keyof typeof preferences) => (value: boolean) => {
     setPreferences((prev) => ({ ...prev, [key]: value }));
   };
-
-  if (loading) {
-    return (
-      <div className="h-screen bg-background flex items-center justify-center">
-        <p>Loading...</p>
-      </div>
-    );
-  }
 
   return (
     <ResponsiveShell

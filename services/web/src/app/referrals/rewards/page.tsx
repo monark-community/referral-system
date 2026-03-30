@@ -1,11 +1,10 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
 import { ResponsiveShell } from "@/components/layout";
 import { Gift, Trophy, Star, Zap, Loader2 } from "lucide-react";
 import { cn, formatPoints } from "@/lib/utils";
-import { getMilestoneTiers, getUserMilestone } from "@/lib/api/user";
+import { useMilestoneTiers, useUserMilestone } from "@/lib/api/hooks";
 import type { MilestoneTier } from "@/lib/api/user";
 
 const tierIcons: Record<string, React.ReactNode> = {
@@ -17,7 +16,6 @@ const tierIcons: Record<string, React.ReactNode> = {
 
 function getIconForTier(name: string, level: number): React.ReactNode {
   if (tierIcons[name]) return tierIcons[name];
-  // Fallback based on level
   const fallbacks = [
     <Gift key="gift" className="w-6 h-6" />,
     <Star key="star" className="w-6 h-6" />,
@@ -85,29 +83,12 @@ function RewardTierCard({
 
 export default function RewardsPage() {
   const router = useRouter();
-  const [tiers, setTiers] = useState<MilestoneTier[]>([]);
-  const [userMilestoneLevel, setUserMilestoneLevel] = useState(0);
-  const [earnedPoints, setEarnedPoints] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const { data: tiersData, isLoading: tiersLoading } = useMilestoneTiers();
+  const { data: userMilestone, isLoading: userLoading } = useUserMilestone();
 
-  useEffect(() => {
-    async function fetchData() {
-      try {
-        const [tiersRes, userRes] = await Promise.all([
-          getMilestoneTiers(),
-          getUserMilestone(),
-        ]);
-        setTiers(tiersRes.tiers);
-        setUserMilestoneLevel(userRes.milestoneLevel);
-        setEarnedPoints(userRes.earnedPoints);
-      } catch (error) {
-        console.error("Failed to fetch milestone data:", error);
-      } finally {
-        setLoading(false);
-      }
-    }
-    fetchData();
-  }, []);
+  const tiers = tiersData?.tiers ?? [];
+  const earnedPoints = userMilestone?.earnedPoints ?? 0;
+  const loading = (tiersLoading && !tiersData) || (userLoading && !userMilestone);
 
   return (
     <ResponsiveShell
