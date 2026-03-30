@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ResponsiveShell } from "@/components/layout/responsive-shell";
 import { Button } from "@/components/ui/button";
 import { ChevronRight, Gift, Star, Trophy, Zap } from "lucide-react";
+import { useAuth } from "@/contexts/auth-context";
 
 const steps = [
   {
@@ -37,6 +38,7 @@ const totalAnimatedItems = steps.length + 1; // steps + rewards card
 
 export default function HowItWorksPage() {
   const router = useRouter();
+  const { isAuthenticated } = useAuth();
   const [visibleCount, setVisibleCount] = useState(0);
 
   useEffect(() => {
@@ -49,7 +51,13 @@ export default function HowItWorksPage() {
     return () => clearInterval(interval);
   }, []);
 
-  const footerContent = (
+  const footerContent = isAuthenticated ? (
+    <footer className="p-4 border-t border-border lg:border-t-0 lg:pt-0 lg:px-0">
+      <Button className="w-full" onClick={() => router.push("/referrals")}>
+        Back to Dashboard
+      </Button>
+    </footer>
+  ) : (
     <footer className="p-4 border-t border-border lg:border-t-0 lg:pt-0 lg:px-0">
       <div className="flex gap-3">
         <Button variant="secondary" className="flex-1" onClick={() => router.push("/referrals/welcome")}>

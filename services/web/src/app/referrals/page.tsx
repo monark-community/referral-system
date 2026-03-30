@@ -7,6 +7,7 @@ import dynamic from "next/dynamic";
 import { PointsCard } from "@/components/referral/points-card";
 import { ReferralLinkCard } from "@/components/referral/referral-link-card";
 import { NavMenuItem } from "@/components/referral/nav-menu-item";
+import { TermsModal } from "@/components/referral/terms-modal";
 
 const ReferralQRCode = lazy(() =>
   import("@/components/referral/referral-qr-code").then((m) => ({ default: m.ReferralQRCode }))
@@ -196,6 +197,7 @@ export default function ReferralsPage() {
   const { data: invitesData } = useInvites();
   const queryClient = useQueryClient();
   const [mounted, setMounted] = useState(false);
+  const [showTerms, setShowTerms] = useState(false);
 
   useEffect(() => setMounted(true), []);
 
@@ -319,10 +321,12 @@ export default function ReferralsPage() {
             <NavMenuItem label="Invites History" onClick={() => router.push("/referrals/history")} badge={userData.pendingPoints > 0 ? 1 : 0} />
             <NavMenuItem label="Preferences" onClick={() => router.push("/referrals/preferences")} />
             <NavMenuItem label="Rewards" onClick={() => router.push("/referrals/rewards")} />
-            <NavMenuItem label="Terms & Conditions" onClick={() => router.push("/referrals/terms")} />
+            <NavMenuItem label="Terms & Conditions" onClick={() => setShowTerms(true)} />
           </section>
         </div>
       </div>
+
+      {showTerms && <TermsModal onClose={() => setShowTerms(false)} />}
     </ResponsiveShell>
   );
 }

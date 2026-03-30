@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -15,6 +16,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
+import { TermsModal } from "@/components/referral/terms-modal";
 
 const navItems = [
   { label: "Home", href: "/referrals", icon: Home },
@@ -24,15 +26,15 @@ const navItems = [
   { label: "Rewards", href: "/referrals/rewards", icon: Gift },
 ];
 
-const secondaryItems = [
+const secondaryLinks = [
   { label: "Preferences", href: "/referrals/preferences", icon: Settings },
-  { label: "Terms", href: "/referrals/terms", icon: FileText },
 ];
 
 export function SidebarNav() {
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout } = useAuth();
+  const [showTerms, setShowTerms] = useState(false);
 
   const handleLogout = () => {
     logout();
@@ -87,7 +89,7 @@ export function SidebarNav() {
         {/* Divider */}
         <div className="!my-3 border-t border-border/50" />
 
-        {secondaryItems.map((item) => {
+        {secondaryLinks.map((item) => {
           const isActive = pathname === item.href;
           const Icon = item.icon;
           return (
@@ -107,6 +109,13 @@ export function SidebarNav() {
             </Link>
           );
         })}
+        <button
+          onClick={() => setShowTerms(true)}
+          className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-[13px] font-medium text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-[background-color,color,transform] duration-150 active:scale-[0.97]"
+        >
+          <FileText className="w-[18px] h-[18px] shrink-0" />
+          <span className="flex-1 text-left">Terms</span>
+        </button>
       </nav>
 
       {/* User section */}
@@ -136,6 +145,8 @@ export function SidebarNav() {
           </button>
         </div>
       )}
+
+      {showTerms && <TermsModal onClose={() => setShowTerms(false)} />}
     </aside>
   );
 }
