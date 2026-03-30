@@ -21,29 +21,24 @@ interface PointsChartProps {
  * simulating a growth curve for earned points.
  */
 function generateChartData(earnedPoints: number, createdAt: string) {
-  const start = new Date(createdAt);
   const now = new Date();
-  const totalDays = Math.max(
-    1,
-    Math.floor((now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24))
-  );
-
-  // Generate ~12 data points spread across the timeline
-  const numPoints = Math.min(12, totalDays);
+  const start = new Date(createdAt);
   const data: { date: string; points: number }[] = [];
 
-  for (let i = 0; i <= numPoints; i++) {
-    const ratio = i / numPoints;
-    const dayOffset = Math.floor(ratio * totalDays);
-    const date = new Date(start);
-    date.setDate(date.getDate() + dayOffset);
+  for (let i = 6; i >= 0; i--) {
+    const date = new Date(now);
+    date.setDate(date.getDate() - i);
 
-    // Ease-in curve so points grow gradually then faster
-    const eased = Math.pow(ratio, 1.4);
-    const points = Math.round(eased * earnedPoints);
+    // If the date is before account creation, points are 0
+    // Otherwise, ease in based on how far through the 7 days we are
+    let points = 0;
+    if (date >= start) {
+      const ratio = (7 - i) / 7;
+      points = Math.round(Math.pow(ratio, 1.4) * earnedPoints);
+    }
 
     data.push({
-      date: date.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+      date: date.toLocaleDateString("en-US", { weekday: "short" }),
       points,
     });
   }
