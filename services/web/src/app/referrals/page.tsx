@@ -1,12 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, lazy, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import { Users, TrendingUp, Clock, ArrowRight, Copy, Check, Share2 } from "lucide-react";
 import dynamic from "next/dynamic";
 import { PointsCard } from "@/components/referral/points-card";
 import { ReferralLinkCard } from "@/components/referral/referral-link-card";
 import { NavMenuItem } from "@/components/referral/nav-menu-item";
+
+const ReferralQRCode = lazy(() =>
+  import("@/components/referral/referral-qr-code").then((m) => ({ default: m.ReferralQRCode }))
+);
 
 const PointsChart = dynamic(
   () => import("@/components/referral/points-chart").then((m) => m.PointsChart),
@@ -100,6 +104,9 @@ function QuickShareCard({ referralLink }: { referralLink: string }) {
             </>
           )}
         </button>
+        <Suspense fallback={null}>
+          <ReferralQRCode referralLink={referralLink} />
+        </Suspense>
       </div>
     </div>
   );
