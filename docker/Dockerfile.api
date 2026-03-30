@@ -1,0 +1,92 @@
+# ─── Stage 1: Build all packages up to API ──────────────────────────────────
+FROM node:20-bullseye-slim AS builder
+
+WORKDIR /app
+
+# Install OpenSSL and build essentials for native dependencies
+RUN apt-get update && apt-get install -y \
+    openssl \
+    ca-certificates \
+    python3 \
+    make \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+# Root manifest
+COPY package.json package-lock.json ./
+
+# Copy packages in dependency order
+COPY packages/common/contracts ./packages/common/contracts
+COPY packages/common/blockchain-connector ./packages/common/blockchain-connector
+COPY services/api ./services/api
+
+# Install all workspace deps
+RUN npm ci \
+  --workspace=packages/common/contracts \
+  --workspace=packages/common/blockchain-connector \
+  --workspace=services/api \
+  --include-workspace-root
+
+# Generate the prisma schema
+RUN npx prisma generate --schema=./services/api/prisma/schema.prisma
+# Build in dependency order
+RUN npm run build -w @reffinity/common-contracts
+RUN npm run build -w @reffinity/blockchain-connector
+RUN npm run build -w reffinity-api
+
+# ─── Stage 2: Prune dev deps ─────────────────────────────────────────────────
+FROM node:20-bullseye-slim AS pruner
+
+WORKDIR /app
+
+# Install OpenSSL for Prisma
+RUN apt-get update && apt-get install -y \
+    openssl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /app/package.json /app/package-lock.json ./
+COPY --from=builder /app/packages/common/contracts/package.json ./packages/common/contracts/
+COPY --from=builder /app/packages/common/blockchain-connector/package.json ./packages/common/blockchain-connector/
+COPY --from=builder /app/services/api/package.json ./services/api/
+COPY --from=builder /app/services/api/prisma ./services/api/prisma
+
+RUN npm ci \
+  --workspace=packages/common/contracts \
+  --workspace=packages/common/blockchain-connector \
+  --workspace=services/api \
+  --include-workspace-root \
+  --omit=dev
+
+# ─── Stage 3: Runtime ────────────────────────────────────────────────────────
+FROM node:20-bullseye-slim
+
+WORKDIR /app
+
+# Install runtime dependencies (OpenSSL is critical for Prisma)
+RUN apt-get update && apt-get install -y \
+    openssl \
+    ca-certificates \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+# Prod node_modules only
+COPY --from=pruner /app/node_modules ./node_modules
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+
+# Built dist artifacts
+COPY --from=builder /app/packages/common/contracts/dist ./packages/common/contracts/dist
+COPY --from=builder /app/packages/common/contracts/package.json ./packages/common/contracts/
+COPY --from=builder /app/packages/common/blockchain-connector/dist ./packages/common/blockchain-connector/dist
+COPY --from=builder /app/packages/common/blockchain-connector/package.json ./packages/common/blockchain-connector/
+COPY --from=builder /app/services/api/dist ./services/api/dist
+COPY --from=builder /app/services/api/package.json ./services/api/
+COPY --from=builder /app/services/api/prisma ./services/api/prisma
+
+
+EXPOSE 3001
+
+WORKDIR /app/services/api
+
+CMD ["node", "dist/src/index.js"]
