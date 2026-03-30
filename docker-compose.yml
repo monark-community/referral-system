@@ -51,6 +51,7 @@ services:
     restart: "no"
 
   db-migrate:
+    profiles: [local-chain]
     build:
       context: .
       dockerfile: docker/Dockerfile.api
@@ -66,6 +67,7 @@ services:
     restart: "no"
 
   api:
+    profiles: [local-chain]
     build:
       context: .
       dockerfile: docker/Dockerfile.api
@@ -124,6 +126,7 @@ services:
 
   # ── 6. Web ───────────────────────────────────────────────────────────────────
   web:
+    profiles: [local-chain]
     build:
       context: .
       dockerfile: docker/Dockerfile.web
