@@ -128,7 +128,8 @@ services:
       context: .
       dockerfile: docker/Dockerfile.web
       args:
-        NEXT_PUBLIC_API_URL: http://localhost:3001
+        NEXT_PUBLIC_API_URL: http://localhost:3001/api
+        NEXT_PUBLIC_RPC_URL: http://localhost:8545
     container_name: reffinity-web
     ports:
       - "3000:3000"
@@ -144,7 +145,7 @@ services:
 
       # Blockchain
       NEXT_PUBLIC_CHAIN_ID: 31337
-      NEXT_PUBLIC_RPC_URL: https://127.0.0.1:8545
+      NEXT_PUBLIC_RPC_URL: http://localhost:8545
 
       # Wallet Connect (if needed)
       #NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID: your_wallet_connect_project_id
