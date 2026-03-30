@@ -92,7 +92,7 @@ export function TermsModal({ onClose }: { onClose: () => void }) {
     return () => window.removeEventListener("keydown", handleKey);
   }, [close]);
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-[100] flex items-center justify-center p-4"
       style={{
@@ -126,6 +126,7 @@ export function TermsModal({ onClose }: { onClose: () => void }) {
           <TermsContent />
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
