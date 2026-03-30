@@ -45,7 +45,7 @@ export const validateProfileUpdate = [
     .withMessage('Name must be between 1 and 100 characters'),
   body('email')
     .isEmail()
-    .normalizeEmail()
+    .normalizeEmail({ gmail_remove_dots: false })
     .withMessage('Valid email is required'),
   body('phone')
     .optional()

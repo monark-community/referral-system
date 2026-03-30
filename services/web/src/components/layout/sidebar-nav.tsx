@@ -114,7 +114,7 @@ export function SidebarNav() {
           className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-[13px] font-medium text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-[background-color,color,transform] duration-150 active:scale-[0.97]"
         >
           <FileText className="w-[18px] h-[18px] shrink-0" />
-          <span className="flex-1 text-left">Terms</span>
+          <span className="flex-1 text-left">Terms & Conditions</span>
         </button>
       </nav>
 

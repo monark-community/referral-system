@@ -121,49 +121,61 @@ export default function PreferencesPage() {
       desktopTitle="Preferences"
       desktopSubtitle="Manage your account settings and security options"
     >
-      <div className="space-y-6 lg:max-w-2xl">
-        {/* Account */}
-        <section>
-          <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 px-1">Account</h2>
-          <div className="rounded-xl bg-card/50 px-5 surface-card">
-            <PreferenceItem
-              id="activate-account"
-              label="Activate Account"
-              description={isAccountActive
-                ? "Your account is active and participating in the referral program"
-                : "Your account is disabled. Re-enable to resume participating."}
-              warning={!isAccountActive}
-              checked={isAccountActive}
-              onChange={handleToggleAccount}
-              disabled={toggling}
-            />
-          </div>
-        </section>
+      <div className="lg:grid lg:grid-cols-[1fr_1fr] lg:gap-6 lg:items-start space-y-6 lg:space-y-0">
+        {/* Left column: Account */}
+        <div className="space-y-3">
+          <section>
+            <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 px-1">Account</h2>
+            <div className="rounded-xl bg-card/50 px-5 py-1 surface-card">
+              <PreferenceItem
+                id="activate-account"
+                label="Activate Account"
+                description={isAccountActive
+                  ? "Your account is active and participating in the referral program"
+                  : "Your account is disabled. Re-enable to resume participating."}
+                warning={!isAccountActive}
+                checked={isAccountActive}
+                onChange={handleToggleAccount}
+                disabled={toggling}
+              />
+            </div>
+          </section>
 
-        {showConfirm && (
-          <div className="rounded-xl p-5 space-y-3" style={{ boxShadow: "0 0 0 1px hsl(0 84% 60% / 0.3), 0 1px 3px hsl(0 0% 0% / 0.4)" }}>
-            <p className="text-sm font-medium text-foreground">Are you sure you want to disable your account?</p>
-            <p className="text-xs text-muted-foreground" style={{ textWrap: "pretty" }}>
-              Your referral links will stop working and you will not earn rewards while your account is disabled. You can re-enable your account at any time.
-            </p>
-            <div className="flex gap-2 pt-1">
-              <button
-                onClick={handleConfirmDisable}
-                className="flex-1 px-3 py-2.5 text-sm font-medium text-white bg-red-600 rounded-xl hover:bg-red-700 active:scale-[0.96] transition-[background-color,transform] duration-150"
-              >
-                Disable Account
-              </button>
-              <button
-                onClick={() => setShowConfirm(false)}
-                className="flex-1 px-3 py-2.5 text-sm font-medium text-foreground bg-secondary rounded-xl hover:bg-secondary/80 active:scale-[0.96] transition-[background-color,transform] duration-150"
-              >
-                Cancel
-              </button>
+          {/* Confirm disable — slides in */}
+          <div
+            className="grid rounded-xl"
+            style={{
+              gridTemplateRows: showConfirm ? "1fr" : "0fr",
+              transition: "grid-template-rows 300ms ease",
+              overflow: "hidden",
+            }}
+          >
+            <div className="min-h-0">
+              <div className="rounded-xl bg-card/50 p-5 space-y-3 surface-card border border-red-500/30">
+                <p className="text-sm font-medium text-foreground">Are you sure you want to disable your account?</p>
+                <p className="text-xs text-muted-foreground" style={{ textWrap: "pretty" }}>
+                  Your referral links will stop working and you will not earn rewards while your account is disabled. You can re-enable your account at any time.
+                </p>
+                <div className="flex gap-2 pt-1">
+                  <button
+                    onClick={handleConfirmDisable}
+                    className="flex-1 px-3 py-2.5 text-sm font-medium text-white bg-red-600 rounded-xl hover:bg-red-700 active:scale-[0.96] transition-[background-color,transform] duration-150"
+                  >
+                    Disable Account
+                  </button>
+                  <button
+                    onClick={() => setShowConfirm(false)}
+                    className="flex-1 px-3 py-2.5 text-sm font-medium text-foreground bg-secondary rounded-xl hover:bg-secondary/80 active:scale-[0.96] transition-[background-color,transform] duration-150"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
-        )}
+        </div>
 
-        {/* Security */}
+        {/* Right column: Security */}
         <section>
           <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 px-1">Security</h2>
           <div className="rounded-xl bg-card/50 px-5 surface-card divide-y divide-border/30">
