@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { ResponsiveShell } from "@/components/layout";
+import { ResponsiveShell } from "@/components/layout/responsive-shell";
 import { Button } from "@/components/ui/button";
 import { ChevronRight } from "lucide-react";
 

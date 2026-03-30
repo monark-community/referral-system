@@ -4,10 +4,10 @@ import {
   createContext,
   useContext,
   useState,
-  useEffect,
   useCallback,
   type ReactNode,
 } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getCurrentUser, logout as apiLogout, type User } from '@/lib/api/auth';
 
 interface AuthContextType {
@@ -22,52 +22,61 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+function hasToken() {
+  return typeof window !== 'undefined' && !!localStorage.getItem('token');
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const [manualUser, setManualUser] = useState<User | null>(null);
 
-  // Check for existing token on mount
-  useEffect(() => {
-    const checkAuth = async () => {
-      const token = localStorage.getItem('token');
-      if (token) {
-        try {
-          const response = await getCurrentUser();
-          setUser(response.user);
-        } catch {
-          // Token invalid, clear it
-          localStorage.removeItem('token');
-        }
+  const { data, isLoading: queryLoading } = useQuery({
+    queryKey: ['auth-user'],
+    queryFn: async () => {
+      try {
+        const response = await getCurrentUser();
+        return response.user;
+      } catch {
+        localStorage.removeItem('token');
+        return null;
       }
-      setIsLoading(false);
-    };
+    },
+    enabled: hasToken() && !manualUser,
+    staleTime: 10 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    retry: false,
+  });
 
-    checkAuth();
-  }, []);
+  const user = manualUser ?? data ?? null;
+  const isLoading = !manualUser && hasToken() && queryLoading;
 
   const login = useCallback((token: string, userData: User) => {
     localStorage.setItem('token', token);
-    setUser(userData);
-  }, []);
+    setManualUser(userData);
+    queryClient.setQueryData(['auth-user'], userData);
+  }, [queryClient]);
 
   const logout = useCallback(() => {
     apiLogout();
-    setUser(null);
-  }, []);
+    setManualUser(null);
+    queryClient.setQueryData(['auth-user'], null);
+    queryClient.clear();
+  }, [queryClient]);
 
   const refreshUser = useCallback(async () => {
     try {
       const response = await getCurrentUser();
-      setUser(response.user);
+      setManualUser(response.user);
+      queryClient.setQueryData(['auth-user'], response.user);
     } catch {
-      // Token might be invalid
       logout();
     }
-  }, [logout]);
+  }, [logout, queryClient]);
 
   const updateUser = useCallback((userData: User) => {
-    setUser(userData);
-  }, []);
+    setManualUser(userData);
+    queryClient.setQueryData(['auth-user'], userData);
+  }, [queryClient]);
 
   return (
     <AuthContext.Provider

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Search } from "lucide-react";
-import { ResponsiveShell } from "@/components/layout";
+import { ResponsiveShell } from "@/components/layout/responsive-shell";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useInvites } from "@/lib/api/hooks";

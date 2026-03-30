@@ -1,10 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, lazy, Suspense } from "react";
 import { Copy, Share2, Check, Mail, MessageCircle, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { ReferralQRCode } from "./referral-qr-code";
+
+const ReferralQRCode = lazy(() =>
+  import("./referral-qr-code").then((m) => ({ default: m.ReferralQRCode }))
+);
 
 interface ReferralLinkCardProps {
   referralLink: string;
@@ -129,7 +132,9 @@ export function ReferralLinkCard({ referralLink, onShare }: ReferralLinkCardProp
         </div>
       )}
 
-      <ReferralQRCode referralLink={referralLink} />
+      <Suspense fallback={null}>
+        <ReferralQRCode referralLink={referralLink} />
+      </Suspense>
     </div>
   );
 }

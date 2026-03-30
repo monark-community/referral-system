@@ -1,12 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ComponentType } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Gift, Link2, Shield, Sparkles, X } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
-import { LoginModal } from "@/components/login/login-modal";
-import { OnboardingModal } from "@/components/onboarding";
 import { useOnboarding } from "@/hooks/use-onboarding";
 
 const features = [
@@ -46,6 +44,25 @@ export default function WelcomePage() {
     goToStep,
   } = useOnboarding();
 
+  // Lazy-loaded auth modals — only loaded when user clicks Login or Join
+  const [AuthModals, setAuthModals] = useState<ComponentType<any> | null>(null);
+
+  const loadAuthModals = () => {
+    if (!AuthModals) {
+      import("./auth-modals").then((m) => setAuthModals(() => m.default));
+    }
+  };
+
+  const handleLoginClick = () => {
+    setIsLoginOpen(true);
+    loadAuthModals();
+  };
+
+  const handleJoinClick = () => {
+    openOnboarding();
+    loadAuthModals();
+  };
+
   const handleOnboardingClose = () => {
     closeOnboarding();
   };
@@ -54,6 +71,8 @@ export default function WelcomePage() {
     closeOnboarding();
     router.push("/referrals");
   };
+
+  const showModals = isLoginOpen || isOnboardingOpen;
 
   return (
     <div className="h-screen bg-background flex flex-col max-w-md lg:max-w-2xl mx-auto overflow-hidden">
@@ -67,7 +86,7 @@ export default function WelcomePage() {
             <Button
               variant="secondary"
               size="sm"
-              onClick={() => setIsLoginOpen(true)}
+              onClick={handleLoginClick}
             >
               Login
             </Button>
@@ -86,7 +105,6 @@ export default function WelcomePage() {
         <div className="p-4 lg:p-8 space-y-6">
           {/* Hero Section */}
           <div className="relative rounded-2xl bg-gradient-to-br from-primary/20 via-primary/10 to-transparent border border-primary/30 p-6 lg:p-8 overflow-hidden">
-            {/* Background decoration */}
             <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-3xl" />
             <div className="absolute bottom-0 left-0 w-24 h-24 bg-primary/5 rounded-full blur-2xl" />
 
@@ -143,7 +161,7 @@ export default function WelcomePage() {
             <Button
               className="flex-1"
               disabled={isLoading}
-              onClick={() => openOnboarding()}
+              onClick={handleJoinClick}
             >
               Join the Program
             </Button>
@@ -151,20 +169,19 @@ export default function WelcomePage() {
         </div>
       </footer>
 
-      <LoginModal
-        isOpen={isLoginOpen}
-        onClose={() => setIsLoginOpen(false)}
-      />
-
-      <OnboardingModal
-        isOpen={isOnboardingOpen}
-        step={step}
-        onClose={handleOnboardingClose}
-        onNextStep={nextStep}
-        onPreviousStep={previousStep}
-        onGoToStep={goToStep}
-        onReturningUser={handleReturningUser}
-      />
+      {showModals && AuthModals && (
+        <AuthModals
+          isLoginOpen={isLoginOpen}
+          onLoginClose={() => setIsLoginOpen(false)}
+          isOnboardingOpen={isOnboardingOpen}
+          step={step}
+          onOnboardingClose={handleOnboardingClose}
+          onNextStep={nextStep}
+          onPreviousStep={previousStep}
+          onGoToStep={goToStep}
+          onReturningUser={handleReturningUser}
+        />
+      )}
     </div>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { ResponsiveShell } from "@/components/layout";
+import { ResponsiveShell } from "@/components/layout/responsive-shell";
 import { Gift, Trophy, Star, Zap, Loader2 } from "lucide-react";
 import { cn, formatPoints } from "@/lib/utils";
 import { useMilestoneTiers, useUserMilestone } from "@/lib/api/hooks";

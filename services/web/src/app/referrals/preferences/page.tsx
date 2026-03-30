@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ResponsiveShell } from "@/components/layout";
+import { ResponsiveShell } from "@/components/layout/responsive-shell";
 import { cn } from "@/lib/utils";
-import { getProfile, disableAccount, enableAccount } from "@/lib/api/user";
+import { disableAccount, enableAccount } from "@/lib/api/user";
 import { useAuth } from "@/contexts/auth-context";
+import { useProfile } from "@/lib/api/hooks";
 
 interface ToggleProps {
   id: string;
@@ -69,6 +70,7 @@ function PreferenceItem({ id, label, description, warning, checked, onChange, di
 export default function PreferencesPage() {
   const router = useRouter();
   const { user, updateUser } = useAuth();
+  const { refetch: refetchProfile } = useProfile();
   const [isAccountActive, setIsAccountActive] = useState(!user?.disabledAt);
   const [toggling, setToggling] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -84,8 +86,8 @@ export default function PreferencesPage() {
     try {
       await enableAccount();
       setIsAccountActive(true);
-      const res = await getProfile();
-      updateUser(res.user);
+      const { data } = await refetchProfile();
+      if (data?.user) updateUser(data.user);
     } catch (err) {
       console.error("Failed to enable account:", err);
     } finally {

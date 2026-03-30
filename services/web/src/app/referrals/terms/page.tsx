@@ -1,53 +1,33 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, type ComponentType } from "react";
 import { useRouter } from "next/navigation";
-import { ResponsiveShell } from "@/components/layout";
+import { ResponsiveShell } from "@/components/layout/responsive-shell";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { OnboardingModal } from "@/components/onboarding";
-import { useOnboarding } from "@/hooks/use-onboarding";
 import { useAuth } from "@/contexts/auth-context";
 
 export default function TermsPage() {
   const router = useRouter();
   const [accepted, setAccepted] = useState(false);
   const { isAuthenticated, isLoading } = useAuth();
-  const {
-    isOpen,
-    step,
-    openOnboarding,
-    closeOnboarding,
-    nextStep,
-    previousStep,
-    goToStep,
-  } = useOnboarding();
+  const [OnboardingFlow, setOnboardingFlow] = useState<ComponentType<{
+    onClose: () => void;
+    onReturningUser: () => void;
+  }> | null>(null);
 
   const handleContinue = () => {
-    if (isLoading) return; // Wait for auth check to complete
+    if (isLoading) return;
     if (isAuthenticated) {
-      // User already authenticated, go directly to dashboard
       router.push("/referrals");
     } else {
-      // Open onboarding modal
-      openOnboarding();
+      // Only load wagmi + onboarding when user actually clicks
+      import("./onboarding-flow").then((m) => setOnboardingFlow(() => m.default));
     }
-  };
-
-  const handleOnboardingClose = () => {
-    closeOnboarding();
-    // If onboarding was completed (user is now authenticated), redirect
-    // This is handled in the success step
-  };
-
-  const handleReturningUser = () => {
-    closeOnboarding();
-    router.push("/referrals");
   };
 
   const footerContent = (
     <footer className="p-4 border-t border-border lg:border-t-0 lg:pt-0 lg:px-0 space-y-4">
-      {/* Checkbox */}
       <label className="flex items-center gap-3 cursor-pointer">
         <button
           role="checkbox"
@@ -81,7 +61,6 @@ export default function TermsPage() {
         </span>
       </label>
 
-      {/* Actions */}
       <div className="flex gap-3">
         <Button
           variant="secondary"
@@ -175,16 +154,15 @@ export default function TermsPage() {
         </div>
       </div>
 
-      {/* Onboarding Modal */}
-      <OnboardingModal
-        isOpen={isOpen}
-        step={step}
-        onClose={handleOnboardingClose}
-        onNextStep={nextStep}
-        onPreviousStep={previousStep}
-        onGoToStep={goToStep}
-        onReturningUser={handleReturningUser}
-      />
+      {OnboardingFlow && (
+        <OnboardingFlow
+          onClose={() => setOnboardingFlow(null)}
+          onReturningUser={() => {
+            setOnboardingFlow(null);
+            router.push("/referrals");
+          }}
+        />
+      )}
     </ResponsiveShell>
   );
 }

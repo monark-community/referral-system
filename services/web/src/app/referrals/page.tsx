@@ -3,13 +3,22 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Users, TrendingUp, Clock, ArrowRight, Copy, Check, Share2 } from "lucide-react";
-import {
-  PointsCard,
-  ReferralLinkCard,
-  NavMenuItem,
-  PointsChart,
-} from "@/components/referral";
-import { ResponsiveShell } from "@/components/layout";
+import dynamic from "next/dynamic";
+import { PointsCard } from "@/components/referral/points-card";
+import { ReferralLinkCard } from "@/components/referral/referral-link-card";
+import { NavMenuItem } from "@/components/referral/nav-menu-item";
+
+const PointsChart = dynamic(
+  () => import("@/components/referral/points-chart").then((m) => m.PointsChart),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-[260px] animate-pulse rounded-lg bg-secondary/30" />
+    ),
+  }
+);
+import { ResponsiveShell } from "@/components/layout/responsive-shell";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth-context";
 import { useInvites } from "@/lib/api/hooks";
 import { formatPoints } from "@/lib/utils";
@@ -178,6 +187,16 @@ export default function ReferralsPage() {
   const router = useRouter();
   const { user: userData, isAuthenticated, isLoading } = useAuth();
   const { data: invitesData } = useInvites();
+  const queryClient = useQueryClient();
+
+  // Prefetch data for likely navigation targets
+  useEffect(() => {
+    if (isAuthenticated) {
+      queryClient.prefetchQuery({ queryKey: ["profile"], queryFn: () => import("@/lib/api/user").then(m => m.getProfile()) });
+      queryClient.prefetchQuery({ queryKey: ["user-milestone"], queryFn: () => import("@/lib/api/user").then(m => m.getUserMilestone()) });
+      queryClient.prefetchQuery({ queryKey: ["milestone-tiers"], queryFn: () => import("@/lib/api/user").then(m => m.getMilestoneTiers()) });
+    }
+  }, [isAuthenticated, queryClient]);
   const invites = invitesData?.invites || [];
 
   useEffect(() => {
@@ -189,7 +208,7 @@ export default function ReferralsPage() {
   if (isLoading) {
     return (
       <div className="h-screen bg-background flex items-center justify-center">
-        <p>Loading...</p>
+        <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }

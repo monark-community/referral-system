@@ -1,7 +1,7 @@
 "use client";
 
 import { ReactNode } from "react";
-import { PageHeader } from "@/components/referral";
+import { PageHeader } from "@/components/referral/page-header";
 import { SidebarNav } from "./sidebar-nav";
 
 interface ResponsiveShellProps {
