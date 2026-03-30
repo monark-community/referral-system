@@ -50,10 +50,10 @@ export default function WelcomePage() {
   useEffect(() => setMounted(true), []);
 
   useEffect(() => {
-    if (!isLoading && isAuthenticated) {
+    if (!isLoading && isAuthenticated && !isOnboardingOpen) {
       router.replace("/referrals");
     }
-  }, [isLoading, isAuthenticated, router]);
+  }, [isLoading, isAuthenticated, isOnboardingOpen, router]);
 
   const loadAuthModals = () => {
     if (!AuthModals) {
@@ -88,7 +88,7 @@ export default function WelcomePage() {
     );
   }
 
-  if (isAuthenticated) return null;
+  if (isAuthenticated && !isOnboardingOpen) return null;
 
   const showModals = isLoginOpen || isOnboardingOpen;
 
