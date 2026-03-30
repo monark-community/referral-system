@@ -10,12 +10,11 @@ import { useAuth } from '@/contexts/auth-context';
 
 interface EmailVerifyStepProps {
   onSuccess: () => void;
-  onSkip: () => void;
 }
 
 const RESEND_COOLDOWN = 60; // seconds
 
-export function EmailVerifyStep({ onSuccess, onSkip }: EmailVerifyStepProps) {
+export function EmailVerifyStep({ onSuccess }: EmailVerifyStepProps) {
   const { user, refreshUser } = useAuth();
   const [isResending, setIsResending] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
@@ -150,19 +149,7 @@ export function EmailVerifyStep({ onSuccess, onSkip }: EmailVerifyStepProps) {
           )}
         </Button>
 
-        <Button
-          variant="outline"
-          onClick={onSkip}
-          className="w-full text-muted-foreground hover:text-foreground"
-        >
-          Skip for now
-        </Button>
       </div>
-
-      {/* Note */}
-      <p className="mt-4 text-center text-xs text-muted-foreground">
-        You can verify your email later from your profile settings.
-      </p>
     </div>
   );
 }

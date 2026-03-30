@@ -64,11 +64,6 @@ export function OnboardingModal({
   // Don't show on wallet step to prevent accidental close
   const showCloseButton = step !== 'wallet' && step !== 'terms';
 
-  const handleSkipEmailVerification = () => {
-    // Skip to success step
-    onGoToStep('success');
-  };
-
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent
@@ -113,7 +108,7 @@ export function OnboardingModal({
         )}
 
         {step === 'verify-email' && (
-          <EmailVerifyStep onSuccess={onNextStep} onSkip={handleSkipEmailVerification} />
+          <EmailVerifyStep onSuccess={onNextStep} />
         )}
 
         {step === 'success' && <SuccessStep onComplete={onClose} />}
