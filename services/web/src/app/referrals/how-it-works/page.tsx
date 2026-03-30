@@ -11,26 +11,26 @@ const steps = [
   {
     number: 1,
     title: "Spread the Word",
-    description:
-      "Use your referral link to invite friends or share Monark with your followers. From Monark enthusiasts to major influencers, everyone is eligible to earn points as they help expand the ecosystem.",
+    short: "Share your referral link with friends and followers to earn points as you help expand the ecosystem.",
+    full: "Use your referral link to invite friends or share Monark with your followers. From Monark enthusiasts to major influencers, everyone is eligible to earn points as they help expand the ecosystem.",
   },
   {
     number: 2,
     title: "Grow Your Circle, Boost Your Score",
-    description:
-      "When your friends join, they become part of your personal Monark Network. Because these connections contribute to your Network Trust Score, you're encouraged to invite reliable users.",
+    short: "Friends who join become part of your Monark Network, boosting your Network Trust Score.",
+    full: "When your friends join, they become part of your personal Monark Network. Because these connections contribute to your Network Trust Score, you're encouraged to invite reliable users.",
   },
   {
     number: 3,
     title: "Stay in Control",
-    description:
-      "Use your personal dashboard to track your invites in real-time, monitor your growing Trust Score, and see exactly how close you are to your next milestone. Your network, your data, your progress.",
+    short: "Track invites, monitor your Trust Score, and see how close you are to the next milestone.",
+    full: "Use your personal dashboard to track your invites in real-time, monitor your growing Trust Score, and see exactly how close you are to your next milestone. Your network, your data, your progress.",
   },
   {
     number: 4,
     title: "Unlock the Monark Ecosystem",
-    description:
-      "Your points are more than just numbers; they are your ticket to exclusive perks. Destroy paywalls and redeem premium services, or specialized rewards across the entire Monark suite of tools!",
+    short: "Redeem your points for premium services and exclusive rewards across Monark tools.",
+    full: "Your points are more than just numbers; they are your ticket to exclusive perks. Destroy paywalls and redeem premium services, or specialized rewards across the entire Monark suite of tools!",
   },
 ];
 
@@ -78,7 +78,7 @@ export default function HowItWorksPage() {
       showSidebar={false}
       footer={footerContent}
     >
-      <div className="p-4 space-y-6">
+      <div className="p-4 space-y-4 lg:space-y-6">
         {steps.map((step, index) => (
           <div
             key={step.number}
@@ -92,16 +92,19 @@ export default function HowItWorksPage() {
             <div className="flex-shrink-0 w-7 h-7 rounded-full bg-primary flex items-center justify-center">
               <span className="text-sm font-bold text-primary-foreground tabular-nums">{step.number}</span>
             </div>
-            <div className="flex-1 space-y-1.5">
+            <div className="flex-1 space-y-1 lg:space-y-1.5">
               <h3 className="font-semibold text-foreground" style={{ textWrap: "balance" }}>{step.title}</h3>
-              <p className="text-sm text-muted-foreground leading-relaxed" style={{ textWrap: "pretty" }}>
-                {step.description}
+              <p className="text-[13px] lg:text-sm text-muted-foreground leading-relaxed lg:hidden" style={{ textWrap: "pretty" }}>
+                {step.short}
+              </p>
+              <p className="text-sm text-muted-foreground leading-relaxed hidden lg:block" style={{ textWrap: "pretty" }}>
+                {step.full}
               </p>
             </div>
           </div>
         ))}
 
-        {/* Rewards card — visually distinct */}
+        {/* Rewards card */}
         <button
           onClick={() => router.push("/referrals/rewards")}
           className="w-full rounded-2xl p-[1px] active:scale-[0.98] transition-[transform] duration-150 group"
