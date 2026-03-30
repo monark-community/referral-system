@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ComponentType } from "react";
+import { useState, useEffect, type ComponentType } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Gift, Link2, Shield, Sparkles, X } from "lucide-react";
@@ -34,6 +34,26 @@ export default function WelcomePage() {
   const router = useRouter();
   const { isAuthenticated, isLoading } = useAuth();
   const [isLoginOpen, setIsLoginOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => setMounted(true), []);
+
+  useEffect(() => {
+    if (!isLoading && isAuthenticated) {
+      router.replace("/referrals");
+    }
+  }, [isLoading, isAuthenticated, router]);
+
+  if (!mounted || isLoading) {
+    return (
+      <div className="h-screen bg-background flex items-center justify-center">
+        <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (isAuthenticated) return null;
+
   const {
     isOpen: isOnboardingOpen,
     step,
@@ -82,15 +102,13 @@ export default function WelcomePage() {
           <h1 className="text-base font-semibold text-foreground">Referrals Program</h1>
         </div>
         <div className="flex items-center gap-2">
-          {!isLoading && !isAuthenticated && (
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={handleLoginClick}
-            >
-              Login
-            </Button>
-          )}
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={handleLoginClick}
+          >
+            Login
+          </Button>
           <button
             onClick={() => router.push("/")}
             className="p-1 rounded-md hover:bg-secondary transition-colors"
@@ -150,22 +168,12 @@ export default function WelcomePage() {
           >
             How it Works
           </Button>
-          {!isLoading && isAuthenticated ? (
-            <Button
-              className="flex-1"
-              onClick={() => router.push("/referrals")}
-            >
-              Go to Dashboard
-            </Button>
-          ) : (
-            <Button
-              className="flex-1"
-              disabled={isLoading}
-              onClick={handleJoinClick}
-            >
-              Join the Program
-            </Button>
-          )}
+          <Button
+            className="flex-1"
+            onClick={handleJoinClick}
+          >
+            Join the Program
+          </Button>
         </div>
       </footer>
 

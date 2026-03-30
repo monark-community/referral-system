@@ -1,9 +1,10 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ResponsiveShell } from "@/components/layout/responsive-shell";
 import { Button } from "@/components/ui/button";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Gift, Star, Trophy, Zap } from "lucide-react";
 
 const steps = [
   {
@@ -32,8 +33,21 @@ const steps = [
   },
 ];
 
+const totalAnimatedItems = steps.length + 1; // steps + rewards card
+
 export default function HowItWorksPage() {
   const router = useRouter();
+  const [visibleCount, setVisibleCount] = useState(0);
+
+  useEffect(() => {
+    let current = 0;
+    const interval = setInterval(() => {
+      current += 1;
+      setVisibleCount(current);
+      if (current >= totalAnimatedItems) clearInterval(interval);
+    }, 180);
+    return () => clearInterval(interval);
+  }, []);
 
   const footerContent = (
     <footer className="p-4 border-t border-border lg:border-t-0 lg:pt-0 lg:px-0">
@@ -57,8 +71,16 @@ export default function HowItWorksPage() {
       footer={footerContent}
     >
       <div className="p-4 space-y-6">
-        {steps.map((step) => (
-          <div key={step.number} className="flex gap-4">
+        {steps.map((step, index) => (
+          <div
+            key={step.number}
+            className="flex gap-4"
+            style={{
+              opacity: index < visibleCount ? 1 : 0,
+              transform: index < visibleCount ? "translateY(0)" : "translateY(12px)",
+              transition: "opacity 400ms ease, transform 400ms ease",
+            }}
+          >
             <div className="flex-shrink-0 w-7 h-7 rounded-full bg-primary flex items-center justify-center">
               <span className="text-sm font-bold text-primary-foreground tabular-nums">{step.number}</span>
             </div>
@@ -71,12 +93,35 @@ export default function HowItWorksPage() {
           </div>
         ))}
 
+        {/* Rewards card — visually distinct */}
         <button
           onClick={() => router.push("/referrals/rewards")}
-          className="flex items-center justify-between w-full px-4 py-3.5 rounded-xl bg-card/50 surface-card hover:surface-card-hover active:scale-[0.98] transition-[box-shadow,transform] duration-150"
+          className="w-full rounded-2xl p-[1px] active:scale-[0.98] transition-[transform] duration-150 group"
+          style={{
+            opacity: steps.length < visibleCount ? 1 : 0,
+            transform: steps.length < visibleCount ? "translateY(0)" : "translateY(12px)",
+            transition: "opacity 400ms ease, transform 400ms ease",
+            background: "linear-gradient(135deg, hsl(25 95% 53% / 0.5), hsl(45 93% 47% / 0.3), hsl(25 95% 53% / 0.15))",
+          }}
         >
-          <span className="text-sm font-medium">Rewards</span>
-          <ChevronRight className="w-4 h-4 text-muted-foreground" />
+          <div className="rounded-[15px] bg-card/95 px-5 py-4 flex items-center gap-4">
+            <div className="flex -space-x-1.5 shrink-0">
+              <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center ring-2 ring-card">
+                <Gift className="w-3.5 h-3.5 text-primary" />
+              </div>
+              <div className="w-7 h-7 rounded-full bg-primary/15 flex items-center justify-center ring-2 ring-card">
+                <Star className="w-3.5 h-3.5 text-primary/80" />
+              </div>
+              <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center ring-2 ring-card">
+                <Trophy className="w-3.5 h-3.5 text-primary/60" />
+              </div>
+            </div>
+            <div className="flex-1 text-left">
+              <p className="text-sm font-semibold text-foreground">View Rewards</p>
+              <p className="text-xs text-muted-foreground">Unlock tiers as you grow your network</p>
+            </div>
+            <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition-[color,transform] duration-150" />
+          </div>
         </button>
       </div>
     </ResponsiveShell>
