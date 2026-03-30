@@ -195,6 +195,9 @@ export default function ReferralsPage() {
   const { user: userData, isAuthenticated, isLoading } = useAuth();
   const { data: invitesData } = useInvites();
   const queryClient = useQueryClient();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => setMounted(true), []);
 
   // Prefetch data for likely navigation targets
   useEffect(() => {
@@ -207,17 +210,13 @@ export default function ReferralsPage() {
   const invites = invitesData?.invites || [];
 
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
+    if (mounted && !isLoading && !isAuthenticated) {
       router.push("/referrals/welcome");
     }
-  }, [isLoading, isAuthenticated, router]);
+  }, [mounted, isLoading, isAuthenticated, router]);
 
-  if (isLoading) {
-    return (
-      <div className="h-screen bg-background flex items-center justify-center">
-        <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+  if (!mounted || isLoading) {
+    return null;
   }
 
   if (!userData) {

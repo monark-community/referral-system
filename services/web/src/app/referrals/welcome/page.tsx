@@ -35,24 +35,7 @@ export default function WelcomePage() {
   const { isAuthenticated, isLoading } = useAuth();
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
-
-  useEffect(() => setMounted(true), []);
-
-  useEffect(() => {
-    if (!isLoading && isAuthenticated) {
-      router.replace("/referrals");
-    }
-  }, [isLoading, isAuthenticated, router]);
-
-  if (!mounted || isLoading) {
-    return (
-      <div className="h-screen bg-background flex items-center justify-center">
-        <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
-
-  if (isAuthenticated) return null;
+  const [AuthModals, setAuthModals] = useState<ComponentType<any> | null>(null);
 
   const {
     isOpen: isOnboardingOpen,
@@ -64,8 +47,13 @@ export default function WelcomePage() {
     goToStep,
   } = useOnboarding();
 
-  // Lazy-loaded auth modals — only loaded when user clicks Login or Join
-  const [AuthModals, setAuthModals] = useState<ComponentType<any> | null>(null);
+  useEffect(() => setMounted(true), []);
+
+  useEffect(() => {
+    if (!isLoading && isAuthenticated) {
+      router.replace("/referrals");
+    }
+  }, [isLoading, isAuthenticated, router]);
 
   const loadAuthModals = () => {
     if (!AuthModals) {
@@ -91,6 +79,16 @@ export default function WelcomePage() {
     closeOnboarding();
     router.push("/referrals");
   };
+
+  if (!mounted || isLoading) {
+    return (
+      <div className="h-screen bg-background flex items-center justify-center">
+        <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (isAuthenticated) return null;
 
   const showModals = isLoginOpen || isOnboardingOpen;
 
