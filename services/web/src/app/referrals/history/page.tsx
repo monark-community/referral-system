@@ -25,23 +25,11 @@ const filterTabs = [
 function getStatusBadge(status: InviteStatus, points?: number, statusDetail?: string) {
   switch (status) {
     case InviteStatus.Pending:
-      return (
-        <Badge variant="secondary" className="text-xs">
-          {statusDetail || "Pending"}
-        </Badge>
-      );
+      return <Badge variant="secondary" className="text-xs">{statusDetail || "Pending"}</Badge>;
     case InviteStatus.Accepted:
-      return (
-        <Badge variant="success" className="text-xs">
-          {points ? `${points.toLocaleString().replace(/,/g, "'")} Points Earned` : "Earned"}
-        </Badge>
-      );
+      return <Badge variant="success" className="text-xs tabular-nums">{points ? `${points.toLocaleString().replace(/,/g, "'")} Points Earned` : "Earned"}</Badge>;
     case InviteStatus.Closed:
-      return (
-        <Badge variant="destructive" className="text-xs">
-          Cancelled
-        </Badge>
-      );
+      return <Badge variant="destructive" className="text-xs">Cancelled</Badge>;
     default:
       return null;
   }
@@ -50,27 +38,20 @@ function getStatusBadge(status: InviteStatus, points?: number, statusDetail?: st
 function InviteItem({ invite }: { invite: Invite }) {
   const getDateLabel = (status: InviteStatus) => {
     switch (status) {
-      case InviteStatus.Pending:
-        return "Invited";
-      case InviteStatus.Accepted:
-        return "Joined";
-      case InviteStatus.Closed:
-        return "Cancelled";
-      default:
-        return "";
+      case InviteStatus.Pending: return "Invited";
+      case InviteStatus.Accepted: return "Joined";
+      case InviteStatus.Closed: return "Cancelled";
+      default: return "";
     }
   };
 
   return (
-    <div className="flex items-center gap-3 p-3 rounded-lg hover:bg-secondary/30 transition-colors">
-      {/* Avatar */}
+    <div className="flex items-center gap-3 p-3 rounded-xl hover:bg-secondary/30 transition-colors duration-150">
       <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center flex-shrink-0">
         <span className="text-sm font-medium text-muted-foreground">
           {invite.referee?.name?.charAt(0).toUpperCase()}
         </span>
       </div>
-
-      {/* Content */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2">
           <span className="text-sm font-medium text-foreground truncate">
@@ -97,8 +78,7 @@ export default function InvitesHistoryPage() {
 
   const filteredInvites = inviteData?.filter((invite) => {
     const matchesSearch = invite.referee?.name?.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesFilter =
-      activeFilter === -1|| invite.status === activeFilter;
+    const matchesFilter = activeFilter === -1 || invite.status === activeFilter;
     return matchesSearch && matchesFilter;
   });
 
@@ -117,28 +97,30 @@ export default function InvitesHistoryPage() {
       title="Invites History"
       onBack={() => router.push("/referrals")}
       onClose={() => router.push("/referrals")}
+      desktopTitle="History"
+      desktopSubtitle="Track all your referral invites and their status"
     >
-        <div className="space-y-4">
-          {/* Search */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+      <div className="space-y-4">
+        {/* Search + Filters */}
+        <div className="flex flex-col lg:flex-row lg:items-center gap-3">
+          <div className="relative lg:flex-1">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input
               type="text"
-              placeholder="Search"
+              placeholder="Search invites..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 bg-secondary/50 border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              className="w-full pl-10 pr-4 py-2.5 bg-card/50 rounded-xl text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring surface-card transition-shadow duration-150 focus:surface-card-hover"
             />
           </div>
 
-          {/* Filter Tabs */}
-          <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4 scrollbar-hide">
+          <div className="flex gap-2 overflow-x-auto pb-1 lg:pb-0 scrollbar-hide shrink-0">
             {filterTabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveFilter(tab.id)}
                 className={cn(
-                  "px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors",
+                  "px-3.5 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-[background-color,color,transform] duration-150 active:scale-[0.96]",
                   activeFilter === tab.id
                     ? "bg-primary text-primary-foreground"
                     : "bg-secondary text-muted-foreground hover:text-foreground"
@@ -148,43 +130,39 @@ export default function InvitesHistoryPage() {
               </button>
             ))}
           </div>
-
-          {/* Invites List */}
-          <div className="space-y-4">
-
-            {groupedInvites?.[InviteStatus.Pending] && groupedInvites[InviteStatus.Pending].length > 0 && (
-              <section>
-                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                  Pending
-                </h3>
-                <div className="space-y-1">
-                  {groupedInvites[InviteStatus.Pending].map((invite) => (
-                    <InviteItem key={invite.id} invite={invite} />
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {groupedInvites?.[InviteStatus.Accepted] && groupedInvites[InviteStatus.Accepted].length > 0 && (
-              <section>
-                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                  Earned
-                </h3>
-                <div className="space-y-1">
-                  {groupedInvites[InviteStatus.Accepted].map((invite) => (
-                    <InviteItem key={invite.id} invite={invite} />
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {filteredInvites?.length === 0 && (
-              <div className="text-center py-8">
-                <p className="text-muted-foreground">No invites found</p>
-              </div>
-            )}
-          </div>
         </div>
+
+        {/* Invites List */}
+        <div className="space-y-5">
+          {groupedInvites?.[InviteStatus.Pending] && groupedInvites[InviteStatus.Pending].length > 0 && (
+            <section>
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">Pending</h3>
+              <div className="rounded-xl bg-card/50 surface-card divide-y divide-border/30">
+                {groupedInvites[InviteStatus.Pending].map((invite) => (
+                  <InviteItem key={invite.id} invite={invite} />
+                ))}
+              </div>
+            </section>
+          )}
+
+          {groupedInvites?.[InviteStatus.Accepted] && groupedInvites[InviteStatus.Accepted].length > 0 && (
+            <section>
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">Earned</h3>
+              <div className="rounded-xl bg-card/50 surface-card divide-y divide-border/30">
+                {groupedInvites[InviteStatus.Accepted].map((invite) => (
+                  <InviteItem key={invite.id} invite={invite} />
+                ))}
+              </div>
+            </section>
+          )}
+
+          {filteredInvites?.length === 0 && (
+            <div className="text-center py-12">
+              <p className="text-muted-foreground">No invites found</p>
+            </div>
+          )}
+        </div>
+      </div>
     </ResponsiveShell>
   );
 }

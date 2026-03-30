@@ -25,15 +25,15 @@ export function NavMenuItem({
       href={href}
       onClick={onClick}
       className={cn(
-        "flex items-center justify-between w-full px-4 py-3.5 rounded-lg transition-colors",
-        "hover:bg-secondary/50",
+        "flex items-center justify-between w-full px-4 py-3.5 rounded-xl transition-[background-color,transform] duration-150",
+        "hover:bg-secondary/50 active:scale-[0.98]",
         isActive && "bg-secondary"
       )}
     >
       <div className="flex items-center gap-3">
         <span className="text-sm font-medium text-foreground">{label}</span>
         {badge !== undefined && badge > 0 && (
-          <span className="flex items-center justify-center min-w-[20px] h-5 px-1.5 text-xs font-bold bg-destructive text-destructive-foreground rounded-full">
+          <span className="flex items-center justify-center min-w-[20px] h-5 px-1.5 text-xs font-bold bg-destructive text-destructive-foreground rounded-full" style={{ fontVariantNumeric: "tabular-nums" }}>
             {badge > 99 ? "99+" : badge}
           </span>
         )}

@@ -30,15 +30,9 @@ export function ReferralLinkCard({ referralLink, onShare }: ReferralLinkCardProp
   const handleNativeShare = async () => {
     if (navigator.share) {
       try {
-        await navigator.share({
-          title: "Join me on Reffinity!",
-          text: shareText,
-          url: referralLink,
-        });
+        await navigator.share({ title: "Join me on Reffinity!", text: shareText, url: referralLink });
       } catch (err) {
-        if ((err as Error).name !== "AbortError") {
-          console.error("Failed to share:", err);
-        }
+        if ((err as Error).name !== "AbortError") console.error("Failed to share:", err);
       }
     } else {
       setShowShareOptions(!showShareOptions);
@@ -73,17 +67,17 @@ export function ReferralLinkCard({ referralLink, onShare }: ReferralLinkCardProp
       <label className="text-sm font-medium text-muted-foreground">
         Your Referral Link
       </label>
-      <div className="flex items-center gap-2 p-3 bg-secondary/50 rounded-lg border border-border">
+      <div className="flex items-center gap-2 p-3 bg-card/50 rounded-xl surface-card">
         <input
           type="text"
           value={referralLink}
           readOnly
-          className="flex-1 bg-transparent text-sm text-foreground outline-none truncate"
+          className="flex-1 bg-transparent text-sm text-foreground outline-none truncate font-mono"
         />
         <button
           onClick={handleCopy}
           className={cn(
-            "p-2 rounded-md transition-colors",
+            "p-2 rounded-lg transition-[background-color,transform] duration-150 active:scale-[0.96]",
             "hover:bg-secondary",
             copied && "text-success"
           )}
@@ -97,47 +91,44 @@ export function ReferralLinkCard({ referralLink, onShare }: ReferralLinkCardProp
         </button>
       </div>
 
-      {/* Share Button */}
       <Button onClick={handleNativeShare} className="w-full" size="lg">
         <Share2 className="w-4 h-4" />
         Share
       </Button>
 
-      {/* Share Options (shown when native share is unavailable) */}
       {showShareOptions && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           <button
             onClick={shareViaEmail}
-            className="flex flex-col items-center gap-1 p-3 rounded-lg border border-border bg-card hover:bg-secondary transition-colors"
+            className="flex flex-col items-center gap-1 p-3 rounded-xl bg-card/50 surface-card hover:surface-card-hover active:scale-[0.96] transition-[box-shadow,transform] duration-150"
           >
             <Mail className="w-5 h-5 text-muted-foreground" />
             <span className="text-xs text-muted-foreground">Email</span>
           </button>
           <button
             onClick={shareViaWhatsApp}
-            className="flex flex-col items-center gap-1 p-3 rounded-lg border border-border bg-card hover:bg-secondary transition-colors"
+            className="flex flex-col items-center gap-1 p-3 rounded-xl bg-card/50 surface-card hover:surface-card-hover active:scale-[0.96] transition-[box-shadow,transform] duration-150"
           >
             <MessageCircle className="w-5 h-5 text-green-500" />
             <span className="text-xs text-muted-foreground">WhatsApp</span>
           </button>
           <button
             onClick={shareViaTelegram}
-            className="flex flex-col items-center gap-1 p-3 rounded-lg border border-border bg-card hover:bg-secondary transition-colors"
+            className="flex flex-col items-center gap-1 p-3 rounded-xl bg-card/50 surface-card hover:surface-card-hover active:scale-[0.96] transition-[box-shadow,transform] duration-150"
           >
             <Send className="w-5 h-5 text-blue-500" />
             <span className="text-xs text-muted-foreground">Telegram</span>
           </button>
           <button
             onClick={shareViaX}
-            className="flex flex-col items-center gap-1 p-3 rounded-lg border border-border bg-card hover:bg-secondary transition-colors"
+            className="flex flex-col items-center gap-1 p-3 rounded-xl bg-card/50 surface-card hover:surface-card-hover active:scale-[0.96] transition-[box-shadow,transform] duration-150"
           >
-            <span className="text-lg font-bold text-muted-foreground">𝕏</span>
+            <span className="text-lg font-bold text-muted-foreground">&#120143;</span>
             <span className="text-xs text-muted-foreground">X</span>
           </button>
         </div>
       )}
 
-      {/* QR Code */}
       <ReferralQRCode referralLink={referralLink} />
     </div>
   );

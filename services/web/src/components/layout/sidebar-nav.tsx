@@ -40,7 +40,7 @@ export function SidebarNav() {
   };
 
   return (
-    <aside className="hidden lg:flex lg:flex-col lg:w-[260px] lg:shrink-0 border-r border-border/60 bg-background h-screen sticky top-0">
+    <aside className="hidden lg:flex lg:flex-col lg:w-[260px] lg:shrink-0 bg-background h-screen sticky top-0" style={{ boxShadow: "1px 0 0 0 hsl(0 0% 100% / 0.06)" }}>
       {/* Brand */}
       <div className="px-6 pt-7 pb-6">
         <div className="flex items-center gap-2.5">
@@ -69,7 +69,7 @@ export function SidebarNav() {
               href={item.href}
               prefetch={true}
               className={cn(
-                "flex items-center gap-3 w-full px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150",
+                "flex items-center gap-3 w-full px-3 py-2 rounded-lg text-[13px] font-medium transition-[background-color,color,transform] duration-150 active:scale-[0.97]",
                 isActive
                   ? "bg-secondary text-foreground"
                   : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
@@ -96,7 +96,7 @@ export function SidebarNav() {
               href={item.href}
               prefetch={true}
               className={cn(
-                "flex items-center gap-3 w-full px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150",
+                "flex items-center gap-3 w-full px-3 py-2 rounded-lg text-[13px] font-medium transition-[background-color,color,transform] duration-150 active:scale-[0.97]",
                 isActive
                   ? "bg-secondary text-foreground"
                   : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
@@ -129,7 +129,7 @@ export function SidebarNav() {
           </div>
           <button
             onClick={handleLogout}
-            className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-[13px] font-medium text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-all duration-150 mt-1"
+            className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-[13px] font-medium text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-[background-color,color,transform] duration-150 active:scale-[0.97] mt-1"
           >
             <LogOut className="w-[18px] h-[18px] shrink-0" />
             Sign Out

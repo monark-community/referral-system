@@ -76,16 +76,16 @@ export function PointsChart({
   const totalPoints = earnedPoints + pendingPoints;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Big number hero */}
       <div>
-        <p className="text-sm text-muted-foreground">Total Points</p>
+        <p className="text-[13px] text-muted-foreground">Total Points</p>
         <div className="flex items-baseline gap-3 mt-1">
-          <span className="text-4xl font-bold tracking-tight text-foreground">
+          <span className="text-4xl font-bold tracking-tight text-foreground" style={{ fontVariantNumeric: "tabular-nums" }}>
             {totalPoints.toLocaleString()}
           </span>
           {pendingPoints > 0 && (
-            <span className="text-sm font-medium text-orange-400">
+            <span className="text-[13px] font-medium text-orange-400" style={{ fontVariantNumeric: "tabular-nums" }}>
               +{pendingPoints.toLocaleString()} pending
             </span>
           )}
@@ -93,7 +93,7 @@ export function PointsChart({
       </div>
 
       {/* Chart */}
-      <div className="h-[200px] -mx-2">
+      <div className="h-[180px] -mx-2">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data}>
             <defs>
