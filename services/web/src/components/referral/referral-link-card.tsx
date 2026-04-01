@@ -1,14 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useState, lazy, Suspense } from "react";
 import { Copy, Share2, Check, Mail, MessageCircle, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { ReferralQRCode } from "./referral-qr-code";
 import { createPrivateInvite, PrivateInviteResponse } from "@/lib/api/user";
 import { WriteReferralContractHelper } from "@reffinity/blockchain-connector/writeReferralContractHelper";
 import { useWriteContract } from "wagmi";
 import { hardhat } from "wagmi/chains";
+
+const ReferralQRCode = lazy(() =>
+  import("./referral-qr-code").then((m) => ({ default: m.ReferralQRCode }))
+);
 
 interface ReferralLinkCardProps {
   referralLink: string;
@@ -64,7 +67,7 @@ export function ReferralLinkCard({ referralLink, onShare }: ReferralLinkCardProp
         const ctx = await WriteReferralContractHelper.createInviteContext();
         await writeContractAsync({
           ...ctx,
-          chainId: hardhat.id, 
+          chainId: hardhat.id,
           args: [
             privateInvite?.bytesinviteId as `0x${string}`,
             privateInvite?.referrerWallet as `0x${string}`,
@@ -105,17 +108,17 @@ export function ReferralLinkCard({ referralLink, onShare }: ReferralLinkCardProp
       <label className="text-sm font-medium text-muted-foreground">
         Your Referral Link
       </label>
-      <div className="flex items-center gap-2 p-3 bg-secondary/50 rounded-lg border border-border">
+      <div className="flex items-center gap-2 p-3 bg-card/50 rounded-xl surface-card">
         <input
           type="text"
           value={referralLink}
           readOnly
-          className="flex-1 bg-transparent text-sm text-foreground outline-none truncate"
+          className="flex-1 bg-transparent text-sm text-foreground outline-none truncate font-mono"
         />
         <button
           onClick={handleCopy}
           className={cn(
-            "p-2 rounded-md transition-colors",
+            "p-2 rounded-lg transition-[background-color,transform] duration-150 active:scale-[0.96]",
             "hover:bg-secondary",
             copied && "text-success"
           )}
@@ -130,7 +133,7 @@ export function ReferralLinkCard({ referralLink, onShare }: ReferralLinkCardProp
       </div>
 
       {/* Share Button */}
-      {!showPopup &&<Button onClick={handleShareClick} className="w-full" size="lg">
+      {!showPopup && <Button onClick={handleShareClick} className="w-full" size="lg">
         <Share2 className="w-4 h-4" />
         Share
       </Button>}
@@ -155,42 +158,42 @@ export function ReferralLinkCard({ referralLink, onShare }: ReferralLinkCardProp
         </div>
       )}
 
-      {/* Share Options (shown when native share is unavailable) */}
       {showShareOptions && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           <button
             onClick={shareViaEmail}
-            className="flex flex-col items-center gap-1 p-3 rounded-lg border border-border bg-card hover:bg-secondary transition-colors"
+            className="flex flex-col items-center gap-1 p-3 rounded-xl bg-card/50 surface-card hover:surface-card-hover active:scale-[0.96] transition-[box-shadow,transform] duration-150"
           >
             <Mail className="w-5 h-5 text-muted-foreground" />
             <span className="text-xs text-muted-foreground">Email</span>
           </button>
           <button
             onClick={shareViaWhatsApp}
-            className="flex flex-col items-center gap-1 p-3 rounded-lg border border-border bg-card hover:bg-secondary transition-colors"
+            className="flex flex-col items-center gap-1 p-3 rounded-xl bg-card/50 surface-card hover:surface-card-hover active:scale-[0.96] transition-[box-shadow,transform] duration-150"
           >
             <MessageCircle className="w-5 h-5 text-green-500" />
             <span className="text-xs text-muted-foreground">WhatsApp</span>
           </button>
           <button
             onClick={shareViaTelegram}
-            className="flex flex-col items-center gap-1 p-3 rounded-lg border border-border bg-card hover:bg-secondary transition-colors"
+            className="flex flex-col items-center gap-1 p-3 rounded-xl bg-card/50 surface-card hover:surface-card-hover active:scale-[0.96] transition-[box-shadow,transform] duration-150"
           >
             <Send className="w-5 h-5 text-blue-500" />
             <span className="text-xs text-muted-foreground">Telegram</span>
           </button>
           <button
             onClick={shareViaX}
-            className="flex flex-col items-center gap-1 p-3 rounded-lg border border-border bg-card hover:bg-secondary transition-colors"
+            className="flex flex-col items-center gap-1 p-3 rounded-xl bg-card/50 surface-card hover:surface-card-hover active:scale-[0.96] transition-[box-shadow,transform] duration-150"
           >
-            <span className="text-lg font-bold text-muted-foreground">𝕏</span>
+            <span className="text-lg font-bold text-muted-foreground">&#120143;</span>
             <span className="text-xs text-muted-foreground">X</span>
           </button>
         </div>
       )}
 
-      {/* QR Code */}
-      <ReferralQRCode referralLink={referralLink} />
+      <Suspense fallback={null}>
+        <ReferralQRCode referralLink={referralLink} />
+      </Suspense>
     </div>
   );
 }

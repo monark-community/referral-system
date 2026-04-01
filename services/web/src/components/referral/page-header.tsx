@@ -29,7 +29,7 @@ export function PageHeader({
         {onBack && (
           <button
             onClick={onBack}
-            className="p-1 -ml-1 rounded-md hover:bg-secondary transition-colors"
+            className="relative p-2 -ml-2 rounded-lg hover:bg-secondary active:scale-[0.96] transition-[background-color,transform] duration-150"
             aria-label="Go back"
           >
             <ChevronLeft className="w-5 h-5 text-foreground" />
@@ -45,7 +45,7 @@ export function PageHeader({
       {onClose && (
         <button
           onClick={onClose}
-          className="p-1 rounded-md hover:bg-secondary transition-colors"
+          className="relative p-2 -mr-2 rounded-lg hover:bg-secondary active:scale-[0.96] transition-[background-color,transform] duration-150"
           aria-label="Close"
         >
           <X className="w-5 h-5 text-foreground" />

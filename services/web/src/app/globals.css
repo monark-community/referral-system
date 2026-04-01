@@ -39,6 +39,9 @@
     --ring: 25 95% 53%;
 
     --radius: 0.75rem;
+
+    --shadow-card: 0 0 0 1px hsl(0 0% 100% / 0.06), 0 1px 3px hsl(0 0% 0% / 0.4), 0 1px 2px hsl(0 0% 0% / 0.3);
+    --shadow-card-hover: 0 0 0 1px hsl(0 0% 100% / 0.08), 0 2px 8px hsl(0 0% 0% / 0.4), 0 1px 3px hsl(0 0% 0% / 0.3);
   }
 }
 
@@ -50,22 +53,36 @@
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+@layer utilities {
+  .surface-card {
+    box-shadow: var(--shadow-card);
+  }
+  .surface-card-hover {
+    box-shadow: var(--shadow-card-hover);
+  }
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
   }
 }
 
 /* Custom scrollbar for dark theme */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: hsl(var(--background));
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
   background: hsl(var(--muted));
-  border-radius: 4px;
+  border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {

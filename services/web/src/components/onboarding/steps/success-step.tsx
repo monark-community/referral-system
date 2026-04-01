@@ -25,9 +25,6 @@ export function SuccessStep({ onComplete }: SuccessStepProps) {
         <div className="flex h-20 w-20 items-center justify-center rounded-full bg-success/10">
           <CheckCircle2 className="h-10 w-10 text-success" />
         </div>
-        <div className="absolute -right-1 -top-1 flex h-8 w-8 items-center justify-center rounded-full bg-primary">
-          <Sparkles className="h-4 w-4 text-primary-foreground" />
-        </div>
       </div>
 
       {/* Title */}

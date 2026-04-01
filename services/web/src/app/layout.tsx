@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import { WagmiProviderWrapper } from "@/providers/wagmi-provider";
+import { QueryProvider } from "@/providers/query-provider";
 import { AuthProvider } from "@/contexts/auth-context";
 
 const inter = Inter({
@@ -22,11 +22,11 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className={`${inter.variable} font-sans antialiased`}>
-        <WagmiProviderWrapper>
+        <QueryProvider>
           <AuthProvider>
             {children}
           </AuthProvider>
-        </WagmiProviderWrapper>
+        </QueryProvider>
       </body>
     </html>
   );
