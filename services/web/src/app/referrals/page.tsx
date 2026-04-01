@@ -8,6 +8,8 @@ import { PointsCard } from "@/components/referral/points-card";
 import { ReferralLinkCard } from "@/components/referral/referral-link-card";
 import { NavMenuItem } from "@/components/referral/nav-menu-item";
 import { TermsModal } from "@/components/referral/terms-modal";
+import { OnboardingModal } from "@/components/onboarding";
+import { useOnboarding } from "@/hooks/use-onboarding";
 
 const ReferralQRCode = lazy(() =>
   import("@/components/referral/referral-qr-code").then((m) => ({ default: m.ReferralQRCode }))
@@ -198,8 +200,26 @@ export default function ReferralsPage() {
   const queryClient = useQueryClient();
   const [mounted, setMounted] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
+  const {
+    isOpen,
+    step,
+    openOnboarding,
+    closeOnboarding,
+    previousStep,
+    goToStep,
+  } = useOnboarding();
+
+  const needsVerification = userData && userData.email && !userData.emailVerified;
 
   useEffect(() => setMounted(true), []);
+
+  // Auto-open verification modal if email not verified
+  useEffect(() => {
+    if (!isLoading && isAuthenticated && needsVerification) {
+      goToStep("verify-email");
+      openOnboarding();
+    }
+  }, [isLoading, isAuthenticated, needsVerification, goToStep, openOnboarding]);
 
   // Refresh user data on mount so points reflect latest blockchain state
   useEffect(() => {
@@ -217,6 +237,16 @@ export default function ReferralsPage() {
       router.push("/referrals/welcome");
     }
   }, [mounted, isLoading, isAuthenticated, router]);
+
+  const handleVerificationClose = () => {
+    if (needsVerification) return;
+    closeOnboarding();
+  };
+
+  const handleVerificationSuccess = () => {
+    closeOnboarding();
+    refreshUser();
+  };
 
   if (!mounted || isLoading) {
     return null;
@@ -328,6 +358,16 @@ export default function ReferralsPage() {
       </div>
 
       {showTerms && <TermsModal onClose={() => setShowTerms(false)} />}
+
+      {/* Email Verification Modal - blocks dashboard until verified */}
+      <OnboardingModal
+        isOpen={isOpen}
+        step={step}
+        onClose={handleVerificationClose}
+        onNextStep={handleVerificationSuccess}
+        onPreviousStep={previousStep}
+        onGoToStep={goToStep}
+      />
     </ResponsiveShell>
   );
 }

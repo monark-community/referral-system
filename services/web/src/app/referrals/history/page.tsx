@@ -49,13 +49,17 @@ function InviteItem({ invite }: { invite: Invite }) {
     <div className="flex items-center gap-3 p-3 rounded-xl hover:bg-secondary/30 transition-colors duration-150">
       <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center flex-shrink-0">
         <span className="text-sm font-medium text-muted-foreground">
-          {invite.referee?.name?.charAt(0).toUpperCase()}
+          {invite.referee?.name?.charAt(0).toUpperCase() || "?"}
         </span>
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2">
           <span className="text-sm font-medium text-foreground truncate">
-            {invite.referee?.name || "Unknown User"}
+            {invite.referee
+              ? invite.referee.name
+              : invite.description
+              ? invite.description
+              : "Unknown User"}
           </span>
           {getStatusBadge(invite.status, invite.points)}
         </div>
@@ -77,9 +81,10 @@ export default function InvitesHistoryPage() {
   const [activeFilter, setActiveFilter] = useState<number>(-1);
 
   const filteredInvites = inviteData?.filter((invite) => {
-    const matchesSearch = invite.referee?.name?.toLowerCase().includes(searchQuery.toLowerCase());
+    const verified = invite.isVerified;
+    const matchesSearch = searchQuery === "" ? true : invite.referee?.name?.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesFilter = activeFilter === -1 || invite.status === activeFilter;
-    return matchesSearch && matchesFilter;
+    return matchesSearch && matchesFilter && verified;
   });
 
   const groupedInvites = filteredInvites?.reduce(

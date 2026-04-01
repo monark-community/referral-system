@@ -9,6 +9,7 @@ import {
   acceptTerms,
   disableAccount,
   enableAccount,
+  createPrivateInvite,
 } from '../controllers/user.controller.js';
 import { authMiddleware } from '../middlewares/auth.middleware.js';
 import { validateProfileUpdate } from '../middlewares/validation.middleware.js';
@@ -40,5 +41,8 @@ router.post('/disable', authMiddleware, disableAccount);
 
 // POST /api/users/enable - Re-enable account
 router.post('/enable', authMiddleware, enableAccount);
+
+//POST /api/users/referrals/private
+router.post('/referrals/private', authMiddleware, createPrivateInvite)
 
 export default router;

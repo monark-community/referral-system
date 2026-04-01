@@ -42,8 +42,8 @@ contract ReferralProgram is AccessControl {
         points.completeAction(ReferralPoints.Action.AcceptedInvite, msg.sender);
         uint256 referrerPoints = points.getUserPoints(referrer);
         uint256 refereePoints = points.getUserPoints(msg.sender);
-        emit ReferralPoints.PointsAdded(referrer, referrerPoints);
-        emit ReferralPoints.PointsAdded(msg.sender, refereePoints);
+        emit ReferralPoints.PointsAdded(referrer, referrerPoints, false);
+        emit ReferralPoints.PointsAdded(msg.sender, refereePoints, false);
         milestones.updateUserMilestone(
             msg.sender,
             refereePoints
@@ -52,7 +52,7 @@ contract ReferralProgram is AccessControl {
             referrer,
             referrerPoints
         );
-        createInvite(inviteId, referrer, ReferralInvites.InviteStatus.Accepted);
+        completeInvite(inviteId, referrer);
     }
 
     function viewReferrals(address user) public view returns (address[] memory) {
@@ -96,9 +96,23 @@ contract ReferralProgram is AccessControl {
     function createInvite(bytes32 inviteID, address referrer, ReferralInvites.InviteStatus status) public {
         require(uint8(status) <= uint8(ReferralInvites.InviteStatus.Closed), "Invalid status");
         invites.createInvite(inviteID, referrer, status);
+        if(status == ReferralInvites.InviteStatus.Pending){
+            points.addPendingAction(ReferralPoints.Action.ReferredNewUser, referrer);
+            uint256 pendingPoints = points.getPendingUserPoints(referrer);
+            emit ReferralPoints.PointsAdded(referrer, pendingPoints, true);
+        }
         emit ReferralInvites.InviteChanged(inviteID, referrer, status);
     }
 
+    function completeInvite(bytes32 inviteID, address referrer) public {
+        bool removePending = invites.completeInvite(inviteID, referrer);
+        if(removePending){
+            points.completePendingAction(ReferralPoints.Action.ReferredNewUser, referrer);
+            uint256 pendingPoints = points.getPendingUserPoints(referrer);
+            emit ReferralPoints.PointsAdded(referrer, pendingPoints, true);
+        }
+        emit ReferralInvites.InviteChanged(inviteID, referrer, ReferralInvites.InviteStatus.Accepted);
+    }
     
     function updateInviteStatus(bytes32 inviteID, ReferralInvites.InviteStatus newStatus) public {
         address referrer = invites.updateInviteStatus(inviteID, newStatus);

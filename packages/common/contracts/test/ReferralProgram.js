@@ -209,6 +209,15 @@ test("user can have have a invite created", async () => {
     assert.equal(userinvites[3].inviteId, stringToHex("invite3", {size: 32}));
     assert.equal(userinvites[3].status, 2); // closed 
     assert.equal(userinvites[3].points, 100n); // points for referring
+
+    const userPendingPoints = await publicClient.readContract({
+        address: contractAddress,
+        abi,
+        functionName: "viewPoints",
+        args: [referrerAccount.address],
+    });
+
+    assert.equal(userPendingPoints, 100n);
     
 });
 

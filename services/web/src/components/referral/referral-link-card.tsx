@@ -4,6 +4,10 @@ import { useState, lazy, Suspense } from "react";
 import { Copy, Share2, Check, Mail, MessageCircle, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { createPrivateInvite, PrivateInviteResponse } from "@/lib/api/user";
+import { WriteReferralContractHelper } from "@reffinity/blockchain-connector/writeReferralContractHelper";
+import { useWriteContract } from "wagmi";
+import { hardhat } from "wagmi/chains";
 
 const ReferralQRCode = lazy(() =>
   import("./referral-qr-code").then((m) => ({ default: m.ReferralQRCode }))
@@ -14,7 +18,14 @@ interface ReferralLinkCardProps {
   onShare?: () => void;
 }
 
+enum LinkType{
+  public, private
+}
+
 export function ReferralLinkCard({ referralLink, onShare }: ReferralLinkCardProps) {
+  const { writeContractAsync } = useWriteContract();
+  const [privateInvite, setPrivateInvite] = useState<PrivateInviteResponse | null>(null);
+  const [showPopup, setShowPopup] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showShareOptions, setShowShareOptions] = useState(false);
 
@@ -30,16 +41,43 @@ export function ReferralLinkCard({ referralLink, onShare }: ReferralLinkCardProp
     }
   };
 
-  const handleNativeShare = async () => {
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: "Join me on Reffinity!", text: shareText, url: referralLink });
-      } catch (err) {
-        if ((err as Error).name !== "AbortError") console.error("Failed to share:", err);
+  const handleShareClick = async () => {
+    try {
+      const data = await createPrivateInvite(null);
+
+      setPrivateInvite(data);
+      setShowPopup(true);
+    } catch (err) {
+      console.error("Failed to generate private invite:", err);
+    }
+  };
+
+  const handleShareViaLink = async (link: string, type: LinkType) => {
+    if (!navigator.share) {
+      alert(`Share link: ${link}`);
+      return;
+    }
+    try {
+      await navigator.share({
+        title: "Join me on Reffinity!",
+        text: shareText,
+        url: link,
+      });
+      if (type == LinkType.private){
+        const ctx = await WriteReferralContractHelper.createInviteContext();
+        await writeContractAsync({
+          ...ctx,
+          chainId: hardhat.id,
+          args: [
+            privateInvite?.bytesinviteId as `0x${string}`,
+            privateInvite?.referrerWallet as `0x${string}`,
+            0,
+          ],
+        });
       }
-    } else {
-      setShowShareOptions(!showShareOptions);
-      onShare?.();
+      setShowPopup(false);
+    } catch (err) {
+      console.error("Share failed:", err);
     }
   };
 
@@ -94,10 +132,31 @@ export function ReferralLinkCard({ referralLink, onShare }: ReferralLinkCardProp
         </button>
       </div>
 
-      <Button onClick={handleNativeShare} className="w-full" size="lg">
+      {/* Share Button */}
+      {!showPopup && <Button onClick={handleShareClick} className="w-full" size="lg">
         <Share2 className="w-4 h-4" />
         Share
-      </Button>
+      </Button>}
+
+      {showPopup && (
+        <div className="popup">
+          <label className="text-sm font-medium text-muted-foreground w-full">
+            Share Via:
+          </label>
+          <Button onClick={() => handleShareViaLink(referralLink, LinkType.public)}
+            className="m-2 p-2" size="sm" >Public Link</Button>
+          {privateInvite && (
+            <Button
+              onClick={() =>
+                handleShareViaLink(referralLink + "-" + privateInvite.inviteCode, LinkType.private)
+              }
+            className="m-2 p-2" size="sm"
+            >
+              Private Link
+            </Button>
+          )}
+        </div>
+      )}
 
       {showShareOptions && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">

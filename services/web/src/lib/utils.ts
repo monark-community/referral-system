@@ -12,3 +12,25 @@ export function cn(...inputs: ClassValue[]) {
 export function formatPoints(value: number): string {
   return value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
+
+/* 
+Parse the link code into valid  referral and invite codes
+*/
+export function parseLinkCode(code?: string): {
+  referralCode: string | null;
+  inviteCode: string | null;
+} {
+  if (!code) {
+    return {
+      referralCode: null,
+      inviteCode: null,
+    };
+  }
+
+  const codes = code.split(/-/, 2);
+
+  return {
+    referralCode: codes[0] ?? null,
+    inviteCode: codes.length > 1 ? codes[1] : null,
+  };
+}

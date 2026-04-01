@@ -54,6 +54,24 @@ contract ReferralInvites is AccessControl {
         userInvites[user].push(inviteID);
     }
 
+    //depending on whether this is an existing invite create a new one or update it to accepted - return whether it was an existing 
+    function completeInvite(
+        bytes32 inviteID,
+        address user
+    ) public returns(bool existingInvite){
+        require(
+            hasRole(ACCESS_ROLE, msg.sender),
+            "createInvite: caller lacks ACCESS_ROLE"
+        );
+        if(invites[inviteID].referrer == address(0)){
+            createInvite(inviteID, user, InviteStatus.Accepted);
+            return false;
+        }else{
+            invites[inviteID].status = InviteStatus.Accepted;
+            return true;
+        }
+    }
+
     function updateInviteStatus(
         bytes32 inviteID,
         InviteStatus newStatus

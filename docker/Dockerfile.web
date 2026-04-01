@@ -1,0 +1,47 @@
+# ─── Stage 1: Build all packages up to Web ──────────────────────────────────
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+ARG NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+
+ARG NEXT_PUBLIC_RPC_URL
+ENV NEXT_PUBLIC_RPC_URL=$NEXT_PUBLIC_RPC_URL
+
+# Root manifest
+COPY package.json package-lock.json ./
+
+# Copy packages in dependency order
+COPY packages/common/contracts ./packages/common/contracts
+COPY packages/common/blockchain-connector ./packages/common/blockchain-connector
+COPY services/web ./services/web
+
+# Install all workspace deps
+RUN npm ci \
+  --workspace=packages/common/contracts \
+  --workspace=packages/common/blockchain-connector \
+  --workspace=services/web \
+  --include-workspace-root
+
+# Build in dependency order
+RUN npm run build -w @reffinity/common-contracts
+RUN npm run build -w @reffinity/blockchain-connector
+RUN npm run build -w reffinity-web
+
+# ─── Stage 2: Runtime (Next.js standalone) ───────────────────────────────────
+FROM node:20-alpine
+
+WORKDIR /app
+
+# next.config.js must have `output: 'standalone'` for this to work.
+# If not using standalone, swap this stage for a full node image + dist copy.
+COPY --from=builder /app/services/web/.next/standalone ./
+COPY --from=builder /app/services/web/.next/static ./services/web/.next/static
+
+EXPOSE 3000
+
+ENV NODE_ENV=production
+ENV PORT=3000
+
+CMD ["node", "services/web/server.js"]
