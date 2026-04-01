@@ -193,7 +193,7 @@ function RecentActivityCard({
 
 export default function ReferralsPage() {
   const router = useRouter();
-  const { user: userData, isAuthenticated, isLoading } = useAuth();
+  const { user: userData, isAuthenticated, isLoading, refreshUser } = useAuth();
   const { data: invitesData } = useInvites();
   const queryClient = useQueryClient();
   const [mounted, setMounted] = useState(false);
@@ -201,14 +201,15 @@ export default function ReferralsPage() {
 
   useEffect(() => setMounted(true), []);
 
-  // Prefetch data for likely navigation targets
+  // Refresh user data on mount so points reflect latest blockchain state
   useEffect(() => {
     if (isAuthenticated) {
+      refreshUser();
       queryClient.prefetchQuery({ queryKey: ["profile"], queryFn: () => import("@/lib/api/user").then(m => m.getProfile()) });
       queryClient.prefetchQuery({ queryKey: ["user-milestone"], queryFn: () => import("@/lib/api/user").then(m => m.getUserMilestone()) });
       queryClient.prefetchQuery({ queryKey: ["milestone-tiers"], queryFn: () => import("@/lib/api/user").then(m => m.getMilestoneTiers()) });
     }
-  }, [isAuthenticated, queryClient]);
+  }, [isAuthenticated, refreshUser, queryClient]);
   const invites = invitesData?.invites || [];
 
   useEffect(() => {
