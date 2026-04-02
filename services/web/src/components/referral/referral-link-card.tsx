@@ -139,18 +139,19 @@ export function ReferralLinkCard({ referralLink, onShare }: ReferralLinkCardProp
       </Button>}
 
       {showPopup && (
-        <div className="popup">
-          <label className="text-sm font-medium text-muted-foreground w-full">
+        <div className="flex items-center gap-2 p-3 rounded-xl bg-card/50 surface-card">
+          <label className="text-sm font-medium text-muted-foreground">
             Share Via:
           </label>
           <Button onClick={() => handleShareViaLink(referralLink, LinkType.public)}
-            className="m-2 p-2" size="sm" >Public Link</Button>
+            size="sm" >Public Link</Button>
           {privateInvite && (
             <Button
               onClick={() =>
                 handleShareViaLink(referralLink + "-" + privateInvite.inviteCode, LinkType.private)
               }
-            className="m-2 p-2" size="sm"
+              size="sm"
+              variant="secondary"
             >
               Private Link
             </Button>

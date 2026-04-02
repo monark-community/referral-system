@@ -68,16 +68,14 @@ export function PointsChart({
     [earnedPoints, createdAt]
   );
 
-  const totalPoints = earnedPoints + pendingPoints;
-
   return (
     <div className="space-y-4">
       {/* Big number hero */}
       <div>
-        <p className="text-[13px] text-muted-foreground">Total Points</p>
+        <p className="text-[13px] text-muted-foreground">Earned Points</p>
         <div className="flex items-baseline gap-3 mt-1">
           <span className="text-4xl font-bold tracking-tight text-foreground" style={{ fontVariantNumeric: "tabular-nums" }}>
-            {totalPoints.toLocaleString()}
+            {earnedPoints.toLocaleString()}
           </span>
           {pendingPoints > 0 && (
             <span className="text-[13px] font-medium text-orange-400" style={{ fontVariantNumeric: "tabular-nums" }}>

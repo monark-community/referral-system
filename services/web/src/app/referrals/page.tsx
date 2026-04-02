@@ -30,6 +30,11 @@ import { useAuth } from "@/contexts/auth-context";
 import { useInvites } from "@/lib/api/hooks";
 import { formatPoints } from "@/lib/utils";
 import type { Invite } from "@/lib/api/user";
+import { createPrivateInvite, PrivateInviteResponse } from "@/lib/api/user";
+import { Button } from "@/components/ui/button";
+import { WriteReferralContractHelper } from "@reffinity/blockchain-connector/writeReferralContractHelper";
+import { useWriteContract } from "wagmi";
+import { hardhat } from "wagmi/chains";
 
 function StatCard({
   label,
@@ -58,8 +63,18 @@ function StatCard({
   );
 }
 
+enum LinkType {
+  public,
+  private,
+}
+
 function QuickShareCard({ referralLink }: { referralLink: string }) {
+  const { writeContractAsync } = useWriteContract();
   const [copied, setCopied] = useState(false);
+  const [showPopup, setShowPopup] = useState(false);
+  const [privateInvite, setPrivateInvite] = useState<PrivateInviteResponse | null>(null);
+
+  const shareText = "Use my referral link to join Reffinity and we both earn rewards!";
 
   const handleCopy = async () => {
     try {
@@ -68,6 +83,45 @@ function QuickShareCard({ referralLink }: { referralLink: string }) {
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
       console.error("Failed to copy:", err);
+    }
+  };
+
+  const handleShareClick = async () => {
+    try {
+      const data = await createPrivateInvite(null);
+      setPrivateInvite(data);
+      setShowPopup(true);
+    } catch (err) {
+      console.error("Failed to generate private invite:", err);
+    }
+  };
+
+  const handleShareViaLink = async (link: string, type: LinkType) => {
+    if (!navigator.share) {
+      alert(`Share link: ${link}`);
+      return;
+    }
+    try {
+      await navigator.share({
+        title: "Join me on Reffinity!",
+        text: shareText,
+        url: link,
+      });
+      if (type === LinkType.private) {
+        const ctx = await WriteReferralContractHelper.createInviteContext();
+        await writeContractAsync({
+          ...ctx,
+          chainId: hardhat.id,
+          args: [
+            privateInvite?.bytesinviteId as `0x${string}`,
+            privateInvite?.referrerWallet as `0x${string}`,
+            0,
+          ],
+        });
+      }
+      setShowPopup(false);
+    } catch (err) {
+      console.error("Share failed:", err);
     }
   };
 
@@ -107,6 +161,36 @@ function QuickShareCard({ referralLink }: { referralLink: string }) {
             </>
           )}
         </button>
+
+        {!showPopup && (
+          <Button onClick={handleShareClick} className="w-full" size="lg" variant="secondary">
+            <Share2 className="w-4 h-4" />
+            Share
+          </Button>
+        )}
+
+        {showPopup && (
+          <div className="flex items-center gap-2 p-3 rounded-[10px] bg-secondary/60">
+            <span className="text-[13px] font-medium text-muted-foreground">
+              Share Via:
+            </span>
+            <Button onClick={() => handleShareViaLink(referralLink, LinkType.public)} size="sm">
+              Public Link
+            </Button>
+            {privateInvite && (
+              <Button
+                onClick={() =>
+                  handleShareViaLink(referralLink + "-" + privateInvite.inviteCode, LinkType.private)
+                }
+                size="sm"
+                variant="secondary"
+              >
+                Private Link
+              </Button>
+            )}
+          </div>
+        )}
+
         <Suspense fallback={null}>
           <ReferralQRCode referralLink={referralLink} />
         </Suspense>

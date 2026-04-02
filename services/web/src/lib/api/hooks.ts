@@ -10,6 +10,7 @@ export function useProfile() {
     queryKey: ["profile"],
     queryFn: () => getProfile(),
     enabled: isAuthenticated,
+    refetchOnMount: "always",
   });
 }
 
@@ -19,6 +20,7 @@ export function useInvites() {
     queryKey: ["invites"],
     queryFn: () => getInvites(),
     enabled: isAuthenticated,
+    refetchOnMount: "always",
   });
 }
 
@@ -37,5 +39,6 @@ export function useUserMilestone() {
     queryKey: ["user-milestone"],
     queryFn: () => getUserMilestone(),
     enabled: isAuthenticated,
+    refetchOnMount: "always",
   });
 }
