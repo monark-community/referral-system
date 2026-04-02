@@ -8,6 +8,8 @@ import { createPrivateInvite, PrivateInviteResponse } from "@/lib/api/user";
 import { WriteReferralContractHelper } from "@reffinity/blockchain-connector/writeReferralContractHelper";
 import { useWriteContract } from "wagmi";
 import { hardhat } from "wagmi/chains";
+import { useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "@/contexts/auth-context";
 
 const ReferralQRCode = lazy(() =>
   import("./referral-qr-code").then((m) => ({ default: m.ReferralQRCode }))
@@ -24,6 +26,8 @@ enum LinkType{
 
 export function ReferralLinkCard({ referralLink, onShare }: ReferralLinkCardProps) {
   const { writeContractAsync } = useWriteContract();
+  const queryClient = useQueryClient();
+  const { refreshUser } = useAuth();
   const [privateInvite, setPrivateInvite] = useState<PrivateInviteResponse | null>(null);
   const [showPopup, setShowPopup] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -74,6 +78,8 @@ export function ReferralLinkCard({ referralLink, onShare }: ReferralLinkCardProp
             0,
           ],
         });
+        queryClient.invalidateQueries({ queryKey: ["invites"] });
+        refreshUser();
       }
       setShowPopup(false);
     } catch (err) {

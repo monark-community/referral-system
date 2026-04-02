@@ -9,6 +9,7 @@ import {
 } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getCurrentUser, logout as apiLogout, type User } from '@/lib/api/auth';
+import { ApiError } from '@/lib/api/client';
 
 interface AuthContextType {
   user: User | null;
@@ -68,8 +69,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const response = await getCurrentUser();
       setManualUser(response.user);
       queryClient.setQueryData(['auth-user'], response.user);
-    } catch {
-      logout();
+    } catch (err) {
+      // Only logout on 401 (token expired/invalid), not on transient errors
+      if (err instanceof ApiError && err.status === 401) {
+        logout();
+      }
     }
   }, [logout, queryClient]);
 

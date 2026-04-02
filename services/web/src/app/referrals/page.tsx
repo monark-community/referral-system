@@ -70,6 +70,8 @@ enum LinkType {
 
 function QuickShareCard({ referralLink }: { referralLink: string }) {
   const { writeContractAsync } = useWriteContract();
+  const queryClient = useQueryClient();
+  const { refreshUser } = useAuth();
   const [copied, setCopied] = useState(false);
   const [showPopup, setShowPopup] = useState(false);
   const [privateInvite, setPrivateInvite] = useState<PrivateInviteResponse | null>(null);
@@ -118,6 +120,8 @@ function QuickShareCard({ referralLink }: { referralLink: string }) {
             0,
           ],
         });
+        queryClient.invalidateQueries({ queryKey: ["invites"] });
+        refreshUser();
       }
       setShowPopup(false);
     } catch (err) {

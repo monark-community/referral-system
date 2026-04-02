@@ -66,6 +66,7 @@ export class BlockchainListenerService {
             }
 
             if (!isPending) {
+              const earnedDelta = Number(points) - existingUser.earnedPoints;
               await prisma.user.update({
                 where: { walletAddress: normalizedAddress },
                 data: {
@@ -73,7 +74,21 @@ export class BlockchainListenerService {
                   milestoneLevel,
                 },
               });
+              // Assign per-referral points to the most recent accepted referral with 0 points
+              if (earnedDelta > 0) {
+                const referral = await prisma.referral.findFirst({
+                  where: { referrerId: existingUser.id, status: 1, points: 0 },
+                  orderBy: { updatedAt: "desc" },
+                });
+                if (referral) {
+                  await prisma.referral.update({
+                    where: { id: referral.id },
+                    data: { points: earnedDelta },
+                  });
+                }
+              }
             } else {
+              const pendingDelta = Number(points) - existingUser.pendingPoints;
               await prisma.user.update({
                 where: { walletAddress: normalizedAddress },
                 data: {
@@ -81,6 +96,19 @@ export class BlockchainListenerService {
                   milestoneLevel,
                 },
               });
+              // Assign per-referral points to the most recent pending referral with 0 points
+              if (pendingDelta > 0) {
+                const referral = await prisma.referral.findFirst({
+                  where: { referrerId: existingUser.id, status: 0, points: 0 },
+                  orderBy: { createdAt: "desc" },
+                });
+                if (referral) {
+                  await prisma.referral.update({
+                    where: { id: referral.id },
+                    data: { points: pendingDelta },
+                  });
+                }
+              }
             }
           } else {
             console.warn(
@@ -244,6 +272,7 @@ export class BlockchainListenerService {
           }
 
           if (!isPending) {
+            const earnedDelta = Number(points) - existingUser.earnedPoints;
             await prisma.user.update({
               where: { walletAddress: normalizedAddress },
               data: {
@@ -251,7 +280,20 @@ export class BlockchainListenerService {
                 milestoneLevel,
               },
             });
+            if (earnedDelta > 0) {
+              const referral = await prisma.referral.findFirst({
+                where: { referrerId: existingUser.id, status: 1, points: 0 },
+                orderBy: { updatedAt: "desc" },
+              });
+              if (referral) {
+                await prisma.referral.update({
+                  where: { id: referral.id },
+                  data: { points: earnedDelta },
+                });
+              }
+            }
           } else {
+            const pendingDelta = Number(points) - existingUser.pendingPoints;
             await prisma.user.update({
               where: { walletAddress: normalizedAddress },
               data: {
@@ -259,6 +301,18 @@ export class BlockchainListenerService {
                 milestoneLevel,
               },
             });
+            if (pendingDelta > 0) {
+              const referral = await prisma.referral.findFirst({
+                where: { referrerId: existingUser.id, status: 0, points: 0 },
+                orderBy: { createdAt: "desc" },
+              });
+              if (referral) {
+                await prisma.referral.update({
+                  where: { id: referral.id },
+                  data: { points: pendingDelta },
+                });
+              }
+            }
           }
         }
       } else if ("inviteId" in event.args) {
