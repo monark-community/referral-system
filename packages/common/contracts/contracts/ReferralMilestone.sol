@@ -5,6 +5,11 @@ import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {EnumerableMap} from "@openzeppelin/contracts/utils/structs/EnumerableMap.sol";
 import "./MilestoneRewards.sol";
 
+// Purpose: Holds the status of a milestone a user earns after a certain number of points
+// Notes:
+// - There is a strict sequence of milestone amounts, you must add milestones in order
+// - OpenZeppelin access control limits all calls to an admin and the ReferralProgram.sol contract - cannot call directly as a user
+
 contract ReferralMilestone is AccessControl {
     using EnumerableMap for EnumerableMap.AddressToUintMap;
 

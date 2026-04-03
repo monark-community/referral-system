@@ -1,6 +1,13 @@
+// Purpose: Deploys the smart contracts to the selected node - eiher the default local node or the one provided
+// Notes:
+// - Also adds default settings such as points per action, and milestone amounts
+
+
+
 import hre from "hardhat";
 import { createWalletClient, createPublicClient, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
+
 
 async function main() {
 
