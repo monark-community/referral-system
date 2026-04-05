@@ -1,3 +1,8 @@
+// Purpose: Calls the Write functions on the Referral Smart Contracts - Relationships, Points, Invites, Milestones
+// Notes:
+// - These functions are generally more complicated than just one read, and completre several actions based on an event
+// - These are just contexts that the appropriate secure wallet handlers can call, added so that there is only one location to change 
+
 import { contracts } from "./contracts.js";
 
 export class WriteReferralContractHelper {

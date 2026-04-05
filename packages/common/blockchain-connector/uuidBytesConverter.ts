@@ -1,3 +1,5 @@
+// Purpose: Handles the Node/Prisma UUID converstion to the Bytes32 type on chain
+
 export function uuidToBytes32(uuid: string): `0x${string}` {
   const hex = uuid.replace(/-/g, "");
   return `0x${hex.padEnd(64, "0")}` as `0x${string}`;

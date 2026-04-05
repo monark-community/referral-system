@@ -1,3 +1,7 @@
+// Purpose: Calls the Read functions on the Referral Smart Contracts - Relationships, Points, Invites, Milestones
+// Notes:
+// - Listeners are used to lighten the load of calling directly to the chain and have the DB as an intermediary, points and invites are the most common calls and have listeners
+
 import { contracts } from "./contracts.js";
 import { WatchContractEventReturnType } from "viem";
 

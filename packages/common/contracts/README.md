@@ -1,6 +1,6 @@
 # /packages/common/contracts
 
-> Smart Contracts and Related Files”
+> Smart Contracts and Related Files
 
 - **Scope**: Code, Scripts, Deployment, and Local-node configuration for blockchain related aspects
 - **Purpose**: On-chain tracking of User refferal status - limited to users wallet, status, points but no personal information
