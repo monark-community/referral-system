@@ -1,3 +1,8 @@
+// Purpose: Allows a dev to add a listener to the contract event
+// Notes:
+// - Current events are 'InviteChanged' and 'PointsAdded'
+
+
 import { createPublicClient, webSocket, parseAbi } from 'viem'
 import { hardhat } from 'viem/chains'
 

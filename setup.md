@@ -2,9 +2,21 @@
 
 All commands run from the project root.
 
+\* Be sure to set up environment variables in service/api and servies/api
+
 ---
 
-## Quick Start
+## Quick Start - Prod
+
+```bash
+
+# Docker Compose the project - may take time on first creation of all of the images:
+docker compose --profile local-chain up
+```
+
+---
+
+## Quick Start - Dev
 
 ```bash
 

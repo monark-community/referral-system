@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.28;
 
+// Purpose: Core Contract acts as a entry point into the referral contracts - handles invite status, points, user relationships, and milestones
+// Notes:
+// - Join program creates a user with no referral, accept invite creates a user with a referral
+// - The points for actions and milestones are dynamic meaning to have any you must set values for them after creating the contract
+// - OpenZeppelin acces control limits admin controls to only admin users 
+
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import "./ReferralRelationships.sol";

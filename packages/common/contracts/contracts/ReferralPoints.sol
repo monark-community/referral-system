@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.28;
 
+// Purpose: Holds the earned and pending points for each user user, as well as the actions they have completed
+// Notes:
+// - To add an Action, you must add it to the enum, then on start up give it a point amount
+// - Actions are completable several times per user
+// - OpenZeppelin access control limits all calls to an admin and the ReferralProgram.sol contract - cannot call directly as a user
+
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 

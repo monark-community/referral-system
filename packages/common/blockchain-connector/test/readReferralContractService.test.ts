@@ -1,13 +1,17 @@
-import { ReadReferralContractService } from '../readReferralContract.service.js';
-import { createWebSocketClient } from '../clients.js';
-import { PublicClient, ReadContractParameters } from 'viem';
+// Purpose: Tests the Read Client functionality
+// Notes:
+// - For now calls the basic functions and tests the direct read functions
+
+import { ReadReferralContractService } from "../readReferralContract.service.js";
+import { createWebSocketClient } from "../clients.js";
+import { PublicClient, ReadContractParameters } from "viem";
 
 // Mock the createWebSocketClient so it returns a mocked publicClient
-jest.mock('../clients.js', () => ({
+jest.mock("../clients.js", () => ({
   createWebSocketClient: jest.fn(),
 }));
 
-describe('ReadReferralContractService', () => {
+describe("ReadReferralContractService", () => {
   let mockPublicClient: Partial<PublicClient>;
   let service: ReadReferralContractService;
 
@@ -16,12 +20,12 @@ describe('ReadReferralContractService', () => {
     mockPublicClient = {
       readContract: jest.fn(
         async (args: ReadContractParameters<any, string, readonly any[]>) => {
-          if (args.functionName === 'viewPoints') return 42;
-          if (args.functionName === 'viewReferrals') return ['0xabc', '0xdef'];
-          if (args.functionName === 'viewReferrer') return '0xxyz';
+          if (args.functionName === "viewPoints") return 42;
+          if (args.functionName === "viewReferrals") return ["0xabc", "0xdef"];
+          if (args.functionName === "viewReferrer") return "0xxyz";
           throw new Error(`Unexpected function: ${args.functionName}`);
-        }
-      ) as unknown as PublicClient['readContract'],
+        },
+      ) as unknown as PublicClient["readContract"],
     } as unknown as PublicClient;
 
     // Make createWebSocketClient return this mocked client
@@ -39,27 +43,33 @@ describe('ReadReferralContractService', () => {
     jest.clearAllMocks();
   });
 
-  test('returns mocked points from getUserCurrentPoints', async () => {
-    const points = await service.getUserCurrentPoints('0x123');
+  test("returns mocked points from getUserCurrentPoints", async () => {
+    const points = await service.getUserCurrentPoints("0x123");
     expect(points).toBe(42);
     expect(mockPublicClient.readContract).toHaveBeenCalledWith(
-      expect.objectContaining({ functionName: 'viewPoints', args: ['0x123'] })
+      expect.objectContaining({ functionName: "viewPoints", args: ["0x123"] }),
     );
   });
 
-  test('returns mocked referrals from getReferrals', async () => {
-    const referrals = await service.getReferrals('0x123');
-    expect(referrals).toEqual(['0xabc', '0xdef']);
+  test("returns mocked referrals from getReferrals", async () => {
+    const referrals = await service.getReferrals("0x123");
+    expect(referrals).toEqual(["0xabc", "0xdef"]);
     expect(mockPublicClient.readContract).toHaveBeenCalledWith(
-      expect.objectContaining({ functionName: 'viewReferrals', args: ['0x123'] })
+      expect.objectContaining({
+        functionName: "viewReferrals",
+        args: ["0x123"],
+      }),
     );
   });
 
-  test('returns mocked referrer from getReferrers', async () => {
-    const referrer = await service.getReferrers('0x123');
-    expect(referrer).toBe('0xxyz');
+  test("returns mocked referrer from getReferrers", async () => {
+    const referrer = await service.getReferrers("0x123");
+    expect(referrer).toBe("0xxyz");
     expect(mockPublicClient.readContract).toHaveBeenCalledWith(
-      expect.objectContaining({ functionName: 'viewReferrer', args: ['0x123'] })
+      expect.objectContaining({
+        functionName: "viewReferrer",
+        args: ["0x123"],
+      }),
     );
   });
 });

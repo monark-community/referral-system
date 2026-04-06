@@ -28,6 +28,7 @@ jest.mock("@/lib/prisma", () => ({
       create: jest.fn(),
       findMany: jest.fn(),
       count: jest.fn(),
+      findUnique: jest.fn(),
     },
   },
 }));
@@ -511,6 +512,8 @@ describe("User Controller test", () => {
         referee: true,
         status: true,
         points: true,
+        description: true,
+        isVerified: true,
         createdAt: true,
         updatedAt: true,
       },

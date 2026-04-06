@@ -2,6 +2,8 @@ export default {
   preset: "ts-jest/presets/default-esm",
   testEnvironment: "node",
 
+  testMatch: ["<rootDir>/test/**/*.test.ts"],
+
   moduleNameMapper: {
     "^(\\.{1,2}/.*)\\.js$": "$1",        // fix relative .js imports
     "^@/(.*)\\.js$": "<rootDir>/src/$1", // fix alias .js imports

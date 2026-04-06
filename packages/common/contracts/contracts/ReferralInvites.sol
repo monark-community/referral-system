@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.28;
 
+// Purpose: Holds the status of a referrer's invite status
+// Notes:
+// - Currently status can be PENDING, ACCEPTED, or CLOSED
+// - OpenZeppelin access control limits all calls to an admin and the ReferralProgram.sol contract - cannot call directly as a user
+// - Completing a invite can mean creating a new one (usually for joinProgram) or updating a invite (usually for acceptInvite)
+
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 
 contract ReferralInvites is AccessControl {
@@ -54,19 +60,19 @@ contract ReferralInvites is AccessControl {
         userInvites[user].push(inviteID);
     }
 
-    //depending on whether this is an existing invite create a new one or update it to accepted - return whether it was an existing 
+    //depending on whether this is an existing invite, create a new one or update it to accepted - return whether it was an existing
     function completeInvite(
         bytes32 inviteID,
         address user
-    ) public returns(bool existingInvite){
+    ) public returns (bool existingInvite) {
         require(
             hasRole(ACCESS_ROLE, msg.sender),
             "createInvite: caller lacks ACCESS_ROLE"
         );
-        if(invites[inviteID].referrer == address(0)){
+        if (invites[inviteID].referrer == address(0)) {
             createInvite(inviteID, user, InviteStatus.Accepted);
             return false;
-        }else{
+        } else {
             invites[inviteID].status = InviteStatus.Accepted;
             return true;
         }

@@ -1,3 +1,9 @@
+// Purpose: Unit test on the ReferralProgram.sol contract
+// Notes:
+// - Only tests right now are for this file, but other contracts are called via ReferralProgram.sol
+// - Currently (Apr-03-2026) just main sequence testing, not edge cases purely to see if the main functions are working
+
+
 import test, {before, beforeEach} from "node:test";
 import assert from "node:assert/strict";
 import hre from "hardhat";
