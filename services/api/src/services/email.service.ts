@@ -1,15 +1,19 @@
-import nodemailer from 'nodemailer';
-import type { Transporter } from 'nodemailer';
+// Purpose: Sends emails to users
+// Notes:
+// - Depending on setup will send an emal via a provided SMTP server, if not provided will log it to console
 
-const API_URL = process.env.API_URL || 'http://localhost:3001';
-const EMAIL_PROVIDER = process.env.EMAIL_PROVIDER || 'console'; // 'smtp' or 'console'
-const FROM_EMAIL = process.env.FROM_EMAIL || 'noreply@reffinity.io';
-const FROM_NAME = process.env.FROM_NAME || 'Reffinity';
+import nodemailer from "nodemailer";
+import type { Transporter } from "nodemailer";
+
+const API_URL = process.env.API_URL || "http://localhost:3001";
+const EMAIL_PROVIDER = process.env.EMAIL_PROVIDER || "console"; // 'smtp' or 'console'
+const FROM_EMAIL = process.env.FROM_EMAIL || "noreply@reffinity.io";
+const FROM_NAME = process.env.FROM_NAME || "Reffinity";
 
 // SMTP setup
 const SMTP_HOST = process.env.SMTP_HOST;
 const SMTP_PORT = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT) : 587;
-const SMTP_SECURE = process.env.SMTP_SECURE === 'true'; // true for port 465, false for other ports
+const SMTP_SECURE = process.env.SMTP_SECURE === "true"; // true for port 465, false for other ports
 const SMTP_USER = process.env.SMTP_USER;
 const SMTP_PASS = process.env.SMTP_PASS;
 
@@ -31,7 +35,7 @@ if (SMTP_HOST && SMTP_USER && SMTP_PASS) {
  */
 function getVerificationEmailHtml(
   name: string | null | undefined,
-  verificationUrl: string
+  verificationUrl: string,
 ): string {
   return `
 <!DOCTYPE html>
@@ -68,7 +72,7 @@ function getVerificationEmailHtml(
                 Verify your email
               </p>
               <p style="color: #a3a3a3; font-size: 15px; line-height: 22px; margin: 0 0 28px;">
-                Hi ${name || 'there'}, confirm your email address to get started with the Reffinity referral program.
+                Hi ${name || "there"}, confirm your email address to get started with the Reffinity referral program.
               </p>
 
               <!-- CTA Button -->
@@ -131,29 +135,29 @@ function getVerificationEmailHtml(
 export async function sendVerificationEmail(
   email: string,
   token: string,
-  name?: string | null
+  name?: string | null,
 ): Promise<void> {
   // Link goes directly to backend, which redirects to frontend after verification
   const verificationUrl = `${API_URL}/api/users/verify-email/${token}`;
 
   const emailHtml = getVerificationEmailHtml(name, verificationUrl);
-  const subject = 'Verify your email for Reffinity';
+  const subject = "Verify your email for Reffinity";
 
   // Console mode (development/testing)
-  if (EMAIL_PROVIDER === 'console' || !smtpTransporter) {
-    console.log('\n========================================');
-    console.log('EMAIL VERIFICATION (Console Mode)');
-    console.log('========================================');
+  if (EMAIL_PROVIDER === "console" || !smtpTransporter) {
+    console.log("\n========================================");
+    console.log("EMAIL VERIFICATION (Console Mode)");
+    console.log("========================================");
     console.log(`To: ${email}`);
     console.log(`From: ${FROM_NAME} <${FROM_EMAIL}>`);
-    console.log(`Name: ${name || 'User'}`);
+    console.log(`Name: ${name || "User"}`);
     console.log(`Subject: ${subject}`);
-    console.log('----------------------------------------');
+    console.log("----------------------------------------");
     console.log(`Verification Link: ${verificationUrl}`);
-    console.log('========================================\n');
-    console.log('To send real emails, configure SMTP in .env:');
-    console.log('   Set SMTP_HOST, SMTP_USER, SMTP_PASS');
-    console.log('   Then set EMAIL_PROVIDER=smtp\n');
+    console.log("========================================\n");
+    console.log("To send real emails, configure SMTP in .env:");
+    console.log("   Set SMTP_HOST, SMTP_USER, SMTP_PASS");
+    console.log("   Then set EMAIL_PROVIDER=smtp\n");
     return;
   }
 
@@ -165,9 +169,11 @@ export async function sendVerificationEmail(
       html: emailHtml,
     });
 
-    console.log(`Verification email sent via SMTP to ${email} (ID: ${info.messageId})`);
+    console.log(
+      `Verification email sent via SMTP to ${email} (ID: ${info.messageId})`,
+    );
   } catch (error) {
-    console.error('Failed to send verification email:', error);
+    console.error("Failed to send verification email:", error);
     throw error;
   }
 }

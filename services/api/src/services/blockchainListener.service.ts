@@ -1,3 +1,8 @@
+// Purpose: Creates a listener service that listens for events on the referral contract
+// Notes:
+// - Passes callable functions to the blockchain-connector listener
+// - Syncs to the chain on startup
+
 import { prisma } from "../lib/prisma.js";
 import { type PublicClient } from "viem";
 import { ReadReferralContractService } from "@reffinity/blockchain-connector/readReferralContract";

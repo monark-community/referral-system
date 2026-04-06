@@ -1,3 +1,9 @@
+// Purpose: Authentication based on the various methods - JWT, Wallet Address, Referral Codes
+// Notes:
+// - The Wallet address is used as authentication for the user, and allows them to sign into the account
+// - Once the wallet is verified then a JWT token generated and is used to access the API
+// - Referral codes link a sign up to a referrer to reward rewards
+
 import jwt from "jsonwebtoken";
 import { ethers } from "ethers";
 import { v4 as uuidv4 } from "uuid";
