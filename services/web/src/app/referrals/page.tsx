@@ -325,7 +325,7 @@ export default function ReferralsPage() {
       queryClient.prefetchQuery({ queryKey: ["milestone-tiers"], queryFn: () => import("@/lib/api/user").then(m => m.getMilestoneTiers()) });
     }
   }, [isAuthenticated, refreshUser, queryClient]);
-  const invites = invitesData?.invites || [];
+  const invites = (invitesData?.invites || []).filter((i) => i.isVerified);
 
   useEffect(() => {
     if (mounted && !isLoading && !isAuthenticated) {
