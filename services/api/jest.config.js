@@ -1,3 +1,7 @@
+// Purpose: Jest configuration for API unit/integration tests in TypeScript ESM mode
+// Notes:
+// - Rewrites .js import specifiers so ts-jest resolves TS source files correctly
+
 export default {
   preset: "ts-jest/presets/default-esm",
   testEnvironment: "node",

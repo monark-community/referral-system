@@ -1,3 +1,4 @@
+// Purpose: Modal dialog component built on Radix UI primitives (Dialog, DialogContent, DialogHeader, etc.)
 'use client';
 
 import * as React from "react";

@@ -1,3 +1,4 @@
+// Purpose: Animated loading spinner with size variants (sm, md, lg)
 import { cn } from "@/lib/utils";
 
 interface SpinnerProps {

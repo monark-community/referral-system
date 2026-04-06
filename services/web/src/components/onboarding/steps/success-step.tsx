@@ -1,3 +1,5 @@
+// Purpose: Onboarding step 5 - shows a success message with the user's referral code and next steps
+
 'use client';
 
 import { useRouter } from 'next/navigation';

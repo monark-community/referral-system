@@ -1,3 +1,5 @@
+// Purpose: Wraps the app with Wagmi's provider for blockchain wallet interactions (MetaMask, chain config)
+
 'use client';
 
 import { WagmiProvider } from 'wagmi';

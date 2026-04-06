@@ -1,3 +1,9 @@
+// Purpose: Responsive page shell - provides the mobile header + desktop sidebar layout for all referral pages
+// Notes:
+// - On mobile: shows a top PageHeader with back/close buttons
+// - On desktop: shows a persistent SidebarNav on the left with the page content on the right
+// - Pages that set showSidebar=false get a simple centered layout instead (e.g. how-it-works)
+
 "use client";
 
 import { ReactNode } from "react";

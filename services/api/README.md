@@ -1,4 +1,4 @@
-# /service/api
+# /services/api
 
 > Backend handling the user data, through a RESTful API
 
@@ -7,21 +7,21 @@
 
 ## Notes
 
-- [.env.example](.env.example) has the example configurations used by the API, to use it, fil them in a seperate file named .env
+- [.env.example](.env.example) has example API configuration values; copy into a local .env file and fill real values.
 
 ## Content
 
-- [pacakge.json](package.json) file Node.js project type, config, scripts
+- [package.json](package.json) - Node.js package scripts and dependencies.
 - [src/](src/) - Source files
-  - [src/index.js](src/index.ts) - Main file loading the express app
+  - [src/index.ts](src/index.ts) - Main file loading the Express app
   - [src/routes/](src/routes/) - Handles the API endpoints
     - [src/routes/auth.routes.ts](src/routes/auth.routes.ts) - Authentication endpoints
     - [src/routes/milestone.routes.ts](src/routes/milestone.routes.ts) - Milestone endpoints
     - [src/routes/user.routes.ts](src/routes/user.routes.ts) - User information endpoints
   - [src/controllers/](src/controllers/) - Logic called by routes to handle the endpoint functions
-    - [src/controllers/src/controllers/auth.controller.ts](src/controllers/auth.controller.ts)
-    - [src/controllers/src/controllers/milestone.controller.ts](src/controllers/milestone.controller.ts)
-    - [src/controllers/src/controllers/user.controller.ts](src/controllers/user.controller.ts)
+    - [src/controllers/auth.controller.ts](src/controllers/auth.controller.ts)
+    - [src/controllers/milestone.controller.ts](src/controllers/milestone.controller.ts)
+    - [src/controllers/user.controller.ts](src/controllers/user.controller.ts)
   - [src/services/](src/services/) - Services and logic that process information
     - [src/services/auth.service.ts](src/services/auth.service.ts) - Authenticate the user
     - [src/services/blockchainListener.service.ts](src/services/blockchainListener.service.ts) - Listeners that synchronize the DB to the chain
@@ -30,5 +30,5 @@
     - [src/middlewares/auth.middleware.ts](src/middlewares/auth.middleware.ts)
     - [src/middlewares/error.middleware.ts](src/middlewares/error.middleware.ts)
     - [src/middlewares/validation.middleware.ts](src/middlewares/validation.middleware.ts)
-  - [lib/](lib/) - library folder i.e. for prisma use
-- [test/](test/) - Test folder, providing code coverage for the API - called using `npm run test`
+  - [src/lib/](src/lib/) - Internal library utilities (Prisma client singleton)
+- [test/](test/) - Test suite for controllers/services; run with npm run test

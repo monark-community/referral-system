@@ -1,3 +1,8 @@
+// Purpose: Email verification result page - wraps EmailVerifiedContent in a Suspense boundary
+// Notes:
+// - The API redirects here after the user clicks the email verification link
+// - Uses Suspense because useSearchParams() requires it in Next.js App Router
+
 import { Suspense } from 'react';
 import EmailVerifiedContent from './EmailVerifiedContent';
 

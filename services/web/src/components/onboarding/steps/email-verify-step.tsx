@@ -1,3 +1,8 @@
+// Purpose: Onboarding step 4 - waits for the user to verify their email via the link sent to them
+// Notes:
+// - Polls the backend every 5 seconds to check if emailVerified has been set to true
+// - Resend button has a 60-second cooldown to prevent spam
+
 'use client';
 
 import { useState, useEffect } from 'react';

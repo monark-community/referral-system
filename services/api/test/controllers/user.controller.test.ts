@@ -1,3 +1,7 @@
+// Purpose: Unit tests for user controller endpoints (profile, verification, referrals, and account status changes)
+// Notes:
+// - Uses mocked Prisma + connector helpers to validate response behavior without live dependencies
+
 import {
   getProfile,
   updateProfile,

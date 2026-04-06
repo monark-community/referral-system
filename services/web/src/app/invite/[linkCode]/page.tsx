@@ -1,3 +1,8 @@
+// Purpose: Invite landing page - captures referral/invite codes from the URL and redirects to welcome
+// Notes:
+// - Stores referralCode and optional inviteCode in localStorage so they persist through onboarding
+// - The codes are consumed later during wallet authentication in the onboarding flow
+
 'use client';
 
 import { useEffect } from 'react';

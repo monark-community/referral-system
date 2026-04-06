@@ -1,1 +1,1 @@
-/** Utils Index */
+// Purpose: Barrel entry for shared utility helpers intended for cross-package reuse

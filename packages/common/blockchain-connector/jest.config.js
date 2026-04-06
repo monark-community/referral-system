@@ -1,3 +1,8 @@
+// Purpose: Jest configuration for blockchain-connector package tests
+// Notes:
+// - Uses ts-jest in ESM mode
+// - Maps @reffinity/common-contracts to the hoisted workspace dependency
+
 import path from 'path';
 import { fileURLToPath } from 'url';
 

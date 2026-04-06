@@ -1,3 +1,7 @@
+// Purpose: Frontend API functions for user actions - profile CRUD, email verification, invites, milestones, account toggle
+// Notes:
+// - These functions call the Express API endpoints defined in services/api/src/routes/user.routes.ts and milestone.routes.ts
+
 import { apiClient } from "./client";
 import type { User } from "./auth";
 

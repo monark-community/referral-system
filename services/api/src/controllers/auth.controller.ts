@@ -1,3 +1,8 @@
+// Purpose: Authentication controller - verifies wallet signatures, creates/logs in users, and serves auth session endpoints
+// Notes:
+// - New wallet users are provisioned with unique referral codes and optional referral/invite linkage
+// - Returns JWT tokens used by auth middleware to protect private API routes
+
 import { Request, Response } from "express";
 import { prisma } from "../lib/prisma.js";
 import {

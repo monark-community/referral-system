@@ -1,3 +1,8 @@
+// Purpose: Referral link card with copy, share (public/private), social sharing, and QR code - used on mobile dashboard
+// Notes:
+// - Public share sends the user's generic referral link
+// - Private share creates a tracked invite on the backend and registers it on-chain via createInvite
+
 "use client";
 
 import { useState, lazy, Suspense } from "react";

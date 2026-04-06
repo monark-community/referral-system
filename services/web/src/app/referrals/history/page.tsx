@@ -1,3 +1,8 @@
+// Purpose: Invites history page - lists all referral invites with search and filter controls
+// Notes:
+// - Invites are grouped by status (Pending, Earned, Cancelled) and filterable via tabs
+// - Only verified invites are shown to the user
+
 "use client";
 
 import { useState } from "react";

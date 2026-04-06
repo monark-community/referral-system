@@ -1,3 +1,5 @@
+// Purpose: Mobile navigation menu item with label, optional badge count, and chevron arrow
+
 "use client";
 
 import { ChevronRight } from "lucide-react";

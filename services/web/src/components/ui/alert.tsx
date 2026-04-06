@@ -1,3 +1,4 @@
+// Purpose: Reusable alert/notification component with variant styles (default, destructive, success, warning)
 import * as React from "react";
 import { cva, type VariantProps } from "class-variance-authority";
 import { AlertCircle, CheckCircle2, Info, XCircle } from "lucide-react";

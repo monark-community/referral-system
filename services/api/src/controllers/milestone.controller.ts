@@ -1,3 +1,7 @@
+// Purpose: Milestone controller - serves milestone tier definitions and computes current user progression toward next tier
+// Notes:
+// - Tier ordering is always ascending by level for deterministic progression
+
 import { Request, Response } from "express";
 import { prisma } from "../lib/prisma.js";
 import { MilestoneTier } from "@prisma/client";

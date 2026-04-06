@@ -1,3 +1,5 @@
+// Purpose: Small card displaying a points value (earned or pending) - used on mobile dashboard
+
 "use client";
 
 import { cn, formatPoints } from "@/lib/utils";

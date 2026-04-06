@@ -1,3 +1,8 @@
+// Purpose: API service entrypoint - configures Express app, registers routes/middleware, and starts background blockchain listeners
+// Notes:
+// - Exposes /health for basic service monitoring
+// - Initializes BlockchainListenerService at startup to sync on-chain events into the database
+
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';

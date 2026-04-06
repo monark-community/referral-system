@@ -1,3 +1,8 @@
+// Purpose: Wagmi configuration - sets up MetaMask connector and RPC transports for Hardhat, Sepolia, and Mainnet
+// Notes:
+// - Hardhat (local chain) is listed first so it is the default during development
+// - RPC URL defaults to localhost:8545 if NEXT_PUBLIC_RPC_URL is not set
+
 import { createConfig, http } from "wagmi";
 import { mainnet, sepolia, hardhat } from "wagmi/chains";
 import { metaMask } from "wagmi/connectors";

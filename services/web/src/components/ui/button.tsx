@@ -1,3 +1,4 @@
+// Purpose: Reusable button component with size and style variants (default, secondary, outline, ghost, destructive)
 "use client";
 
 import * as React from "react";

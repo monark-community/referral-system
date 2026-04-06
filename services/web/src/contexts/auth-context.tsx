@@ -1,3 +1,8 @@
+// Purpose: Global authentication context - stores the current user, JWT token, and provides login/logout/refresh
+// Notes:
+// - Token is stored in localStorage; on page load, the user is fetched from GET /api/auth/me if a token exists
+// - Provides useAuth() hook for any component to access user state and auth actions
+
 'use client';
 
 import {

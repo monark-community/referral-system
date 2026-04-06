@@ -1,3 +1,8 @@
+// Purpose: Area chart showing the user's earned points growth over the last 7 days (desktop dashboard)
+// Notes:
+// - Uses Recharts (AreaChart) for rendering
+// - Generates synthetic data points based on account creation date and current earned points
+
 "use client";
 
 import { useMemo } from "react";

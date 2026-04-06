@@ -1,3 +1,5 @@
+// Purpose: Shared utility functions - Tailwind class merging (cn), number formatting, and referral link code parsing
+
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 

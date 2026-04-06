@@ -1,3 +1,8 @@
+// Purpose: Onboarding step 3 - collects name, email, and optional phone from the new user
+// Notes:
+// - Sends a verification email automatically after saving the profile
+// - Client-side validation for name length, email format, and phone format
+
 'use client';
 
 import { useState } from 'react';

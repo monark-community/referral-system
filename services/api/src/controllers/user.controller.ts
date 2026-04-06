@@ -1,3 +1,8 @@
+// Purpose: User controller - handles profile management, email verification, referral invite operations, and account status toggles
+// Notes:
+// - Coordinates DB writes with on-chain identifiers (bytes32 invite IDs) where needed
+// - Verification endpoints redirect back to web flow after token validation
+
 import { Request, Response } from "express";
 import { prisma } from "../lib/prisma.js";
 import {

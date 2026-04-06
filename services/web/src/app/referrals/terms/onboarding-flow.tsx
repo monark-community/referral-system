@@ -1,3 +1,8 @@
+// Purpose: Lazy-loaded onboarding flow wrapper used on the terms page for unauthenticated users
+// Notes:
+// - Wraps the OnboardingModal inside a WagmiProvider so wallet interactions work
+// - Auto-opens the onboarding modal on mount
+
 "use client";
 
 import dynamic from "next/dynamic";

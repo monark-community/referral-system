@@ -1,3 +1,5 @@
+// Purpose: Authentication API routes for wallet login/session operations
+
 import { Router } from 'express';
 import { walletAuth, getMe, logout } from '../controllers/auth.controller.js';
 import { authMiddleware } from '../middlewares/auth.middleware.js';

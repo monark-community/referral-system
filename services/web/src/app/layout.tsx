@@ -1,3 +1,8 @@
+// Purpose: Root layout for the Next.js app - wraps every page with global providers and styles
+// Notes:
+// - Wagmi (blockchain wallet), React Query (data fetching), and Auth providers are nested here so they are available app-wide
+// - Uses the Inter font and enforces dark mode
+
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";

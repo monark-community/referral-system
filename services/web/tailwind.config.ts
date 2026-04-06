@@ -1,3 +1,7 @@
+// Purpose: Tailwind CSS theme/configuration for the web frontend
+// Notes:
+// - Uses CSS variables for semantic colors so themes can be adjusted centrally in globals.css
+
 import type { Config } from "tailwindcss";
 
 const config: Config = {

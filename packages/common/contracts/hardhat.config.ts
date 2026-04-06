@@ -1,3 +1,8 @@
+// Purpose: Hardhat configuration for compiling and deploying referral smart contracts
+// Notes:
+// - Defines local simulated networks and Sepolia network credentials
+// - Includes a production Solidity profile with optimizer enabled
+
 import hardhatToolboxViemPlugin from "@nomicfoundation/hardhat-toolbox-viem";
 import { configVariable, defineConfig } from "hardhat/config";
 

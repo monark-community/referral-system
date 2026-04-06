@@ -1,3 +1,7 @@
+// Purpose: Request validation middleware set using express-validator for auth/profile payloads
+// Notes:
+// - Returns structured validation error details to simplify frontend form handling
+
 import { Request, Response, NextFunction } from 'express';
 import { body, validationResult } from 'express-validator';
 

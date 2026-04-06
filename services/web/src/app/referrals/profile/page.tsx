@@ -1,3 +1,9 @@
+// Purpose: User profile page - displays and edits personal info (name, email, phone) and shows milestone progress
+// Notes:
+// - Wallet address is read-only (set during onboarding) but can be copied
+// - Changing email resets verification and sends a new verification link
+// - Milestone progress bar shows how close the user is to the next tier
+
 "use client";
 
 import { useState, useEffect } from "react";

@@ -1,3 +1,7 @@
+// Purpose: Seeds baseline milestone tier data into the API database
+// Notes:
+// - Tier levels/point thresholds should stay aligned with on-chain milestone settings
+
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();

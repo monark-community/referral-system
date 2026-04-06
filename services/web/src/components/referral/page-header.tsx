@@ -1,3 +1,5 @@
+// Purpose: Mobile page header bar with optional back button, title/subtitle, and close button
+
 "use client";
 
 import { ChevronLeft, X } from "lucide-react";

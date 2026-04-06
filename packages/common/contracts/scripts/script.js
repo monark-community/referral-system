@@ -1,3 +1,8 @@
+// Purpose: Manual local-chain script for calling ReferralProgram contract methods during development
+// Notes:
+// - Uses Hardhat account #0 and local node RPC
+// - Intended for quick event/read/write experimentation, not production flows
+
 import hre from "hardhat";
 import { createWalletClient, createPublicClient, http, stringToHex } from "viem";
 import { hardhat } from "viem/chains"

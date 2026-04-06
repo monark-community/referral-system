@@ -1,3 +1,8 @@
+// Purpose: Lazy-loaded container for the login and onboarding modals on the welcome page
+// Notes:
+// - Dynamically imports WagmiProvider, LoginModal, and OnboardingModal to avoid loading wallet code upfront
+// - Rendered only when the user clicks "Login" or "Join the Program"
+
 "use client";
 
 import dynamic from "next/dynamic";

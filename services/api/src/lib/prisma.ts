@@ -1,3 +1,7 @@
+// Purpose: Shared Prisma client singleton for API database access
+// Notes:
+// - Reuses a global instance in development to avoid exhausting DB connections during hot reloads
+
 import { PrismaClient } from '@prisma/client';
 
 // Prevent multiple Prisma Client instances in development

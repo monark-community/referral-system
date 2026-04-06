@@ -1,3 +1,9 @@
+// Purpose: Multi-step onboarding modal - guides new users through wallet connect, terms, profile, email verify, and success
+// Notes:
+// - 5 steps: wallet -> terms -> profile -> verify-email -> success
+// - Progress bar at the top shows which step the user is on
+// - Close button is hidden on wallet/terms steps to prevent accidental abandonment
+
 'use client';
 
 import {

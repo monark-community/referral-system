@@ -1,3 +1,7 @@
+// Purpose: Displays the email verification result (success, invalid link, or error) based on URL query params
+// Notes:
+// - The backend redirects to this page with ?success=true or ?error=invalid after the user clicks the verification link
+
 'use client';
 
 import { useEffect, useState } from 'react';

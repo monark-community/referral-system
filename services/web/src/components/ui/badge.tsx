@@ -1,3 +1,4 @@
+// Purpose: Small status badge component with color variants (default, secondary, success, destructive, warning)
 import * as React from "react";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";

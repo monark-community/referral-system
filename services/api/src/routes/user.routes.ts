@@ -1,3 +1,5 @@
+// Purpose: User API routes for profile, verification, referral invite handling, and account enable/disable actions
+
 import { Router } from 'express';
 import {
   getProfile,

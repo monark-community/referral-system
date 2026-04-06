@@ -1,3 +1,8 @@
+// Purpose: QR code popup for the user's referral link with a download-as-PNG button
+// Notes:
+// - Uses the qrcode.react library to generate an SVG QR code
+// - Download converts the SVG to a canvas, then exports as PNG
+
 "use client";
 
 import { useState, useEffect, useCallback } from "react";

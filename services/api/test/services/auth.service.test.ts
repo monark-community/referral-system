@@ -1,3 +1,5 @@
+// Purpose: Unit tests for auth service helpers (JWT, referral code generation, signature verification)
+
 import {
   generateJWT,
   verifyJWT,

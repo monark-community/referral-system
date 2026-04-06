@@ -1,3 +1,8 @@
+// Purpose: Terms and conditions content and full-screen modal overlay
+// Notes:
+// - TermsContent is a standalone component reused by both the modal and the terms page
+// - TermsModal uses createPortal to render above everything else
+
 "use client";
 
 import { useState, useEffect, useCallback } from "react";

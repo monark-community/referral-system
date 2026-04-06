@@ -1,3 +1,7 @@
+// Purpose: Onboarding step 2 - displays terms and conditions with an accept checkbox
+// Notes:
+// - Calls POST /api/users/accept-terms on the backend to record acceptance with a timestamp
+
 'use client';
 
 import { useState } from 'react';

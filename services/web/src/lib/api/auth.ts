@@ -1,3 +1,8 @@
+// Purpose: Frontend API functions for authentication - wallet auth, get current user, and logout
+// Notes:
+// - walletAuth sends the signed message to the backend and receives a JWT token + user data
+// - logout just removes the token from localStorage (JWT is stateless)
+
 import { apiClient } from "./client";
 
 export interface User {

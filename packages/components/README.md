@@ -1,16 +1,16 @@
 # /packages/components
 
-> Think: “reusable UI pieces that make development faster and consistent within this project.”
+> Workspace package reserved for reusable UI component primitives.
 
-- **Scope**: Project-wide, reusable UI components.
-- **Purpose**: Provides building blocks for the frontend or app services in this repository. Components are designed to be used across multiple parts of the project, but are typically not meant to be published as a standalone library (unless you later decide to extract them).
-- **Examples**:
-    - Buttons, inputs, forms, and other UI elements
-    - Layout components (headers, footers, grids)
-    - Small interactive widgets (modals, tooltips, accordions)
+- **Scope**: Shared component package layer for cross-app reuse.
+- **Purpose**: Central home for UI pieces that may be extracted from service-level apps over time.
+
+## Notes
+
+- This package is currently a scaffold with no runtime component files committed yet.
+- Existing live UI currently resides in [services/web/src/components/](../../services/web/src/components/).
 
 # Content
 
-- Content of your components package
-- Content of your components package
-- Content of your components package
+- Future reusable components can be added under this folder and exported via a package entrypoint.
+- See [services/web/README.md](../../services/web/README.md) for current frontend component locations.

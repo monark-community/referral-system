@@ -1,3 +1,8 @@
+// Purpose: Explains the referral program in 4 steps with staggered animations
+// Notes:
+// - Shows a short description on mobile and a full description on desktop for each step
+// - Includes a link to the rewards page at the bottom
+
 "use client";
 
 import { useEffect, useState } from "react";

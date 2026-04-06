@@ -1,3 +1,8 @@
+// Purpose: State machine hook for the multi-step onboarding flow (wallet -> terms -> profile -> verify-email -> success)
+// Notes:
+// - Tracks the current step and open/closed state of the onboarding modal
+// - Provides nextStep, previousStep, goToStep, and reset controls
+
 'use client';
 
 import { useState, useCallback } from 'react';

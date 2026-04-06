@@ -1,3 +1,8 @@
+// Purpose: Base API client - wraps fetch with auth token injection, JSON parsing, and error handling
+// Notes:
+// - Automatically attaches the JWT Bearer token from localStorage to every request
+// - Throws ApiError with status code for non-2xx responses so callers can handle specific errors
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
 
 export class ApiError extends Error {

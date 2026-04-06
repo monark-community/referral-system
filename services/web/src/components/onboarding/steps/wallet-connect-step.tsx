@@ -1,3 +1,9 @@
+// Purpose: Onboarding step 1 - connects MetaMask, signs a message, and registers the user on-chain
+// Notes:
+// - New users: calls joinProgram (no referrer) or acceptInvite (with referrer) on the smart contract
+// - Returning users with a completed profile skip onboarding entirely
+// - Returning users with an unverified email jump straight to the verify-email step
+
 'use client';
 
 import { useState } from 'react';

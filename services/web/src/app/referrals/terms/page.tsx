@@ -1,3 +1,8 @@
+// Purpose: Terms and conditions page - shows T&C with an accept checkbox for new users, or a modal for authenticated users
+// Notes:
+// - Unauthenticated users see a full-page layout with accept + continue flow that launches onboarding
+// - Authenticated users see the terms as a dismissible modal overlay
+
 "use client";
 
 import { useState, useEffect, type ComponentType } from "react";

@@ -1,3 +1,5 @@
+// Purpose: Exposes the referral contract ABI for consumption by other workspace packages
+
 export const RefferalABI = [
   {
     inputs: [],

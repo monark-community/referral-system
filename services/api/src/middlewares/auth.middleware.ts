@@ -1,3 +1,7 @@
+// Purpose: Authentication middleware - validates JWT Bearer tokens and attaches the authenticated user to req.user
+// Notes:
+// - Blocks non-GET reward-changing actions when an account is disabled, except re-enable/verify-email paths
+
 import { Request, Response, NextFunction } from "express";
 import { verifyJWT } from "../services/auth.service.js";
 import { prisma } from "../lib/prisma.js";

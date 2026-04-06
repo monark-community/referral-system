@@ -1,3 +1,4 @@
+// Purpose: Form label component with optional "required" asterisk indicator
 import * as React from "react";
 import { cn } from "@/lib/utils";
 

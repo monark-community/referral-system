@@ -1,1 +1,1 @@
-/** Contracts Index */
+// Purpose: Barrel entry for shared contract-related types/helpers intended for cross-package reuse

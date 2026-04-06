@@ -1,3 +1,8 @@
+// Purpose: React Query hooks for fetching user data - profile, invites, milestone tiers, and user milestone progress
+// Notes:
+// - All hooks are only enabled when the user is authenticated (checks useAuth)
+// - Profile and invites refetch on every mount to stay fresh
+
 "use client";
 
 import { useQuery } from "@tanstack/react-query";

@@ -123,8 +123,11 @@ TODO
 
 - [packages/common/contracts/README.md](packages/common/contracts/README.md)
 - [packages/common/blockchain-connector/README.md](packages/common/blockchain-connector/README.md)
+- [packages/shared/README.md](packages/shared/README.md)
+- [packages/components/README.md](packages/components/README.md)
 - [services/api/README.md](services/api/README.md)
 - [services/web/README.md](services/web/README.md)
+- [services/web/src/README.md](services/web/src/README.md)
 
 - [GitHub Issues](https://github.com/monark-community/referral-system/issues)
 - [Client Meeting Notes](https://github.com/monark-community/referral-system/wiki/Client%E2%80%90Meeting%E2%80%90Notes)

@@ -1,16 +1,16 @@
 # /packages/shared
 
-> Think: “general-purpose, portable modules.”
+> Cross-package reusable interfaces and helpers.
 
-- **Scope**: Code intended to be reusable across multiple projects or repos.
-- **Purpose**: Functions, components, or clients that are general enough to be published or imported elsewhere.
-- **Examples**:
-    - API client modules that can talk to your backend across projects
-    - UI components library
-    - Generic validation functions or formatters
+- **Scope**: Shared barrels intended for reuse across workspace packages/services.
+- **Purpose**: Provides stable import points for contracts, shared types, and generic utilities.
+
+## Notes
+
+- This package currently acts as a structure-first shared layer and can grow with reusable runtime code.
 
 ## Content
 
-- Content of your shared package
-- Content of your shared package
-- Content of your shared package
+- [contracts/index.ts](contracts/index.ts) - Shared contract-related exports.
+- [types/index.ts](types/index.ts) - Shared TypeScript type export entry.
+- [utils/index.ts](utils/index.ts) - Shared utility export entry.

@@ -1,3 +1,5 @@
+// Purpose: Milestone API routes exposing public tier definitions and authenticated user milestone progress
+
 import { Router } from "express";
 import {
   getMilestoneTiers,

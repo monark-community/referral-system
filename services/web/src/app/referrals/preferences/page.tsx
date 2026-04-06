@@ -1,3 +1,8 @@
+// Purpose: User preferences page - lets users enable/disable their account and set security options
+// Notes:
+// - Disabling an account stops referral links from working and pauses reward earning
+// - Security toggles (auto-accept, auto-block, auto-remove) are UI-only placeholders for future features
+
 "use client";
 
 import { useState } from "react";

@@ -1,3 +1,5 @@
+// Purpose: Unit tests for milestone controller endpoints (tier listing and user milestone progression)
+
 import {
   getMilestoneTiers,
   getUserMilestone,

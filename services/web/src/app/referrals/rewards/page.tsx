@@ -1,3 +1,9 @@
+// Purpose: Rewards page - shows milestone tiers and which ones the user has unlocked
+// Notes:
+// - If no tiers are configured on the backend, falls back to dummy placeholder tiers
+// - Uses a vertical timeline on mobile and a card grid on desktop
+// - Tiers animate in with a staggered reveal
+
 "use client";
 
 import { useEffect, useState } from "react";

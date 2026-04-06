@@ -1,3 +1,7 @@
+// Purpose: Central API error middleware for consistent JSON error responses
+// Notes:
+// - Includes stack traces only in development mode
+
 import { Request, Response, NextFunction } from 'express';
 
 export interface AppError extends Error {

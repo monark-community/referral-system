@@ -1,3 +1,10 @@
+// Purpose: Main referral dashboard page - shows points, stats, share links, and recent activity
+// Notes:
+// - Desktop layout has a points chart, share card, stat cards, and activity feed side-by-side
+// - Mobile layout uses a simplified card + nav menu approach
+// - Auto-opens email verification modal if the user has not verified their email
+// - Redirects unauthenticated users to the welcome page
+
 "use client";
 
 import { useEffect, useState, lazy, Suspense } from "react";
@@ -7,7 +14,7 @@ import dynamic from "next/dynamic";
 import { PointsCard } from "@/components/referral/points-card";
 import { ReferralLinkCard } from "@/components/referral/referral-link-card";
 import { NavMenuItem } from "@/components/referral/nav-menu-item";
-import { TermsModal } from "@/components/referral/terms-modal";
+import { TermsModal } from "@/components/referral/terms-modal"; 
 import { OnboardingModal } from "@/components/onboarding";
 import { useOnboarding } from "@/hooks/use-onboarding";
 

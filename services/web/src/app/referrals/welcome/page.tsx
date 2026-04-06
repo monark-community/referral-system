@@ -1,3 +1,8 @@
+// Purpose: Welcome/landing page - first page new visitors see, with hero, feature highlights, and join/login actions
+// Notes:
+// - Authenticated users are auto-redirected to the dashboard
+// - Login and onboarding modals are lazy-loaded via auth-modals.tsx to keep the initial bundle small
+
 "use client";
 
 import { useState, useEffect, type ComponentType } from "react";

@@ -1,3 +1,8 @@
+// Purpose: Desktop sidebar navigation - shows brand, nav links, user info, and sign-out
+// Notes:
+// - Only visible on lg+ screens (hidden on mobile via CSS)
+// - Highlights the active page based on the current URL path
+
 "use client";
 
 import { useState } from "react";

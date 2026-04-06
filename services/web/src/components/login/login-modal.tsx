@@ -1,3 +1,8 @@
+// Purpose: Login modal for returning users - connects MetaMask wallet and authenticates via signature
+// Notes:
+// - Only for existing users; new users who try to login are told to use "Join the Program" instead
+// - Flow: connect MetaMask -> sign a message -> send signature to backend for JWT token
+
 'use client';
 
 import { useState } from 'react';

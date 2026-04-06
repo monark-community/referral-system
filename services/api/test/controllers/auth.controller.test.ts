@@ -1,3 +1,7 @@
+// Purpose: Unit tests for auth controller endpoints (wallet auth, get current user, logout)
+// Notes:
+// - Mocks Prisma and auth service helpers to isolate controller behavior
+
 import { walletAuth, getMe, logout } from "@/controllers/auth.controller.js";
 import { prisma } from "@/lib/prisma.js";
 import {
