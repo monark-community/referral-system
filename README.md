@@ -1,10 +1,9 @@
 # Reffinity
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-![GitHub Issues](https://img.shields.io/github/issues/monark-community/Reffinity)
-![GitHub Issues](https://img.shields.io/github/issues-pr/monark-community/Reffinity)
-![GitHub Stars](https://img.shields.io/github/stars/monark-community/Reffinity)
-![GitHub Forks](https://img.shields.io/github/forks/monark-community/Reffinity)
+![GitHub Issues](https://img.shields.io/github/issues/monark-community/referral-system)
+![GitHub Stars](https://img.shields.io/github/stars/monark-community/referral-system)
+![GitHub Forks](https://img.shields.io/github/forks/monark-community/referral-system)
 
 ## Project Overview
 
