@@ -1,5 +1,5 @@
 # ─── Stage 1: Build all packages up to API ──────────────────────────────────
-FROM node:20-bullseye-slim AS builder
+FROM node:20-bookworm-slim AS builder
 
 WORKDIR /app
 
@@ -35,7 +35,7 @@ RUN npm run build -w @reffinity/blockchain-connector
 RUN npm run build -w reffinity-api
 
 # ─── Stage 2: Prune dev deps ─────────────────────────────────────────────────
-FROM node:20-bullseye-slim AS pruner
+FROM node:20-bookworm-slim AS pruner
 
 WORKDIR /app
 
@@ -59,7 +59,7 @@ RUN npm ci \
   --omit=dev
 
 # ─── Stage 3: Runtime ────────────────────────────────────────────────────────
-FROM node:20-bullseye-slim
+FROM node:20-bookworm-slim
 
 WORKDIR /app
 
