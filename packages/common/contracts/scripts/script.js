@@ -26,6 +26,12 @@ async function main() {
     transport: http("http://127.0.0.1:8545"),
   });
 
+  const receipt = await publicClient.getBalance({
+    address: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+  });
+
+  console.log(receipt);
+
     // const hash = await walletClient.writeContract({ 
     //   account,
     //   address: '0x5fbdb2315678afecb367f032d93f642f64180aa3',
@@ -37,17 +43,17 @@ async function main() {
 
     // console.log(receipt.logs)
 
-      let txHash = await walletClient.writeContract({
-      abi: artifact.abi,
-      address: '0x5fbdb2315678afecb367f032d93f642f64180aa3',
-      functionName: 'acceptInvite',
-      chainId: hardhat.id,
-      args: ['0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266', '0x072afdc01e0e41adb47739bee18aa87600000000000000000000000000000000'],
-    });
+    //   let txHash = await walletClient.writeContract({
+    //   abi: artifact.abi,
+    //   address: '0x5fbdb2315678afecb367f032d93f642f64180aa3',
+    //   functionName: 'acceptInvite',
+    //   chainId: hardhat.id,
+    //   args: ['0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266', '0x072afdc01e0e41adb47739bee18aa87600000000000000000000000000000000'],
+    // });
 
-    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+    // const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
 
-    console.log(receipt.logs)
+    // console.log(receipt.logs)
 
     // const events = await publicClient.getContractEvents({
     //   address: '0x5fbdb2315678afecb367f032d93f642f64180aa3',

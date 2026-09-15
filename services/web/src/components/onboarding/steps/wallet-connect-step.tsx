@@ -7,7 +7,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useConnect, useAccount, useSignMessage, useDisconnect, useWriteContract, useSwitchChain } from 'wagmi';
+import { useConnect, useAccount, useSignMessage, useDisconnect, useWriteContract, useSwitchChain, useSimulateContract } from 'wagmi';
 import { waitForTransactionReceipt } from '@wagmi/core';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
@@ -120,12 +120,21 @@ export function WalletConnectStep({ onSuccess, onReturningUser, onNeedsVerificat
           args: [response.referrerWalletAddress as `0x${string}`, inviteId as `0x${string}`],
         });
       } else {
-        const joinProgramContext = await WriteReferralContractHelper.joinProgramContext();
+        const joinProgramContext =
+          await WriteReferralContractHelper.joinProgramContext();
+
+        console.log("=== JOIN PROGRAM ===");
+        console.log("address:", joinProgramContext.address);
+        console.log("function:", "joinProgram");
+        console.log("abi:", joinProgramContext.abi);
+
         txHash = await writeContractAsync({
           ...joinProgramContext,
           chainId: hardhat.id,
           args: [],
         });
+
+        console.log("Join Program tx hash:", txHash);
       }
 
       // Wait for the transaction to be mined so the blockchain listener can pick up the events
