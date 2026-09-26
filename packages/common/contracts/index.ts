@@ -520,6 +520,56 @@ export const RefferalABI = [
         type: "address",
       },
     ],
+    name: "viewAllReferrals",
+    outputs: [
+      {
+        components: [
+          {
+            internalType: "uint8",
+            name: "level",
+            type: "uint8",
+          },
+          {
+            internalType: "address",
+            name: "referral",
+            type: "address",
+          },
+        ],
+        internalType: "struct ReferralRelationships.ReferralLevel[]",
+        name: "",
+        type: "tuple[]",
+      },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        internalType: "address",
+        name: "user",
+        type: "address",
+      },
+    ],
+    name: "viewAncestors",
+    outputs: [
+      {
+        internalType: "address[2]",
+        name: "",
+        type: "address[2]",
+      },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        internalType: "address",
+        name: "user",
+        type: "address",
+      },
+    ],
     name: "viewPoints",
     outputs: [
       {

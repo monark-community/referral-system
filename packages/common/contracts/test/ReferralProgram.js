@@ -14,7 +14,7 @@ import {
   zeroAddress,
   stringToHex
 } from "viem";
-import { privateKeyToAccount } from "viem/accounts";
+import { mnemonicToAccount, privateKeyToAccount } from "viem/accounts";
 
 
 
@@ -26,6 +26,10 @@ let referreeAccount;
 let contractAddress;
 let abi;
 let hardhatProcess;
+let testAccounts;
+let testWalletClients;
+
+const hardhatMnemonic = "test test test test test test test test test test test junk";
 
 before(async () => {
 
@@ -52,6 +56,17 @@ before(async () => {
         account: referreeAccount,
         transport: http("http://127.0.0.1:8545"),
     });
+
+    // Additional funded Hardhat accounts used to construct multi-level trees.
+    testAccounts = Array.from(
+        { length: 7 },
+        (_, addressIndex) => mnemonicToAccount(hardhatMnemonic, { addressIndex })
+    );
+
+    testWalletClients = testAccounts.map((account) => createWalletClient({
+        account,
+        transport: http("http://127.0.0.1:8545"),
+    }));
 
 });
 
@@ -150,6 +165,129 @@ test("accepting invite adds a referrer-referree relationship", async () => {
     });
 
     assert.equal(referreeValues[0], referreeAccount.address);
+});
+
+test("viewAllReferrals returns an empty list when a user has no referrees", async () => {
+    const referrals = await publicClient.readContract({
+        address: contractAddress,
+        abi,
+        functionName: "viewAllReferrals",
+        args: [testAccounts[0].address],
+    });
+
+    assert.deepEqual(referrals, []);
+});
+
+test("viewAncestors fills missing parent and grandparent positions with the zero address", async () => {
+    await joinProgram(testAccounts[0], testWalletClients[0]);
+    await acceptReferral(1, 0, "one-level-invite");
+
+    const rootAncestors = await publicClient.readContract({
+        address: contractAddress,
+        abi,
+        functionName: "viewAncestors",
+        args: [testAccounts[0].address],
+    });
+
+    const directReferreeAncestors = await publicClient.readContract({
+        address: contractAddress,
+        abi,
+        functionName: "viewAncestors",
+        args: [testAccounts[1].address],
+    });
+
+    assert.deepEqual(rootAncestors, [zeroAddress, zeroAddress]);
+    assert.deepEqual(directReferreeAncestors, [
+        testAccounts[0].address,
+        zeroAddress,
+    ]);
+});
+
+test("two-level referral flow returns the parent, grandparent, and both referral levels", async () => {
+    await joinProgram(testAccounts[0], testWalletClients[0]);
+    await acceptReferral(1, 0, "level-one-invite");
+    await acceptReferral(2, 1, "level-two-invite");
+
+    const ancestors = await publicClient.readContract({
+        address: contractAddress,
+        abi,
+        functionName: "viewAncestors",
+        args: [testAccounts[2].address],
+    });
+
+    const referrals = await publicClient.readContract({
+        address: contractAddress,
+        abi,
+        functionName: "viewAllReferrals",
+        args: [testAccounts[0].address],
+    });
+
+    assert.deepEqual(ancestors, [
+        testAccounts[1].address,
+        testAccounts[0].address,
+    ]);
+    assert.equal(referrals.length, 2);
+    assert.deepEqual(referralLevelsByAddress(referrals), {
+        [testAccounts[1].address.toLowerCase()]: 1,
+        [testAccounts[2].address.toLowerCase()]: 2,
+    });
+});
+
+test("viewAllReferrals handles branches and excludes referrees below level two", async () => {
+    await buildBranchedReferralTree();
+
+    const rootReferrals = await publicClient.readContract({
+        address: contractAddress,
+        abi,
+        functionName: "viewAllReferrals",
+        args: [testAccounts[0].address],
+    });
+
+    assert.equal(rootReferrals.length, 5);
+    assert.deepEqual(referralLevelsByAddress(rootReferrals), {
+        [testAccounts[1].address.toLowerCase()]: 1,
+        [testAccounts[2].address.toLowerCase()]: 1,
+        [testAccounts[3].address.toLowerCase()]: 2,
+        [testAccounts[4].address.toLowerCase()]: 2,
+        [testAccounts[5].address.toLowerCase()]: 2,
+    });
+    assert.equal(
+        referralLevelsByAddress(rootReferrals)[testAccounts[6].address.toLowerCase()],
+        undefined
+    );
+
+    // Levels are relative to the user being viewed. The third-level referree
+    // from the root's perspective is a second-level referree of account 1.
+    const branchReferrals = await publicClient.readContract({
+        address: contractAddress,
+        abi,
+        functionName: "viewAllReferrals",
+        args: [testAccounts[1].address],
+    });
+
+    assert.equal(branchReferrals.length, 3);
+    assert.deepEqual(referralLevelsByAddress(branchReferrals), {
+        [testAccounts[3].address.toLowerCase()]: 1,
+        [testAccounts[4].address.toLowerCase()]: 1,
+        [testAccounts[6].address.toLowerCase()]: 2,
+    });
+});
+
+test("viewAncestors returns only the immediate parent and grandparent in a deeper referral tree", async () => {
+    await buildBranchedReferralTree();
+
+    const ancestors = await publicClient.readContract({
+        address: contractAddress,
+        abi,
+        functionName: "viewAncestors",
+        args: [testAccounts[6].address],
+    });
+
+    assert.deepEqual(ancestors, [
+        testAccounts[3].address,
+        testAccounts[1].address,
+    ]);
+    assert.equal(ancestors.includes(testAccounts[0].address), false);
 });
 
 test("user achieves a milestone", async () => {
@@ -275,6 +413,52 @@ test("user invite status can be updated", async () => {
 
 
 /*Helper functions that complete common functions in many tests*/
+
+async function writeProgramContract(account, walletClient, functionName, args = []) {
+    const { request } = await publicClient.simulateContract({
+        account,
+        address: contractAddress,
+        abi,
+        functionName,
+        args,
+    });
+
+    const hash = await walletClient.writeContract(request);
+    await publicClient.waitForTransactionReceipt({ hash });
+}
+
+async function joinProgram(account, walletClient) {
+    await writeProgramContract(account, walletClient, "joinProgram");
+}
+
+async function acceptReferral(referreeIndex, referrerIndex, inviteName) {
+    await writeProgramContract(
+        testAccounts[referreeIndex],
+        testWalletClients[referreeIndex],
+        "acceptInvite",
+        [
+            testAccounts[referrerIndex].address,
+            stringToHex(inviteName, { size: 32 }),
+        ]
+    );
+}
+
+async function buildBranchedReferralTree() {
+    await joinProgram(testAccounts[0], testWalletClients[0]);
+    await acceptReferral(1, 0, "root-to-one");
+    await acceptReferral(2, 0, "root-to-two");
+    await acceptReferral(3, 1, "one-to-three");
+    await acceptReferral(4, 1, "one-to-four");
+    await acceptReferral(5, 2, "two-to-five");
+    await acceptReferral(6, 3, "three-to-six");
+}
+
+function referralLevelsByAddress(referrals) {
+    return Object.fromEntries(referrals.map(({ referral, level }) => [
+        referral.toLowerCase(),
+        level,
+    ]));
+}
 
 async function addReferrerAndReferree(){
     let request;

@@ -5,7 +5,7 @@ pragma solidity ^0.8.28;
 // Notes:
 // - Join program creates a user with no referral, accept invite creates a user with a referral
 // - The points for actions and milestones are dynamic meaning to have any you must set values for them after creating the contract
-// - OpenZeppelin acces control limits admin controls to only admin users 
+// - OpenZeppelin acces control limits admin controls to only admin users
 
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
@@ -50,23 +50,34 @@ contract ReferralProgram is AccessControl {
         uint256 refereePoints = points.getUserPoints(msg.sender);
         emit ReferralPoints.PointsAdded(referrer, referrerPoints, false);
         emit ReferralPoints.PointsAdded(msg.sender, refereePoints, false);
-        milestones.updateUserMilestone(
-            msg.sender,
-            refereePoints
-        );
-        milestones.updateUserMilestone(
-            referrer,
-            referrerPoints
-        );
+        milestones.updateUserMilestone(msg.sender, refereePoints);
+        milestones.updateUserMilestone(referrer, referrerPoints);
         completeInvite(inviteId, referrer);
     }
 
-    function viewReferrals(address user) public view returns (address[] memory) {
+    function viewReferrals(
+        address user
+    ) public view returns (address[] memory) {
         return relationships.viewReferrals(user);
+    }
+
+    function viewAllReferrals(
+        address user
+    ) public view returns (ReferralRelationships.ReferralLevel[] memory) {
+        return relationships.viewAllReferrals(user);
     }
 
     function viewReferrer(address user) public view returns (address) {
         return relationships.viewReferrer(user);
+    }
+
+    function viewAncestors(
+        address user
+    ) public view returns (address[2] memory) {
+        return [
+            relationships.viewReferrer(user),
+            relationships.viewGrandparent(user)
+        ];
     }
 
     function setPointsForAction(
@@ -80,7 +91,9 @@ contract ReferralProgram is AccessControl {
         return points.getUserPoints(user);
     }
 
-    function getCurrentUserMilestone(address user) public view returns (uint256) {
+    function getCurrentUserMilestone(
+        address user
+    ) public view returns (uint256) {
         return milestones.getCurrentMilestone(user);
     }
 
@@ -99,11 +112,21 @@ contract ReferralProgram is AccessControl {
 
     // -- Functions for invites and statuses
 
-    function createInvite(bytes32 inviteID, address referrer, ReferralInvites.InviteStatus status) public {
-        require(uint8(status) <= uint8(ReferralInvites.InviteStatus.Closed), "Invalid status");
+    function createInvite(
+        bytes32 inviteID,
+        address referrer,
+        ReferralInvites.InviteStatus status
+    ) public {
+        require(
+            uint8(status) <= uint8(ReferralInvites.InviteStatus.Closed),
+            "Invalid status"
+        );
         invites.createInvite(inviteID, referrer, status);
-        if(status == ReferralInvites.InviteStatus.Pending){
-            points.addPendingAction(ReferralPoints.Action.ReferredNewUser, referrer);
+        if (status == ReferralInvites.InviteStatus.Pending) {
+            points.addPendingAction(
+                ReferralPoints.Action.ReferredNewUser,
+                referrer
+            );
             uint256 pendingPoints = points.getPendingUserPoints(referrer);
             emit ReferralPoints.PointsAdded(referrer, pendingPoints, true);
         }
@@ -112,20 +135,32 @@ contract ReferralProgram is AccessControl {
 
     function completeInvite(bytes32 inviteID, address referrer) public {
         bool removePending = invites.completeInvite(inviteID, referrer);
-        if(removePending){
-            points.completePendingAction(ReferralPoints.Action.ReferredNewUser, referrer);
+        if (removePending) {
+            points.completePendingAction(
+                ReferralPoints.Action.ReferredNewUser,
+                referrer
+            );
             uint256 pendingPoints = points.getPendingUserPoints(referrer);
             emit ReferralPoints.PointsAdded(referrer, pendingPoints, true);
         }
-        emit ReferralInvites.InviteChanged(inviteID, referrer, ReferralInvites.InviteStatus.Accepted);
+        emit ReferralInvites.InviteChanged(
+            inviteID,
+            referrer,
+            ReferralInvites.InviteStatus.Accepted
+        );
     }
-    
-    function updateInviteStatus(bytes32 inviteID, ReferralInvites.InviteStatus newStatus) public {
+
+    function updateInviteStatus(
+        bytes32 inviteID,
+        ReferralInvites.InviteStatus newStatus
+    ) public {
         address referrer = invites.updateInviteStatus(inviteID, newStatus);
         emit ReferralInvites.InviteChanged(inviteID, referrer, newStatus);
     }
 
-    function getInviteStatus(bytes32 inviteID) public view returns (ReferralInvites.InviteStatus) {
+    function getInviteStatus(
+        bytes32 inviteID
+    ) public view returns (ReferralInvites.InviteStatus) {
         return invites.getInviteStatus(inviteID);
     }
 
@@ -140,14 +175,21 @@ contract ReferralProgram is AccessControl {
         address referrer;
     }
 
-    function getReferrerInvites(address user) public view returns (ReferrerInviteSummary[] memory) {
-        ReferralInvites.InviteSummary[] memory inviteSummaries = invites.getReferrerInvites(user);
-        ReferrerInviteSummary[] memory summaries = new ReferrerInviteSummary[](inviteSummaries.length);
+    function getReferrerInvites(
+        address user
+    ) public view returns (ReferrerInviteSummary[] memory) {
+        ReferralInvites.InviteSummary[] memory inviteSummaries = invites
+            .getReferrerInvites(user);
+        ReferrerInviteSummary[] memory summaries = new ReferrerInviteSummary[](
+            inviteSummaries.length
+        );
         for (uint256 i = 0; i < inviteSummaries.length; i++) {
             summaries[i] = ReferrerInviteSummary({
                 inviteId: inviteSummaries[i].inviteId,
                 status: inviteSummaries[i].status,
-                points: points.getPointsForAction(ReferralPoints.Action.ReferredNewUser),
+                points: points.getPointsForAction(
+                    ReferralPoints.Action.ReferredNewUser
+                ),
                 referrer: inviteSummaries[i].referrer
             });
         }

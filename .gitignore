@@ -44,3 +44,6 @@ coverage/
 
 # Claude Code
 .claude/
+
+# Local Reffinity project knowledge (agent memory, research, and working notes)
+.reffinity/

@@ -22,7 +22,16 @@ describe("ReadReferralContractService", () => {
         async (args: ReadContractParameters<any, string, readonly any[]>) => {
           if (args.functionName === "viewPoints") return 42;
           if (args.functionName === "viewReferrals") return ["0xabc", "0xdef"];
+          if (args.functionName === "viewAllReferrals") {
+            return [
+              { level: 1, referral: "0xabc" },
+              { level: 2, referral: "0xdef" },
+            ];
+          }
           if (args.functionName === "viewReferrer") return "0xxyz";
+          if (args.functionName === "viewAncestors") {
+            return ["0xparent", "0xgrandparent"];
+          }
           throw new Error(`Unexpected function: ${args.functionName}`);
         },
       ) as unknown as PublicClient["readContract"],
@@ -68,6 +77,31 @@ describe("ReadReferralContractService", () => {
     expect(mockPublicClient.readContract).toHaveBeenCalledWith(
       expect.objectContaining({
         functionName: "viewReferrer",
+        args: ["0x123"],
+      }),
+    );
+  });
+
+  test("returns mocked two-level referrals from getAllReferrals", async () => {
+    const referrals = await service.getAllReferrals("0x123");
+    expect(referrals).toEqual([
+      { level: 1, referral: "0xabc" },
+      { level: 2, referral: "0xdef" },
+    ]);
+    expect(mockPublicClient.readContract).toHaveBeenCalledWith(
+      expect.objectContaining({
+        functionName: "viewAllReferrals",
+        args: ["0x123"],
+      }),
+    );
+  });
+
+  test("returns mocked parent and grandparent from getAncestors", async () => {
+    const ancestors = await service.getAncestors("0x123");
+    expect(ancestors).toEqual(["0xparent", "0xgrandparent"]);
+    expect(mockPublicClient.readContract).toHaveBeenCalledWith(
+      expect.objectContaining({
+        functionName: "viewAncestors",
         args: ["0x123"],
       }),
     );

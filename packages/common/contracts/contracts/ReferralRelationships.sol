@@ -58,4 +58,55 @@ contract ReferralRelationships is AccessControl {
     ) external view onlyRole(ACCESS_ROLE) returns (address[] memory) {
         return _referrals[referree].values();
     }
+
+    function viewGrandparent(
+        address referree
+    ) external view onlyRole(ACCESS_ROLE) returns (address) {
+        return _referrers[_referrers[referree]];
+    }
+
+    struct ReferralLevel {
+        uint8 level;
+        address referral;
+    }
+
+    function viewAllReferrals(
+        address user
+    ) external view onlyRole(ACCESS_ROLE) returns (ReferralLevel[] memory) {
+        uint256 referralCount = _ReferralCount(user);
+        ReferralLevel[] memory referrals = new ReferralLevel[](referralCount);
+
+        uint256 nextIndex = 0;
+
+        address[] memory directReferrals = _referrals[user].values();
+        for (uint256 i = 0; i < directReferrals.length; i++) {
+            address directReferree = directReferrals[i];
+            referrals[nextIndex++] = ReferralLevel({
+                referral: directReferree,
+                level: 1
+            });
+
+            address[] memory subReferees = _referrals[directReferree].values();
+
+            for (uint256 j = 0; j < subReferees.length; j++) {
+                referrals[nextIndex++] = ReferralLevel({
+                    referral: subReferees[j],
+                    level: 2
+                });
+            }
+        }
+
+        return referrals;
+    }
+
+    function _ReferralCount(address user) private view returns (uint256) {
+        address[] memory directReferrals = _referrals[user].values();
+        uint256 count = directReferrals.length;
+
+        for (uint256 i = 0; i < directReferrals.length; i++) {
+            count += _referrals[directReferrals[i]].length();
+        }
+
+        return count;
+    }
 }
