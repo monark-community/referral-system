@@ -3,7 +3,9 @@
 // - Listeners are used to lighten the load of calling directly to the chain and have the DB as an intermediary, points and invites are the most common calls and have listeners
 
 import { contracts } from "./contracts.js";
-import { WatchContractEventReturnType } from "viem";
+import { Address, WatchContractEventReturnType } from "viem";
+
+export type ReferralAncestors = readonly [parent: Address, grandparent: Address];
 
 enum InviteStatus {
   Pending,
@@ -26,6 +28,15 @@ export class ReadReferralContractService {
     });
   }
 
+  async getAllReferrals(userAddress: string) {
+    return this.clients.publicClient.readContract({
+      address: contracts.referral.address.local,
+      abi: contracts.referral.abi,
+      functionName: "viewAllReferrals",
+      args: [userAddress],
+    });
+  }
+
   async getReferrers(userAddress: string) {
     return this.clients.publicClient.readContract({
       address: contracts.referral.address.local,
@@ -33,6 +44,17 @@ export class ReadReferralContractService {
       functionName: "viewReferrer",
       args: [userAddress],
     });
+  }
+
+  async getAncestors(userAddress: string): Promise<ReferralAncestors> {
+    const ancestors = await this.clients.publicClient.readContract({
+      address: contracts.referral.address.local,
+      abi: contracts.referral.abi,
+      functionName: "viewAncestors",
+      args: [userAddress],
+    });
+
+    return ancestors as ReferralAncestors;
   }
 
   async getUserCurrentPoints(userAddress: string) {
