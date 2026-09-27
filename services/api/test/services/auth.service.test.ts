@@ -4,6 +4,7 @@ import {
   generateJWT,
   verifyJWT,
   generateReferralCode,
+  generateInviteCode,
   verifyWalletSignature,
   generateEmailVerificationToken,
 } from "@/services/auth.service.js";
@@ -61,5 +62,32 @@ describe("test the auth service", () => {
   test("generate Email verification code", () => {
     const code = generateEmailVerificationToken();
     expect(code).toBeDefined();
+  });
+
+  test("verifyJWT returns null for an invalid or tampered token", () => {
+    const token = generateJWT(
+      "user1",
+      "0x1234567890123456789012345678901234567890",
+    );
+
+    expect(verifyJWT("not-a-real-token")).toBeNull();
+    expect(verifyJWT(token + "tampered")).toBeNull();
+  });
+
+  test("a malformed signature returns false instead of throwing", () => {
+    const consoleError = jest.spyOn(console, "error").mockImplementation(() => {});
+
+    const result = verifyWalletSignature(
+      "Login to app",
+      "0xnotasignature",
+      "0x1234567890123456789012345678901234567890",
+    );
+
+    expect(result).toBe(false);
+    consoleError.mockRestore();
+  });
+
+  test("should generate an 8 character invite code", () => {
+    expect(generateInviteCode()).toMatch(/^[A-Z0-9]{8}$/);
   });
 });

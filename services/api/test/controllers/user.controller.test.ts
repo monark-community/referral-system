@@ -12,6 +12,7 @@ import {
   enableAccount,
   getInvites,
   createPrivateInvite,
+  acceptTerms,
 } from "@/controllers/user.controller.js";
 import { prisma } from "@/lib/prisma.js";
 import { uuidToBytes32 } from "@reffinity/blockchain-connector/uuidBytesConverter";
@@ -337,7 +338,7 @@ describe("User Controller test", () => {
     expect(res.status).toHaveBeenCalledWith(404);
   });
 
-  test("validateRefferalCode should fail on invalid code", async () => {
+  test("validateRefferalCode should fail when no code is given", async () => {
     req = { params: {} };
 
     await validateReferralCode(req, res);
@@ -495,7 +496,7 @@ describe("User Controller test", () => {
     expect(res.status).toHaveBeenCalledWith(404);
   });
 
-  test("getInvites should disable user", async () => {
+  test("getInvites should return the user's invites", async () => {
     req = { user: { id: "user1", walletAddress: "abcd-1234-defg-5678" } };
 
     (prisma.referral.findMany as jest.Mock).mockReturnValue([
@@ -618,6 +619,147 @@ describe("User Controller test", () => {
       referralCode: req.user.referralCode,
       inviteCode: expect.any(String),
       referrerWallet: "0x9876543210",
+    });
+  });
+
+  describe("acceptTerms, database errors and invite code collisions", () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
+    test("acceptTerms should fail on not authenticated user", async () => {
+      req = {};
+
+      await acceptTerms(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(res.json).toHaveBeenCalledWith({ error: "Not authenticated" });
+    });
+
+    test("acceptTerms should record when the user accepted the terms", async () => {
+      req = { user: { id: "user1" } };
+      const updatedUser = { id: "user1", walletAddress: "0xabc" };
+      (prisma.user.update as jest.Mock).mockResolvedValueOnce(updatedUser);
+
+      await acceptTerms(req, res);
+
+      expect(prisma.user.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: "user1" },
+          data: { termsAcceptedAt: expect.any(Date) },
+        }),
+      );
+      expect(res.json).toHaveBeenCalledWith({ user: updatedUser });
+    });
+
+    test("createPrivateInvite should generate a new invite code when the first one is taken", async () => {
+      req = {
+        user: { id: "user1", referralCode: "ABCDEFGHIJ", walletAddress: "0x9876543210" },
+        body: { description: "my description" },
+      };
+      (prisma.referral.findUnique as jest.Mock)
+        .mockResolvedValueOnce({ id: "existing-invite" }) // first code is taken
+        .mockResolvedValueOnce(null); // second code is free
+      (prisma.referral.create as jest.Mock).mockResolvedValueOnce({ id: "invite2" });
+
+      await createPrivateInvite(req, res);
+
+      const triedCodes = (prisma.referral.findUnique as jest.Mock).mock.calls.map(
+        ([args]) => args.where.inviteCode,
+      );
+      expect(triedCodes).toHaveLength(2);
+      expect(prisma.referral.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ inviteCode: triedCodes[1] }),
+      });
+    });
+
+    test("verifyEmail should send the user to the error page when the database fails", async () => {
+      const consoleError = jest.spyOn(console, "error").mockImplementation(() => {});
+      req = { params: { token: "123456" } };
+      (prisma.user.findFirst as jest.Mock).mockRejectedValueOnce(new Error("db down"));
+
+      await verifyEmail(req, res);
+
+      expect(res.redirect).toHaveBeenCalledWith(
+        expect.stringContaining(`/referrals/email-verified?error=server`),
+      );
+      consoleError.mockRestore();
+    });
+
+    // Every endpoint catches database errors and answers with a 500
+    test.each([
+      {
+        name: "getProfile",
+        handler: getProfile,
+        failing: prisma.user.findUnique,
+        request: { user: { id: "user1" } },
+        error: "Failed to get profile",
+      },
+      {
+        name: "updateProfile",
+        handler: updateProfile,
+        failing: prisma.user.findFirst,
+        request: { user: { id: "user1" }, body: { email: "new@example.com" } },
+        error: "Failed to update profile",
+      },
+      {
+        name: "sendVerificationEmail",
+        handler: sendVerificationEmail,
+        failing: prisma.user.findUnique,
+        request: { user: { id: "user1" } },
+        error: "Failed to send verification email",
+      },
+      {
+        name: "validateReferralCode",
+        handler: validateReferralCode,
+        failing: prisma.user.findUnique,
+        request: { params: { code: "ABC123" } },
+        error: "Failed to validate referral code",
+      },
+      {
+        name: "acceptTerms",
+        handler: acceptTerms,
+        failing: prisma.user.update,
+        request: { user: { id: "user1" } },
+        error: "Failed to accept terms",
+      },
+      {
+        name: "disableAccount",
+        handler: disableAccount,
+        failing: prisma.user.update,
+        request: { user: { id: "user1" } },
+        error: "Failed to disable account",
+      },
+      {
+        name: "enableAccount",
+        handler: enableAccount,
+        failing: prisma.user.update,
+        request: { user: { id: "user1" } },
+        error: "Failed to enable account",
+      },
+      {
+        name: "getInvites",
+        handler: getInvites,
+        failing: prisma.referral.findMany,
+        request: { user: { id: "user1", walletAddress: "0xABC" } },
+        error: "Failed to get invites",
+      },
+      {
+        name: "createPrivateInvite",
+        handler: createPrivateInvite,
+        failing: prisma.referral.count,
+        request: { user: { id: "user1", walletAddress: "0xABC" }, body: {} },
+        error: "Failed to create a private invites",
+      },
+    ])("$name returns 500 when the database fails", async ({ handler, failing, request, error }) => {
+      const consoleError = jest.spyOn(console, "error").mockImplementation(() => {});
+      (failing as jest.Mock).mockRejectedValueOnce(new Error("db down"));
+
+      await handler(request as any, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ error });
+      consoleError.mockRestore();
     });
   });
 });

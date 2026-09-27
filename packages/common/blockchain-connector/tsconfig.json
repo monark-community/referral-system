@@ -12,5 +12,6 @@
     "resolveJsonModule": true,
     "declaration": true,
     "emitDeclarationOnly": false,
+    "types": ["node", "jest"],
   }
 }

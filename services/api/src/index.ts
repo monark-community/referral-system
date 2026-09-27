@@ -1,41 +1,12 @@
-// Purpose: API service entrypoint - configures Express app, registers routes/middleware, and starts background blockchain listeners
+// Purpose: API service entrypoint - starts the HTTP server and the background blockchain listener
 // Notes:
-// - Exposes /health for basic service monitoring
+// - The Express app itself is built in app.ts, so tests can use it without starting anything
 // - Initializes BlockchainListenerService at startup to sync on-chain events into the database
 
-import express from 'express';
-import cors from 'cors';
-import helmet from 'helmet';
-import dotenv from 'dotenv';
-import routes from './routes/index.js';
-import { errorHandler } from './middlewares/error.middleware.js';
+import app from './app.js';
 import { BlockchainListenerService } from './services/blockchainListener.service.js';
 
-// Load environment variables
-dotenv.config();
-
-const app = express();
 const PORT = process.env.PORT || 3001;
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
-
-// Middleware
-app.use(helmet());
-app.use(cors({
-  origin: FRONTEND_URL,
-  credentials: true,
-}));
-app.use(express.json());
-
-// Health check
-app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
-
-// API Routes
-app.use('/api', routes);
-
-// Error handling
-app.use(errorHandler);
 
 //bolockchain listener service
 const blockchainListener = new BlockchainListenerService();
