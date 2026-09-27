@@ -15,8 +15,11 @@ export default {
   testEnvironment: 'node',
   extensionsToTreatAsEsm: ['.ts'],
   transform: {
-    '^.+\\.ts$': ['ts-jest', { useESM: true }],
+    // 151002 is a harmless module-kind warning that ts-jest prints once per test file
+    '^.+\\.ts$': ['ts-jest', { useESM: true, diagnostics: { ignoreCodes: [151002] } }],
   },
+  // Skip compiled copies of the tests that `npm run build` puts in dist/
+  testPathIgnorePatterns: ['/node_modules/', '<rootDir>/dist/'],
   moduleNameMapper: {
     // Fix relative JS imports for ESM
     '^(\\.{1,2}/.*)\\.js$': '$1',
@@ -25,4 +28,6 @@ export default {
   },
   setupFiles: ['./jest.setup.ts'],
   moduleDirectories: ['node_modules', '<rootDir>/../../../node_modules'],
+  // Count every source file in coverage, not just the ones a test imports
+  collectCoverageFrom: ['*.ts', '!jest.setup.ts'],
 };

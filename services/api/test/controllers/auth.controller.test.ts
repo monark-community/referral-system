@@ -18,6 +18,7 @@ jest.mock("@/lib/prisma", () => ({
     },
     referral: {
       create: jest.fn(),
+      update: jest.fn(),
     },
   },
 }));
@@ -260,6 +261,112 @@ describe("Test auth controller", () => {
     expect(res.json).toHaveBeenCalledWith({
       message: "Logged out successfully",
       success: true,
+    });
+  });
+
+  describe("returning users, code collisions, private invites and errors", () => {
+    const walletAddress = "0x1234567890123456789012345678901234567890";
+    const loginBody = {
+      walletAddress,
+      signature: "0xabcdef",
+      message: "Sign this message to authenticate",
+    };
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
+    test("walletAuth logs in an existing user without creating a new account", async () => {
+      req = { body: loginBody };
+      const existingUser = {
+        id: "user1",
+        walletAddress: walletAddress.toLowerCase(),
+        referralCode: "REFERRAL123",
+      };
+      (prisma.user.findUnique as jest.Mock).mockResolvedValueOnce(existingUser);
+
+      await walletAuth(req, res);
+
+      expect(prisma.user.create).not.toHaveBeenCalled();
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          user: expect.objectContaining({ id: "user1" }),
+          token: "JWT_TOKEN",
+          isNewUser: false,
+        }),
+      );
+    });
+
+    test("walletAuth generates a new referral code when the first one is taken", async () => {
+      req = { body: loginBody };
+      (prisma.user.findUnique as jest.Mock)
+        .mockResolvedValueOnce(null) // wallet is new
+        .mockResolvedValueOnce({ id: "someone-else" }) // first code is taken
+        .mockResolvedValueOnce(null); // second code is free
+
+      await walletAuth(req, res);
+
+      expect(generateReferralCode).toHaveBeenCalledTimes(2);
+      expect(prisma.user.create).toHaveBeenCalled();
+      expect(prisma.referral.create).not.toHaveBeenCalled();
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ isNewUser: true, bytesInviteId: "" }),
+      );
+    });
+
+    test("walletAuth links a new user to the private invite they signed up with", async () => {
+      req = {
+        body: { ...loginBody, referralCode: "referrer1", inviteCode: "INVITE01" },
+      };
+      (prisma.user.findUnique as jest.Mock)
+        .mockResolvedValueOnce(null) // wallet is new
+        .mockResolvedValueOnce(null) // generated code is free
+        .mockResolvedValueOnce({ id: "referrer123", walletAddress: "0xreferrer" });
+      (prisma.referral.update as jest.Mock).mockResolvedValueOnce({ id: "invite1" });
+
+      await walletAuth(req, res);
+
+      expect(prisma.referral.update).toHaveBeenCalledWith({
+        where: { inviteCode: "INVITE01" },
+        data: {
+          referrerId: "referrer123",
+          refereeId: "user1",
+          status: 0,
+          points: 0,
+        },
+      });
+      expect(prisma.referral.create).not.toHaveBeenCalled();
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          isNewUser: true,
+          bytesInviteId: "BYTES32",
+          referrerWalletAddress: "0xreferrer",
+        }),
+      );
+    });
+
+    test("walletAuth returns 500 when the database fails", async () => {
+      const consoleError = jest.spyOn(console, "error").mockImplementation(() => {});
+      req = { body: loginBody };
+      (prisma.user.findUnique as jest.Mock).mockRejectedValueOnce(new Error("db down"));
+
+      await walletAuth(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ error: "Authentication failed" });
+      consoleError.mockRestore();
+    });
+
+    test("getMe returns 500 when the database fails", async () => {
+      const consoleError = jest.spyOn(console, "error").mockImplementation(() => {});
+      req = { user: { id: "user1" } };
+      (prisma.user.findUnique as jest.Mock).mockRejectedValueOnce(new Error("db down"));
+
+      await getMe(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ error: "Failed to get user" });
+      consoleError.mockRestore();
     });
   });
 });

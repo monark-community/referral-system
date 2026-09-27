@@ -171,4 +171,26 @@ describe("Testing milestone controller", () => {
     });
     expect(res.status).toHaveBeenCalledWith(500);
   });
+
+  test("getUserMilestone returns null tiers when none match the user", async () => {
+    req = { user: { id: "user1" } };
+
+    (prisma.user.findUnique as jest.Mock).mockReturnValue({
+      earnedPoints: 500,
+      milestoneLevel: 5,
+    });
+    (prisma.milestoneTier.findMany as jest.Mock).mockReturnValue([
+      { level: 1, pointsRequired: 30 },
+      { level: 2, pointsRequired: 100 },
+    ]);
+
+    await getUserMilestone(req, res);
+
+    expect(res.json).toHaveBeenCalledWith({
+      milestoneLevel: 5,
+      earnedPoints: 500,
+      currentTier: null,
+      nextTier: null,
+    });
+  });
 });

@@ -353,5 +353,9 @@ export class BlockchainListenerService {
       this.isListeningToPointsAdded = false;
       console.log("Blockchain listener stopped");
     }
+    if (this.isListeningToInviteChanged) {
+      this.readReferralContractService.stopListeningToInviteChangedEvent();
+      this.isListeningToInviteChanged = false;
+    }
   }
 }

@@ -17,6 +17,10 @@ export default {
   extensionsToTreatAsEsm: [".ts"],
 
   transform: {
-    "^.+\\.ts$": ["ts-jest", { useESM: true }],
+    // 151002 is a harmless module-kind warning that ts-jest prints once per test file
+    "^.+\\.ts$": ["ts-jest", { useESM: true, diagnostics: { ignoreCodes: [151002] } }],
   },
+
+  // Count every source file in coverage, not just the ones a test imports
+  collectCoverageFrom: ["src/**/*.ts"],
 };
