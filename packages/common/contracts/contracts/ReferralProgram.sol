@@ -13,6 +13,7 @@ import "./ReferralRelationships.sol";
 import "./ReferralPoints.sol";
 import "./ReferralMilestone.sol";
 import "./ReferralInvites.sol";
+import "./ReferralAllocation.sol";
 
 contract ReferralProgram is AccessControl {
     using EnumerableSet for EnumerableSet.AddressSet;
@@ -21,6 +22,28 @@ contract ReferralProgram is AccessControl {
     ReferralPoints private points;
     ReferralMilestone private milestones;
     ReferralInvites private invites;
+
+    uint16 public directReferralBps = 8_000;
+    uint16 public grandparentReferralBps = 2_000;
+
+    struct PendingPointAllocation {
+        address directRecipient;
+        address grandparentRecipient;
+        uint256 directAmount;
+        uint256 grandparentAmount;
+    }
+
+    mapping(bytes32 => PendingPointAllocation) private pendingPointAllocations;
+
+    event ReferralPointsAllocated(
+        address indexed participant,
+        uint256 pool,
+        address indexed directRecipient,
+        uint256 directAmount,
+        address indexed grandparentRecipient,
+        uint256 grandparentAmount,
+        uint256 unallocatedAmount
+    );
 
     EnumerableSet.AddressSet users;
 
@@ -44,14 +67,19 @@ contract ReferralProgram is AccessControl {
         require(!users.contains(msg.sender), "Referree already in system");
         users.add(msg.sender);
         relationships.createRelationship(msg.sender, referrer);
-        points.completeAction(ReferralPoints.Action.ReferredNewUser, referrer);
+
+        uint256 referralPointPool = viewReferralPointPool();
+        ReferralAllocation.Allocation memory allocation = _allocateReferralPool(
+            msg.sender,
+            referralPointPool
+        );
+        _awardReferralPoints(msg.sender, referralPointPool, allocation);
+
+        // The new-user bonus is separate from the referral pool.
         points.completeAction(ReferralPoints.Action.AcceptedInvite, msg.sender);
-        uint256 referrerPoints = points.getUserPoints(referrer);
         uint256 refereePoints = points.getUserPoints(msg.sender);
-        emit ReferralPoints.PointsAdded(referrer, referrerPoints, false);
         emit ReferralPoints.PointsAdded(msg.sender, refereePoints, false);
         milestones.updateUserMilestone(msg.sender, refereePoints);
-        milestones.updateUserMilestone(referrer, referrerPoints);
         completeInvite(inviteId, referrer);
     }
 
@@ -85,6 +113,31 @@ contract ReferralProgram is AccessControl {
         uint256 amount
     ) public onlyRole(DEFAULT_ADMIN_ROLE) {
         points.setPointsForAction(action, amount);
+    }
+
+    // Calculates the currently configured fixed points pool. Future reward
+    // calculators can be added beside this function without changing allocation math.
+    function viewReferralPointPool() public view returns (uint256) {
+        return
+            points.getPointsForAction(
+                ReferralPoints.Action.ReferredNewUser
+            );
+    }
+
+    function setReferralSplit(
+        uint16 directBps,
+        uint16 grandparentBps
+    ) public onlyRole(DEFAULT_ADMIN_ROLE) {
+        ReferralAllocation.validateSplit(directBps, grandparentBps);
+        directReferralBps = directBps;
+        grandparentReferralBps = grandparentBps;
+    }
+
+    function previewReferralPointAllocation(
+        address participant,
+        uint256 pointPool
+    ) public view returns (ReferralAllocation.Allocation memory) {
+        return _allocateReferralPool(participant, pointPool);
     }
 
     function viewPoints(address user) public view returns (uint256) {
@@ -123,12 +176,21 @@ contract ReferralProgram is AccessControl {
         );
         invites.createInvite(inviteID, referrer, status);
         if (status == ReferralInvites.InviteStatus.Pending) {
-            points.addPendingAction(
-                ReferralPoints.Action.ReferredNewUser,
-                referrer
-            );
-            uint256 pendingPoints = points.getPendingUserPoints(referrer);
-            emit ReferralPoints.PointsAdded(referrer, pendingPoints, true);
+            ReferralAllocation.Allocation memory allocation = ReferralAllocation
+                .allocate(
+                    viewReferralPointPool(),
+                    referrer,
+                    relationships.viewReferrer(referrer),
+                    directReferralBps,
+                    grandparentReferralBps
+                );
+            pendingPointAllocations[inviteID] = PendingPointAllocation({
+                directRecipient: allocation.directRecipient,
+                grandparentRecipient: allocation.grandparentRecipient,
+                directAmount: allocation.directAmount,
+                grandparentAmount: allocation.grandparentAmount
+            });
+            _addPendingPoints(allocation);
         }
         emit ReferralInvites.InviteChanged(inviteID, referrer, status);
     }
@@ -136,12 +198,7 @@ contract ReferralProgram is AccessControl {
     function completeInvite(bytes32 inviteID, address referrer) public {
         bool removePending = invites.completeInvite(inviteID, referrer);
         if (removePending) {
-            points.completePendingAction(
-                ReferralPoints.Action.ReferredNewUser,
-                referrer
-            );
-            uint256 pendingPoints = points.getPendingUserPoints(referrer);
-            emit ReferralPoints.PointsAdded(referrer, pendingPoints, true);
+            _removePendingPoints(inviteID);
         }
         emit ReferralInvites.InviteChanged(
             inviteID,
@@ -195,5 +252,107 @@ contract ReferralProgram is AccessControl {
         }
 
         return summaries;
+    }
+
+    function _allocateReferralPool(
+        address participant,
+        uint256 pointPool
+    ) private view returns (ReferralAllocation.Allocation memory) {
+        return
+            ReferralAllocation.allocate(
+                pointPool,
+                relationships.viewReferrer(participant),
+                relationships.viewGrandparent(participant),
+                directReferralBps,
+                grandparentReferralBps
+            );
+    }
+
+    function _awardReferralPoints(
+        address participant,
+        uint256 pointPool,
+        ReferralAllocation.Allocation memory allocation
+    ) private {
+        if (allocation.directAmount > 0) {
+            _awardAndUpdateMilestone(
+                allocation.directRecipient,
+                allocation.directAmount
+            );
+        }
+        if (allocation.grandparentAmount > 0) {
+            _awardAndUpdateMilestone(
+                allocation.grandparentRecipient,
+                allocation.grandparentAmount
+            );
+        }
+
+        emit ReferralPointsAllocated(
+            participant,
+            pointPool,
+            allocation.directRecipient,
+            allocation.directAmount,
+            allocation.grandparentRecipient,
+            allocation.grandparentAmount,
+            allocation.unallocatedAmount
+        );
+    }
+
+    function _awardAndUpdateMilestone(
+        address recipient,
+        uint256 amount
+    ) private {
+        points.awardPoints(recipient, amount);
+        uint256 balance = points.getUserPoints(recipient);
+        emit ReferralPoints.PointsAdded(recipient, balance, false);
+        milestones.updateUserMilestone(recipient, balance);
+    }
+
+    function _addPendingPoints(
+        ReferralAllocation.Allocation memory allocation
+    ) private {
+        if (allocation.directAmount > 0) {
+            points.addPendingPoints(
+                allocation.directRecipient,
+                allocation.directAmount
+            );
+            _emitPendingBalance(allocation.directRecipient);
+        }
+        if (allocation.grandparentAmount > 0) {
+            points.addPendingPoints(
+                allocation.grandparentRecipient,
+                allocation.grandparentAmount
+            );
+            _emitPendingBalance(allocation.grandparentRecipient);
+        }
+    }
+
+    function _removePendingPoints(bytes32 inviteID) private {
+        PendingPointAllocation memory allocation = pendingPointAllocations[
+            inviteID
+        ];
+        delete pendingPointAllocations[inviteID];
+
+        if (allocation.directAmount > 0) {
+            points.removePendingPoints(
+                allocation.directRecipient,
+                allocation.directAmount
+            );
+            _emitPendingBalance(allocation.directRecipient);
+        }
+        if (allocation.grandparentAmount > 0) {
+            points.removePendingPoints(
+                allocation.grandparentRecipient,
+                allocation.grandparentAmount
+            );
+            _emitPendingBalance(allocation.grandparentRecipient);
+        }
+    }
+
+    function _emitPendingBalance(address recipient) private {
+        emit ReferralPoints.PointsAdded(
+            recipient,
+            points.getPendingUserPoints(recipient),
+            true
+        );
     }
 }

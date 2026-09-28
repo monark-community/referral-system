@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.28;
 
-// Purpose: Holds the earned and pending points for each user user, as well as the actions they have completed
+// Purpose: Holds earned and pending point balances and the actions users completed.
 // Notes:
-// - To add an Action, you must add it to the enum, then on start up give it a point amount
-// - Actions are completable several times per user
+// - Action amounts calculate point pools for future awards.
+// - Awarded balances are snapshotted so configuration changes do not reprice history.
 // - OpenZeppelin access control limits all calls to an admin and the ReferralProgram.sol contract - cannot call directly as a user
 
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
@@ -27,6 +27,8 @@ contract ReferralPoints is AccessControl {
     mapping(address => mapping(Action => uint256)) public userActionCounts;
     mapping(address => mapping(Action => uint256))
         public userPendingActionCounts;
+    mapping(address => uint256) private earnedPointBalances;
+    mapping(address => uint256) private pendingPointBalances;
 
     //Gives the role of access to the contract provided, and admin to the user provided
     constructor(address admin_role, address access_role) {
@@ -40,7 +42,6 @@ contract ReferralPoints is AccessControl {
             hasRole(ACCESS_ROLE, msg.sender),
             "setPointsForAction: caller lacks ACCESS_ROLE"
         );
-        require(amount >= 0, "Points cannot be negative");
         pointsForAction[action] = amount;
     }
 
@@ -50,6 +51,16 @@ contract ReferralPoints is AccessControl {
             "completeAction: caller lacks ACCESS_ROLE"
         );
         userActionCounts[user][action] += 1;
+        earnedPointBalances[user] += pointsForAction[action];
+    }
+
+    function awardPoints(address user, uint256 amount) public {
+        require(
+            hasRole(ACCESS_ROLE, msg.sender),
+            "awardPoints: caller lacks ACCESS_ROLE"
+        );
+        require(user != address(0), "Cannot award the zero address");
+        earnedPointBalances[user] += amount;
     }
 
     function getPointsForAction(Action action) public view returns (uint256) {
@@ -63,15 +74,7 @@ contract ReferralPoints is AccessControl {
             hasRole(ACCESS_ROLE, msg.sender),
             "getUserPoints: caller lacks ACCESS_ROLE"
         );
-        uint256 usersPointAmount = 0;
-
-        for (uint256 i = 0; i <= uint256(type(Action).max); i++) {
-            Action action = Action(i);
-            uint256 completedAmount = userActionCounts[user][action];
-            usersPointAmount += completedAmount * pointsForAction[action];
-        }
-
-        return usersPointAmount;
+        return earnedPointBalances[user];
     }
 
     function addPendingAction(Action action, address user) public {
@@ -80,6 +83,7 @@ contract ReferralPoints is AccessControl {
             "completeAction: caller lacks ACCESS_ROLE"
         );
         userPendingActionCounts[user][action] += 1;
+        pendingPointBalances[user] += pointsForAction[action];
     }
 
     function completePendingAction(Action action, address user) public {
@@ -89,7 +93,32 @@ contract ReferralPoints is AccessControl {
         );
         if (userPendingActionCounts[user][action] > 0) {
             userPendingActionCounts[user][action] -= 1;
+            uint256 amount = pointsForAction[action];
+            pendingPointBalances[user] -= amount > pendingPointBalances[user]
+                ? pendingPointBalances[user]
+                : amount;
         }
+    }
+
+    function addPendingPoints(address user, uint256 amount) public {
+        require(
+            hasRole(ACCESS_ROLE, msg.sender),
+            "addPendingPoints: caller lacks ACCESS_ROLE"
+        );
+        require(user != address(0), "Cannot award the zero address");
+        pendingPointBalances[user] += amount;
+    }
+
+    function removePendingPoints(address user, uint256 amount) public {
+        require(
+            hasRole(ACCESS_ROLE, msg.sender),
+            "removePendingPoints: caller lacks ACCESS_ROLE"
+        );
+        require(
+            pendingPointBalances[user] >= amount,
+            "Pending point balance is too low"
+        );
+        pendingPointBalances[user] -= amount;
     }
 
     function getPendingUserPoints(
@@ -99,14 +128,6 @@ contract ReferralPoints is AccessControl {
             hasRole(ACCESS_ROLE, msg.sender),
             "getUserPoints: caller lacks ACCESS_ROLE"
         );
-        uint256 usersPointAmount = 0;
-
-        for (uint256 i = 0; i <= uint256(type(Action).max); i++) {
-            Action action = Action(i);
-            uint256 completedAmount = userPendingActionCounts[user][action];
-            usersPointAmount += completedAmount * pointsForAction[action];
-        }
-
-        return usersPointAmount;
+        return pendingPointBalances[user];
     }
 }

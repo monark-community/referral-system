@@ -5,6 +5,7 @@
 import { ReadReferralContractService } from "../readReferralContract.service.js";
 import { createWebSocketClient } from "../clients.js";
 import { PublicClient, ReadContractParameters } from "viem";
+import { contracts } from "../contracts.js";
 
 // Mock the createWebSocketClient so it returns a mocked publicClient
 jest.mock("../clients.js", () => ({
@@ -142,6 +143,14 @@ describe("ReadReferralContractService milestones and events", () => {
         args: ["0x123"],
       }),
     );
+  });
+
+  test("the packaged ReferralProgram ABI exposes PointsAdded to listeners", () => {
+    expect(
+      contracts.referral.abi.some(
+        (item) => item.type === "event" && item.name === "PointsAdded",
+      ),
+    ).toBe(true);
   });
 
   test("passes each PointsAdded log to the callback and skips logs without args", async () => {

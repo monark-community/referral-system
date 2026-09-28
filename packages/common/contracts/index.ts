@@ -619,4 +619,80 @@ export const RefferalABI = [
     stateMutability: "view",
     type: "function",
   },
+  {
+    inputs: [
+      { internalType: "uint16", name: "directBps", type: "uint16" },
+      { internalType: "uint16", name: "grandparentBps", type: "uint16" },
+    ],
+    name: "InvalidReferralSplit",
+    type: "error",
+  },
+  {
+    anonymous: false,
+    inputs: [
+      { indexed: true, internalType: "address", name: "participant", type: "address" },
+      { indexed: false, internalType: "uint256", name: "pool", type: "uint256" },
+      { indexed: true, internalType: "address", name: "directRecipient", type: "address" },
+      { indexed: false, internalType: "uint256", name: "directAmount", type: "uint256" },
+      { indexed: true, internalType: "address", name: "grandparentRecipient", type: "address" },
+      { indexed: false, internalType: "uint256", name: "grandparentAmount", type: "uint256" },
+      { indexed: false, internalType: "uint256", name: "unallocatedAmount", type: "uint256" },
+    ],
+    name: "ReferralPointsAllocated",
+    type: "event",
+  },
+  {
+    inputs: [],
+    name: "directReferralBps",
+    outputs: [{ internalType: "uint16", name: "", type: "uint16" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "grandparentReferralBps",
+    outputs: [{ internalType: "uint16", name: "", type: "uint16" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [
+      { internalType: "address", name: "participant", type: "address" },
+      { internalType: "uint256", name: "pointPool", type: "uint256" },
+    ],
+    name: "previewReferralPointAllocation",
+    outputs: [
+      {
+        components: [
+          { internalType: "address", name: "directRecipient", type: "address" },
+          { internalType: "address", name: "grandparentRecipient", type: "address" },
+          { internalType: "uint256", name: "directAmount", type: "uint256" },
+          { internalType: "uint256", name: "grandparentAmount", type: "uint256" },
+          { internalType: "uint256", name: "unallocatedAmount", type: "uint256" },
+        ],
+        internalType: "struct ReferralAllocation.Allocation",
+        name: "",
+        type: "tuple",
+      },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [
+      { internalType: "uint16", name: "directBps", type: "uint16" },
+      { internalType: "uint16", name: "grandparentBps", type: "uint16" },
+    ],
+    name: "setReferralSplit",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "viewReferralPointPool",
+    outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+    stateMutability: "view",
+    type: "function",
+  },
 ];

@@ -12,7 +12,8 @@ import {
   createWalletClient,
   http,
   zeroAddress,
-  stringToHex
+  stringToHex,
+  decodeEventLog
 } from "viem";
 import { mnemonicToAccount, privateKeyToAccount } from "viem/accounts";
 
@@ -119,11 +120,11 @@ test("User has a default milestone of zero", async () => {
     assert.equal(value, 0n);
 });
 
-test("points can be added to an account", async () => {
+test("single-referrer flow preserves results and emits listener-visible events", async () => {
 
     await addPointsForActions();
 
-    await addReferrerAndReferree();
+    const receipt = await addReferrerAndReferree();
 
     const referrerPoints = await publicClient.readContract({
         address: contractAddress,
@@ -142,6 +143,180 @@ test("points can be added to an account", async () => {
     });
 
     assert.equal(referreePoints, 50n); // referree has 50 points after referral
+
+    assert.equal(
+        await publicClient.readContract({
+            address: contractAddress,
+            abi,
+            functionName: "viewReferrer",
+            args: [referreeAccount.address],
+        }),
+        referrerAccount.address
+    );
+    assert.equal(
+        await publicClient.readContract({
+            address: contractAddress,
+            abi,
+            functionName: "getInviteStatus",
+            args: [stringToHex("invite0", { size: 32 })],
+        }),
+        1
+    );
+
+    // PointsAdded is declared in ReferralPoints.sol, so explicitly guard that it
+    // remains part of ReferralProgram's ABI and can be decoded by API listeners.
+    const pointsAddedAbi = abi.find(
+        (item) => item.type === "event" && item.name === "PointsAdded"
+    );
+    assert.ok(pointsAddedAbi, "ReferralProgram ABI must expose PointsAdded");
+
+    const pointsEvents = decodeReceiptEvents(receipt, "PointsAdded");
+    assert.equal(pointsEvents.length, 2);
+    assert.deepEqual(
+        pointsEvents.map(({ args }) => ({
+            user: args.user.toLowerCase(),
+            points: args.points,
+            isPending: args.isPending,
+        })),
+        [
+            {
+                user: referrerAccount.address.toLowerCase(),
+                points: 100n,
+                isPending: false,
+            },
+            {
+                user: referreeAccount.address.toLowerCase(),
+                points: 50n,
+                isPending: false,
+            },
+        ]
+    );
+
+    const allocationEvents = decodeReceiptEvents(
+        receipt,
+        "ReferralPointsAllocated"
+    );
+    assert.equal(allocationEvents.length, 1);
+    assert.deepEqual(
+        {
+            participant: allocationEvents[0].args.participant.toLowerCase(),
+            pool: allocationEvents[0].args.pool,
+            directRecipient:
+                allocationEvents[0].args.directRecipient.toLowerCase(),
+            directAmount: allocationEvents[0].args.directAmount,
+            grandparentRecipient:
+                allocationEvents[0].args.grandparentRecipient.toLowerCase(),
+            grandparentAmount: allocationEvents[0].args.grandparentAmount,
+            unallocatedAmount: allocationEvents[0].args.unallocatedAmount,
+        },
+        {
+            participant: referreeAccount.address.toLowerCase(),
+            pool: 100n,
+            directRecipient: referrerAccount.address.toLowerCase(),
+            directAmount: 100n,
+            grandparentRecipient: zeroAddress,
+            grandparentAmount: 0n,
+            unallocatedAmount: 0n,
+        }
+    );
+});
+
+test("configured referral points are calculated as one pool", async () => {
+    await addPointsForActions();
+
+    const pool = await publicClient.readContract({
+        address: contractAddress,
+        abi,
+        functionName: "viewReferralPointPool",
+    });
+
+    assert.equal(pool, 100n);
+});
+
+test("one point pool is conserved across direct and grandparent recipients", async () => {
+    await addPointsForActions();
+    await joinProgram(testAccounts[0], testWalletClients[0]);
+
+    // No grandparent: the direct referrer receives the full pool.
+    await acceptReferral(1, 0, "direct-only-points");
+    assert.equal(await viewPoints(testAccounts[0]), 100n);
+    assert.equal(await viewPoints(testAccounts[1]), 50n);
+
+    // Both levels: the same pool is split 80/20, plus the separate user bonus.
+    await acceptReferral(2, 1, "two-level-points");
+    assert.equal(await viewPoints(testAccounts[0]), 120n);
+    assert.equal(await viewPoints(testAccounts[1]), 130n);
+    assert.equal(await viewPoints(testAccounts[2]), 50n);
+});
+
+test("allocation preview covers no parent, direct-only, and two-level cases", async () => {
+    await joinProgram(testAccounts[0], testWalletClients[0]);
+    await acceptReferral(1, 0, "preview-direct");
+    await acceptReferral(2, 1, "preview-two-level");
+
+    const noParent = await previewPointAllocation(testAccounts[0], 101n);
+    assert.equal(noParent.directRecipient, zeroAddress);
+    assert.equal(noParent.grandparentRecipient, zeroAddress);
+    assert.equal(noParent.directAmount, 0n);
+    assert.equal(noParent.grandparentAmount, 0n);
+    assert.equal(noParent.unallocatedAmount, 101n);
+
+    const directOnly = await previewPointAllocation(testAccounts[1], 101n);
+    assert.equal(directOnly.directRecipient, testAccounts[0].address);
+    assert.equal(directOnly.directAmount, 101n);
+    assert.equal(directOnly.grandparentAmount, 0n);
+    assert.equal(directOnly.unallocatedAmount, 0n);
+
+    // The direct recipient receives the one-point integer division remainder.
+    const twoLevel = await previewPointAllocation(testAccounts[2], 101n);
+    assert.equal(twoLevel.directRecipient, testAccounts[1].address);
+    assert.equal(twoLevel.grandparentRecipient, testAccounts[0].address);
+    assert.equal(twoLevel.directAmount, 81n);
+    assert.equal(twoLevel.grandparentAmount, 20n);
+    assert.equal(twoLevel.directAmount + twoLevel.grandparentAmount, 101n);
+});
+
+test("point allocation split is configurable and must total 100 percent", async () => {
+    await writeProgramContract(
+        referrerAccount,
+        referrerWalletClient,
+        "setReferralSplit",
+        [7_000, 3_000]
+    );
+    await joinProgram(testAccounts[0], testWalletClients[0]);
+    await acceptReferral(1, 0, "custom-direct");
+    await acceptReferral(2, 1, "custom-two-level");
+
+    const allocation = await previewPointAllocation(testAccounts[2], 101n);
+    assert.equal(allocation.directAmount, 71n);
+    assert.equal(allocation.grandparentAmount, 30n);
+
+    await assert.rejects(
+        writeProgramContract(
+            referrerAccount,
+            referrerWalletClient,
+            "setReferralSplit",
+            [8_000, 1_000]
+        )
+    );
+});
+
+test("changing the point-pool configuration does not reprice prior awards", async () => {
+    await addPointsForActions();
+    await joinProgram(testAccounts[0], testWalletClients[0]);
+    await acceptReferral(1, 0, "first-priced-referral");
+    assert.equal(await viewPoints(testAccounts[0]), 100n);
+
+    await writeProgramContract(
+        referrerAccount,
+        referrerWalletClient,
+        "setPointsForAction",
+        [0, 200]
+    );
+    assert.equal(await viewPoints(testAccounts[0]), 100n);
+
+    await acceptReferral(2, 0, "second-priced-referral");
+    assert.equal(await viewPoints(testAccounts[0]), 300n);
 });
 
 test("accepting invite adds a referrer-referree relationship", async () => {
@@ -424,7 +599,7 @@ async function writeProgramContract(account, walletClient, functionName, args = 
     });
 
     const hash = await walletClient.writeContract(request);
-    await publicClient.waitForTransactionReceipt({ hash });
+    return publicClient.waitForTransactionReceipt({ hash });
 }
 
 async function joinProgram(account, walletClient) {
@@ -460,6 +635,39 @@ function referralLevelsByAddress(referrals) {
     ]));
 }
 
+function decodeReceiptEvents(receipt, eventName) {
+    return receipt.logs.flatMap((log) => {
+        try {
+            const decoded = decodeEventLog({
+                abi,
+                data: log.data,
+                topics: log.topics,
+            });
+            return decoded.eventName === eventName ? [decoded] : [];
+        } catch {
+            return [];
+        }
+    });
+}
+
+async function viewPoints(account) {
+    return publicClient.readContract({
+        address: contractAddress,
+        abi,
+        functionName: "viewPoints",
+        args: [account.address],
+    });
+}
+
+async function previewPointAllocation(account, pointPool) {
+    return publicClient.readContract({
+        address: contractAddress,
+        abi,
+        functionName: "previewReferralPointAllocation",
+        args: [account.address, pointPool],
+    });
+}
+
 async function addReferrerAndReferree(){
     let request;
 
@@ -482,7 +690,7 @@ async function addReferrerAndReferree(){
         args: [referrerAccount.address, stringToHex("invite0", {size: 32})],
     }))
     hash = await referreeWalletClient.writeContract(request)
-    await publicClient.waitForTransactionReceipt({ hash });
+    return publicClient.waitForTransactionReceipt({ hash });
 
 }
 
