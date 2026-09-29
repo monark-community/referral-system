@@ -5,6 +5,7 @@
 import { ReadReferralContractService } from "../readReferralContract.service.js";
 import { createWebSocketClient } from "../clients.js";
 import { PublicClient, ReadContractParameters } from "viem";
+import { contracts } from "../contracts.js";
 
 // Mock the createWebSocketClient so it returns a mocked publicClient
 jest.mock("../clients.js", () => ({
@@ -31,6 +32,18 @@ describe("ReadReferralContractService", () => {
           if (args.functionName === "viewReferrer") return "0xxyz";
           if (args.functionName === "viewAncestors") {
             return ["0xparent", "0xgrandparent"];
+          }
+          if (args.functionName === "viewReferralPointPool") return 100n;
+          if (args.functionName === "directReferralBps") return 8000;
+          if (args.functionName === "grandparentReferralBps") return 2000;
+          if (args.functionName === "previewReferralPointAllocation") {
+            return {
+              directRecipient: "0xparent",
+              grandparentRecipient: "0xgrandparent",
+              directAmount: 80n,
+              grandparentAmount: 20n,
+              unallocatedAmount: 0n,
+            };
           }
           throw new Error(`Unexpected function: ${args.functionName}`);
         },
@@ -144,6 +157,56 @@ describe("ReadReferralContractService milestones and events", () => {
     );
   });
 
+  test.each([
+    ["getReferralPointPool", "viewReferralPointPool", 100n],
+    ["getDirectReferralBps", "directReferralBps", 8000],
+    ["getGrandparentReferralBps", "grandparentReferralBps", 2000],
+  ] as const)("%s directly returns the %s contract read", async (method, functionName, expected) => {
+    publicClient.readContract.mockResolvedValueOnce(expected);
+    const result = await service[method]();
+
+    expect(result).toBe(expected);
+    expect(publicClient.readContract).toHaveBeenCalledWith(
+      expect.objectContaining({ functionName }),
+    );
+  });
+
+  test("returns the direct allocation preview without reshaping it", async () => {
+    const expected = {
+      directRecipient: "0xparent",
+      grandparentRecipient: "0xgrandparent",
+      directAmount: 80n,
+      grandparentAmount: 20n,
+      unallocatedAmount: 0n,
+    };
+    publicClient.readContract.mockResolvedValueOnce(expected);
+    const result = await service.previewReferralPointAllocation("0x123", 100n);
+
+    expect(result).toBe(expected);
+    expect(publicClient.readContract).toHaveBeenCalledWith(
+      expect.objectContaining({
+        functionName: "previewReferralPointAllocation",
+        args: ["0x123", 100n],
+      }),
+    );
+  });
+
+  test("the packaged ReferralProgram ABI exposes PointsAdded to listeners", () => {
+    expect(
+      contracts.referral.abi.some(
+        (item) => item.type === "event" && item.name === "PointsAdded",
+      ),
+    ).toBe(true);
+  });
+
+  test("the packaged ABI exposes ReferralPointsAllocated to listeners", () => {
+    expect(
+      contracts.referral.abi.some(
+        (item) => item.type === "event" && item.name === "ReferralPointsAllocated",
+      ),
+    ).toBe(true);
+  });
+
   test("passes each PointsAdded log to the callback and skips logs without args", async () => {
     const callback = jest.fn();
     await service.listenToPointsAddedEvent(callback, 5000);
@@ -190,9 +253,54 @@ describe("ReadReferralContractService milestones and events", () => {
     });
   });
 
+  test("passes each ReferralPointsAllocated log to the callback", async () => {
+    const callback = jest.fn();
+    await service.listenToReferralPointsAllocatedEvent(callback, 5000);
+
+    expect(publicClient.watchContractEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventName: "ReferralPointsAllocated",
+        pollingInterval: 5000,
+      }),
+    );
+
+    registeredOnLogs()([
+      {
+        args: {
+          participant: "0xparticipant",
+          pool: 100n,
+          directRecipient: "0xdirect",
+          directAmount: 80n,
+          grandparentRecipient: "0xgrandparent",
+          grandparentAmount: 20n,
+          unallocatedAmount: 0n,
+        },
+        blockNumber: 11n,
+        logIndex: 3,
+        transactionHash: "0xtx",
+      },
+      { blockNumber: 12n, logIndex: 0 },
+    ]);
+
+    expect(callback).toHaveBeenCalledTimes(1);
+    expect(callback).toHaveBeenCalledWith({
+      participant: "0xparticipant",
+      pool: 100n,
+      directRecipient: "0xdirect",
+      directAmount: 80n,
+      grandparentRecipient: "0xgrandparent",
+      grandparentAmount: 20n,
+      unallocatedAmount: 0n,
+      blockNumber: 11n,
+      logIndex: 3,
+      transactionHash: "0xtx",
+    });
+  });
+
   test("polls every 10 seconds when no interval is given", async () => {
     await service.listenToPointsAddedEvent(jest.fn());
     await service.listenToInviteChangedEvent(jest.fn());
+    await service.listenToReferralPointsAllocatedEvent(jest.fn());
 
     expect(publicClient.watchContractEvent).toHaveBeenNthCalledWith(
       1,
@@ -202,11 +310,16 @@ describe("ReadReferralContractService milestones and events", () => {
       2,
       expect.objectContaining({ pollingInterval: 10000 }),
     );
+    expect(publicClient.watchContractEvent).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({ pollingInterval: 10000 }),
+    );
   });
 
   test.each([
     ["getPointsAddedEvents", "PointsAdded"],
     ["getInviteChangedEvents", "InviteChanged"],
+    ["getReferralPointsAllocatedEvents", "ReferralPointsAllocated"],
   ] as const)("%s fetches past %s events in a block range", async (method, eventName) => {
     const events = [{ blockNumber: 5n }];
     publicClient.getContractEvents.mockResolvedValue(events);
@@ -237,9 +350,19 @@ describe("ReadReferralContractService milestones and events", () => {
     expect(unwatch).toHaveBeenCalledTimes(1);
   });
 
+  test("stops the ReferralPointsAllocated listener only once", async () => {
+    await service.listenToReferralPointsAllocatedEvent(jest.fn());
+
+    await service.stopListeningToReferralPointsAllocatedEvent();
+    await service.stopListeningToReferralPointsAllocatedEvent();
+
+    expect(unwatch).toHaveBeenCalledTimes(1);
+  });
+
   test("stopping before listening does nothing", async () => {
     await service.stopListeningToPointsAddedEvent();
     await service.stopListeningToInviteChangedEvent();
+    await service.stopListeningToReferralPointsAllocatedEvent();
 
     expect(unwatch).not.toHaveBeenCalled();
   });

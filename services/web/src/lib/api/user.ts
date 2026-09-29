@@ -36,6 +36,26 @@ export interface GetInvitesResponse {
   invites: Invite[];
 }
 
+export interface ReferralReward {
+  id: string;
+  transactionHash: string;
+  blockNumber: string;
+  logIndex: number;
+  participant: {
+    walletAddress: string;
+    name: string | null;
+  };
+  referralLevel: 1 | 2;
+  points: number;
+  pointPool: number;
+  unallocatedPoints: number;
+  observedAt: string;
+}
+
+export interface ReferralRewardHistoryResponse {
+  rewardHistory: ReferralReward[];
+}
+
 export interface PrivateInviteRequest {
   description: string | null;
 }
@@ -83,6 +103,13 @@ export async function sendVerificationEmail(): Promise<{
  */
 export async function getInvites(): Promise<GetInvitesResponse> {
   return apiClient<GetInvitesResponse>("/users/referrals");
+}
+
+/**
+ * Get direct-child and grandchild point-allocation history.
+ */
+export async function getReferralRewardHistory(): Promise<ReferralRewardHistoryResponse> {
+  return apiClient<ReferralRewardHistoryResponse>("/users/referral-rewards");
 }
 
 /**

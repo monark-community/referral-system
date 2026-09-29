@@ -16,6 +16,7 @@ import { bytes32ToUuid } from "@reffinity/blockchain-connector/uuidBytesConverte
 export class BlockchainListenerService {
   private isListeningToPointsAdded: boolean = false;
   private isListeningToInviteChanged: boolean = false;
+  private isListeningToReferralPointsAllocated: boolean = false;
   private publicClient: any = createClient(
     process.env.CHAIN_TYPE as "localhost" | "sepolia",
   ).publicClient;
@@ -31,10 +32,83 @@ export class BlockchainListenerService {
       await this.syncToChain();
       await this.startPointsAddedListener();
       await this.startInviteChangedListener();
+      await this.startReferralPointsAllocatedListener();
 
       console.log("Blockchain listener initialized successfully.");
     } catch (error) {
       console.error("Error initializing blockchain listener:", error);
+    }
+  }
+
+  private async persistReferralPointAllocation(event: {
+    participant: string;
+    pool: bigint;
+    directRecipient: string;
+    directAmount: bigint;
+    grandparentRecipient: string;
+    grandparentAmount: bigint;
+    unallocatedAmount: bigint;
+    blockNumber: bigint;
+    logIndex: number;
+    transactionHash: string;
+  }): Promise<void> {
+    const data = {
+      transactionHash: event.transactionHash.toLowerCase(),
+      logIndex: event.logIndex,
+      blockNumber: event.blockNumber,
+      participantWalletAddress: event.participant.toLowerCase(),
+      pool: Number(event.pool),
+      directRecipientWalletAddress: event.directRecipient.toLowerCase(),
+      directAmount: Number(event.directAmount),
+      grandparentRecipientWalletAddress:
+        event.grandparentRecipient.toLowerCase(),
+      grandparentAmount: Number(event.grandparentAmount),
+      unallocatedAmount: Number(event.unallocatedAmount),
+    };
+
+    await prisma.referralPointAllocation.upsert({
+      where: {
+        transactionHash_logIndex: {
+          transactionHash: data.transactionHash,
+          logIndex: data.logIndex,
+        },
+      },
+      update: data,
+      create: data,
+    });
+  }
+
+  private async startReferralPointsAllocatedListener(): Promise<void> {
+    if (this.isListeningToReferralPointsAllocated) {
+      return;
+    }
+
+    try {
+      await this.readReferralContractService.listenToReferralPointsAllocatedEvent(
+        async (event) => {
+          await this.persistReferralPointAllocation(event);
+          await prisma.chainSyncState.upsert({
+            where: { id: 1 },
+            update: {
+              lastReferralAllocationBlock: event.blockNumber,
+              lastReferralAllocationLogIndex: event.logIndex,
+            },
+            create: {
+              id: 1,
+              lastProcessedBlock: 0n,
+              lastProcessedLogIndex: 0,
+              lastReferralAllocationBlock: event.blockNumber,
+              lastReferralAllocationLogIndex: event.logIndex,
+            },
+          });
+        },
+        10000,
+      );
+      this.isListeningToReferralPointsAllocated = true;
+    } catch (error) {
+      throw new Error(
+        `Could not start blockchain listener: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 
@@ -210,6 +284,8 @@ export class BlockchainListenerService {
     const state = await prisma.chainSyncState.findUnique({ where: { id: 1 } });
     const latestBlock = await this.publicClient.getBlockNumber();
 
+    await this.syncReferralPointAllocations(state, latestBlock);
+
     const fromBlock: bigint = state?.lastProcessedBlock ?? 0n;
     const fromLogIndex: number = state?.lastProcessedLogIndex ?? 0;
 
@@ -347,6 +423,87 @@ export class BlockchainListenerService {
     console.log("Catch-up complete.");
   }
 
+  private async syncReferralPointAllocations(
+    state: {
+      lastProcessedBlock: bigint;
+      lastProcessedLogIndex: number;
+      lastReferralAllocationBlock?: bigint;
+      lastReferralAllocationLogIndex?: number;
+    } | null,
+    latestBlock: bigint,
+  ): Promise<void> {
+    const fromBlock = state?.lastReferralAllocationBlock ?? 0n;
+    const fromLogIndex = state?.lastReferralAllocationLogIndex ?? -1;
+
+    if (fromBlock >= latestBlock) {
+      return;
+    }
+
+    const events = (await this.readReferralContractService.getReferralPointsAllocatedEvents(
+      {
+        fromBlock,
+        toBlock: latestBlock,
+      },
+    )) as Array<{
+      blockNumber: bigint;
+      logIndex: number;
+      transactionHash: string;
+      args: {
+        participant: string;
+        pool: bigint;
+        directRecipient: string;
+        directAmount: bigint;
+        grandparentRecipient: string;
+        grandparentAmount: bigint;
+        unallocatedAmount: bigint;
+      };
+    }>;
+
+    let lastProcessedBlock = latestBlock;
+    let lastProcessedLogIndex = -1;
+    for (const event of events.sort((a, b) => {
+      if (a.blockNumber < b.blockNumber) return -1;
+      if (a.blockNumber > b.blockNumber) return 1;
+      return a.logIndex - b.logIndex;
+    })) {
+      if (
+        event.blockNumber < fromBlock ||
+        (event.blockNumber === fromBlock && event.logIndex <= fromLogIndex)
+      ) {
+        continue;
+      }
+
+      await this.persistReferralPointAllocation({
+        ...event.args,
+        blockNumber: event.blockNumber,
+        logIndex: event.logIndex,
+        transactionHash: event.transactionHash,
+      });
+      lastProcessedBlock = event.blockNumber;
+      lastProcessedLogIndex = event.logIndex;
+    }
+
+    if (lastProcessedBlock < latestBlock) {
+      lastProcessedBlock = latestBlock;
+      lastProcessedLogIndex = -1;
+    }
+
+    await prisma.chainSyncState.upsert({
+      where: { id: 1 },
+      update: {
+        lastReferralAllocationBlock: lastProcessedBlock,
+        lastReferralAllocationLogIndex: lastProcessedLogIndex,
+      },
+      create: {
+        id: 1,
+        lastProcessedBlock: state?.lastProcessedBlock ?? 0n,
+        lastProcessedLogIndex: state?.lastProcessedLogIndex ?? 0,
+        lastReferralAllocationBlock: lastProcessedBlock,
+        lastReferralAllocationLogIndex: lastProcessedLogIndex,
+      },
+    });
+  }
+
   stop(): void {
     if (this.isListeningToPointsAdded) {
       this.readReferralContractService.stopListeningToPointsAddedEvent();
@@ -356,6 +513,10 @@ export class BlockchainListenerService {
     if (this.isListeningToInviteChanged) {
       this.readReferralContractService.stopListeningToInviteChangedEvent();
       this.isListeningToInviteChanged = false;
+    }
+    if (this.isListeningToReferralPointsAllocated) {
+      this.readReferralContractService.stopListeningToReferralPointsAllocatedEvent();
+      this.isListeningToReferralPointsAllocated = false;
     }
   }
 }

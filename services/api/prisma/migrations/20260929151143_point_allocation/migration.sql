@@ -1,0 +1,2 @@
+-- RenameIndex
+ALTER INDEX "referral_point_allocations_grandparent_recipient_wallet_address" RENAME TO "referral_point_allocations_grandparent_recipient_wallet_add_idx";

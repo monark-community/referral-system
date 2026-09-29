@@ -3,7 +3,7 @@
 // - Listeners are used to lighten the load of calling directly to the chain and have the DB as an intermediary, points and invites are the most common calls and have listeners
 
 import { contracts } from "./contracts.js";
-import { Address, WatchContractEventReturnType } from "viem";
+import { Address, Hash, WatchContractEventReturnType } from "viem";
 
 export type ReferralAncestors = readonly [parent: Address, grandparent: Address];
 
@@ -16,6 +16,7 @@ enum InviteStatus {
 export class ReadReferralContractService {
   private unwatchPointsAddedEvent: WatchContractEventReturnType | null = null;
   private unwatchInviteChangedEvent: WatchContractEventReturnType | null = null;
+  private unwatchReferralPointsAllocatedEvent: WatchContractEventReturnType | null = null;
 
   constructor(private clients: any) {}
 
@@ -63,6 +64,42 @@ export class ReadReferralContractService {
       abi: contracts.referral.abi,
       functionName: "viewPoints",
       args: [userAddress],
+    });
+  }
+
+  async getReferralPointPool() {
+    return this.clients.publicClient.readContract({
+      address: contracts.referral.address.local,
+      abi: contracts.referral.abi,
+      functionName: "viewReferralPointPool",
+    });
+  }
+
+  async getDirectReferralBps() {
+    return this.clients.publicClient.readContract({
+      address: contracts.referral.address.local,
+      abi: contracts.referral.abi,
+      functionName: "directReferralBps",
+    });
+  }
+
+  async getGrandparentReferralBps() {
+    return this.clients.publicClient.readContract({
+      address: contracts.referral.address.local,
+      abi: contracts.referral.abi,
+      functionName: "grandparentReferralBps",
+    });
+  }
+
+  async previewReferralPointAllocation(
+    userAddress: Address,
+    pointPool: bigint,
+  ) {
+    return this.clients.publicClient.readContract({
+      address: contracts.referral.address.local,
+      abi: contracts.referral.abi,
+      functionName: "previewReferralPointAllocation",
+      args: [userAddress, pointPool],
     });
   }
 
@@ -135,6 +172,90 @@ export class ReadReferralContractService {
     if (this.unwatchPointsAddedEvent) {
       this.unwatchPointsAddedEvent();
       this.unwatchPointsAddedEvent = null;
+    }
+  }
+
+  async listenToReferralPointsAllocatedEvent(
+    callback: (eventData: {
+      participant: Address;
+      pool: bigint;
+      directRecipient: Address;
+      directAmount: bigint;
+      grandparentRecipient: Address;
+      grandparentAmount: bigint;
+      unallocatedAmount: bigint;
+      blockNumber: bigint;
+      logIndex: number;
+      transactionHash: Hash;
+    }) => void,
+    pollingInterval?: number,
+  ) {
+    const unwatch = this.clients.publicClient.watchContractEvent({
+      address: contracts.referral.address.local,
+      abi: contracts.referral.abi,
+      eventName: "ReferralPointsAllocated",
+      pollingInterval: pollingInterval ? pollingInterval : 10000,
+      onLogs: (logs: any) => {
+        for (const log of logs) {
+          if (!log.args) continue;
+
+          const {
+            participant,
+            pool,
+            directRecipient,
+            directAmount,
+            grandparentRecipient,
+            grandparentAmount,
+            unallocatedAmount,
+          } = log.args as {
+            participant: Address;
+            pool: bigint;
+            directRecipient: Address;
+            directAmount: bigint;
+            grandparentRecipient: Address;
+            grandparentAmount: bigint;
+            unallocatedAmount: bigint;
+          };
+
+          callback({
+            participant,
+            pool,
+            directRecipient,
+            directAmount,
+            grandparentRecipient,
+            grandparentAmount,
+            unallocatedAmount,
+            blockNumber: log.blockNumber!,
+            logIndex: log.logIndex!,
+            transactionHash: log.transactionHash!,
+          });
+        }
+      },
+    });
+
+    this.unwatchReferralPointsAllocatedEvent = unwatch;
+  }
+
+  async getReferralPointsAllocatedEvents({
+    fromBlock,
+    toBlock,
+  }: {
+    fromBlock: bigint;
+    toBlock: bigint;
+  }) {
+    return this.clients.publicClient.getContractEvents({
+      address: contracts.referral.address.local,
+      abi: contracts.referral.abi,
+      eventName: "ReferralPointsAllocated",
+      fromBlock,
+      toBlock,
+    });
+  }
+
+  async stopListeningToReferralPointsAllocatedEvent() {
+    if (this.unwatchReferralPointsAllocatedEvent) {
+      this.unwatchReferralPointsAllocatedEvent();
+      this.unwatchReferralPointsAllocatedEvent = null;
     }
   }
 

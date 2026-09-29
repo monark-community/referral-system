@@ -406,6 +406,91 @@ export async function getInvites(req: Request, res: Response): Promise<void> {
   }
 }
 
+/**
+ * GET /api/users/referral-rewards
+ * Return the current user's direct and grandparent reward interactions.
+ */
+export async function getReferralRewardHistory(
+  req: Request,
+  res: Response,
+): Promise<void> {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: "Not authenticated" });
+      return;
+    }
+
+    const walletAddress = req.user.walletAddress.toLowerCase();
+    const allocations = await prisma.referralPointAllocation.findMany({
+      where: {
+        OR: [
+          {
+            directRecipientWalletAddress: walletAddress,
+            directAmount: { gt: 0 },
+          },
+          {
+            grandparentRecipientWalletAddress: walletAddress,
+            grandparentAmount: { gt: 0 },
+          },
+        ],
+      },
+      orderBy: [{ blockNumber: "desc" }, { logIndex: "desc" }],
+    });
+
+    const participantWallets = [
+      ...new Set(
+        allocations.map((allocation) =>
+          allocation.participantWalletAddress.toLowerCase(),
+        ),
+      ),
+    ];
+    const participants = await prisma.user.findMany({
+      where: { walletAddress: { in: participantWallets } },
+      select: { walletAddress: true, name: true },
+    });
+    const participantByWallet = new Map(
+      participants.map((participant) => [
+        participant.walletAddress.toLowerCase(),
+        participant,
+      ]),
+    );
+
+    const rewardHistory = allocations.map((allocation) => {
+      const isGrandparent =
+        allocation.grandparentRecipientWalletAddress === walletAddress &&
+        allocation.grandparentAmount > 0;
+      const participantWalletAddress =
+        allocation.participantWalletAddress.toLowerCase();
+      const participant = participantByWallet.get(participantWalletAddress);
+
+      return {
+        id: allocation.id,
+        transactionHash: allocation.transactionHash,
+        blockNumber: allocation.blockNumber.toString(),
+        logIndex: allocation.logIndex,
+        participant: participant
+          ? {
+              walletAddress: participant.walletAddress,
+              name: participant.name,
+            }
+          : { walletAddress: participantWalletAddress, name: null },
+        referralLevel: isGrandparent ? 2 : 1,
+        points: isGrandparent
+          ? allocation.grandparentAmount
+          : allocation.directAmount,
+        pointPool: allocation.pool,
+        unallocatedPoints: allocation.unallocatedAmount,
+        observedAt: allocation.observedAt,
+      };
+    });
+
+    res.json({ rewardHistory });
+  } catch (error) {
+    console.error("Get referral reward history error:", error);
+    res.status(500).json({ error: "Failed to get referral reward history" });
+  }
+}
+
 export async function createPrivateInvite(
   req: Request,
   res: Response,

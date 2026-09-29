@@ -10,7 +10,8 @@ import { generateJWT } from "@/services/auth.service.js";
 
 jest.mock("@/lib/prisma", () => ({
   prisma: {
-    user: { findUnique: jest.fn(), findFirst: jest.fn(), update: jest.fn() },
+    user: { findUnique: jest.fn(), findFirst: jest.fn(), findMany: jest.fn(), update: jest.fn() },
+    referralPointAllocation: { findMany: jest.fn() },
     milestoneTier: { findMany: jest.fn() },
   },
 }));
@@ -43,6 +44,8 @@ describe("API routes", () => {
     db.user.findUnique.mockReset().mockResolvedValue(user);
     db.user.findFirst.mockReset();
     db.user.update.mockReset();
+    db.user.findMany.mockReset().mockResolvedValue([]);
+    db.referralPointAllocation.findMany.mockReset().mockResolvedValue([]);
     db.milestoneTier.findMany.mockReset();
   });
 
@@ -100,6 +103,7 @@ describe("API routes", () => {
       ["post", "/api/users/verify-email/send"],
       ["post", "/api/users/accept-terms"],
       ["get", "/api/users/referrals"],
+      ["get", "/api/users/referral-rewards"],
       ["post", "/api/users/disable"],
       ["post", "/api/users/enable"],
       ["post", "/api/users/referrals/private"],

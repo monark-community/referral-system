@@ -89,9 +89,34 @@ model Referral {
 
 //Used for the listener service to determine the last block updated_at
 model ChainSyncState {
-  id                    Int    @id @default(1)
-  lastProcessedBlock    BigInt
-  lastProcessedLogIndex Int
+  id                                 Int    @id @default(1)
+  lastProcessedBlock                 BigInt
+  lastProcessedLogIndex              Int
+  lastReferralAllocationBlock        BigInt @default(0)
+  lastReferralAllocationLogIndex     Int    @default(-1)
+}
+
+// Immutable projection of ReferralPointsAllocated events. Addresses are kept as
+// chain identifiers so event history can be recorded even before a User row exists.
+model ReferralPointAllocation {
+  id                                  String   @id @default(uuid())
+  transactionHash                     String   @map("transaction_hash")
+  logIndex                            Int      @map("log_index")
+  blockNumber                         BigInt   @map("block_number")
+  participantWalletAddress            String   @map("participant_wallet_address")
+  pool                                Int
+  directRecipientWalletAddress        String   @map("direct_recipient_wallet_address")
+  directAmount                        Int      @map("direct_amount")
+  grandparentRecipientWalletAddress   String   @map("grandparent_recipient_wallet_address")
+  grandparentAmount                   Int      @map("grandparent_amount")
+  unallocatedAmount                   Int      @map("unallocated_amount")
+  observedAt                          DateTime @default(now()) @map("observed_at")
+
+  @@unique([transactionHash, logIndex])
+  @@index([participantWalletAddress])
+  @@index([directRecipientWalletAddress])
+  @@index([grandparentRecipientWalletAddress])
+  @@map("referral_point_allocations")
 }
 
 // Milestone tier definitions
