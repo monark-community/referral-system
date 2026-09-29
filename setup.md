@@ -41,7 +41,7 @@ npm run build:packages
 npm run db:generate
 npm run db:migrate
 
-# 5. Start development servers
+
 npm run dev                  # Starts both API (3001) and Web (3000)
 ```
 
