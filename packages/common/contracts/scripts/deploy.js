@@ -68,6 +68,22 @@ async function main() {
     var hash = await walletClient.writeContract(request)
     await publicClient.waitForTransactionReceipt({ hash });
 
+    // Set the global two-level referral pool split.
+    const referralSplitBps = {
+        direct: 8000,
+        grandparent: 2000,
+    };
+    ({ request } = await publicClient.simulateContract({
+        account: account,
+        address: receipt.contractAddress,
+        abi: artifact.abi,
+        functionName: "setReferralSplit",
+        args: [referralSplitBps.direct, referralSplitBps.grandparent],
+    }));
+    hash = await walletClient.writeContract(request);
+    await publicClient.waitForTransactionReceipt({ hash });
+    console.log("Referral split set:", referralSplitBps);
+
     // Set up milestone thresholds on-chain
     const milestoneThresholds = [500, 1500, 5000, 10000];
     for (const threshold of milestoneThresholds) {

@@ -8,6 +8,7 @@ describe("WriteReferralContractHelper", () => {
     ["acceptInviteContext", "acceptInvite"],
     ["joinProgramContext", "joinProgram"],
     ["setPointsForActionContext", "setPointsForAction"],
+    ["setReferralSplitContext", "setReferralSplit"],
     ["addMilestoneContext", "addNewMilestone"],
     ["createInviteContext", "createInvite"],
   ] as const)("%s targets %s on the local referral contract", async (method, functionName) => {

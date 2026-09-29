@@ -8,6 +8,7 @@ import {
   verifyEmail,
   validateReferralCode,
   getInvites,
+  getReferralRewardHistory,
   acceptTerms,
   disableAccount,
   enableAccount,
@@ -37,6 +38,9 @@ router.get('/referral/:code', validateReferralCode);
 router.get('/verify-email/:token', verifyEmail);
 
 router.get('/referrals', authMiddleware, getInvites);
+
+// GET /api/users/referral-rewards - Get direct and grandparent reward history
+router.get('/referral-rewards', authMiddleware, getReferralRewardHistory);
 
 // POST /api/users/disable - Disable account
 router.post('/disable', authMiddleware, disableAccount);

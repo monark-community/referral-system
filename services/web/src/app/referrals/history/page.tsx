@@ -1,4 +1,4 @@
-// Purpose: Invites history page - lists all referral invites with search and filter controls
+// Purpose: Referral history page - lists invite states and direct/grandchild rewards
 // Notes:
 // - Invites are grouped by status (Pending, Earned, Cancelled) and filterable via tabs
 // - Only verified invites are shown to the user
@@ -11,8 +11,8 @@ import { Search } from "lucide-react";
 import { ResponsiveShell } from "@/components/layout/responsive-shell";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { useInvites } from "@/lib/api/hooks";
-import type { Invite } from "@/lib/api/user";
+import { useInvites, useReferralRewardHistory } from "@/lib/api/hooks";
+import type { Invite, ReferralReward } from "@/lib/api/user";
 
 enum InviteStatus {
     Pending,
@@ -76,11 +76,50 @@ function InviteItem({ invite }: { invite: Invite }) {
   );
 }
 
+function RewardItem({ reward }: { reward: ReferralReward }) {
+  const displayName =
+    reward.participant.name ||
+    `${reward.participant.walletAddress.slice(0, 6)}...${reward.participant.walletAddress.slice(-4)}`;
+  const relationship = reward.referralLevel === 2 ? "Grandchild" : "Direct referral";
+
+  return (
+    <div className="flex items-center gap-3 p-3 rounded-xl hover:bg-secondary/30 transition-colors duration-150">
+      <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center flex-shrink-0">
+        <span className="text-sm font-medium text-muted-foreground">
+          {displayName.charAt(0).toUpperCase()}
+        </span>
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-sm font-medium text-foreground truncate">
+            {displayName}
+          </span>
+          <Badge variant="success" className="text-xs tabular-nums">
+            {reward.points.toLocaleString().replace(/,/g, "'")} Points Earned
+          </Badge>
+        </div>
+        <div className="flex items-center gap-2 mt-1">
+          <Badge variant="secondary" className="text-[10px]">
+            Level {reward.referralLevel}
+          </Badge>
+          <span className="text-xs text-muted-foreground">
+            {relationship} · {new Date(reward.observedAt).toLocaleDateString()}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function InvitesHistoryPage() {
   const router = useRouter();
   const { data: invitesData, isLoading } = useInvites();
+  const { data: rewardsData, isLoading: rewardsLoading } =
+    useReferralRewardHistory();
   const inviteData = invitesData?.invites ?? null;
-  const loading = isLoading && !invitesData;
+  const rewardData = rewardsData?.rewardHistory ?? [];
+  const loading =
+    (isLoading && !invitesData) || (rewardsLoading && !rewardsData);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<number>(-1);
@@ -101,6 +140,35 @@ export default function InvitesHistoryPage() {
     },
     {} as Record<number, Invite[]>
   );
+
+  const filteredRewards = rewardData.filter((reward) => {
+    const searchValue = searchQuery.toLowerCase();
+    const matchesSearch =
+      searchQuery === "" ||
+      reward.participant.name?.toLowerCase().includes(searchValue) ||
+      reward.participant.walletAddress.toLowerCase().includes(searchValue);
+    const matchesFilter =
+      activeFilter === -1 || activeFilter === InviteStatus.Accepted;
+    return matchesSearch && matchesFilter;
+  });
+
+  const directRewardWallets = new Set(
+    rewardData
+      .filter((reward) => reward.referralLevel === 1)
+      .map((reward) => reward.participant.walletAddress.toLowerCase()),
+  );
+  const legacyEarnedInvites =
+    groupedInvites?.[InviteStatus.Accepted]?.filter(
+      (invite) =>
+        !invite.referee?.walletAddress ||
+        !directRewardWallets.has(invite.referee.walletAddress.toLowerCase()),
+    ) ?? [];
+  const hasEarnedHistory =
+    filteredRewards.length > 0 || legacyEarnedInvites.length > 0;
+  const hasVisibleHistory =
+    loading ||
+    hasEarnedHistory ||
+    Object.values(groupedInvites ?? {}).some((invites) => invites.length > 0);
 
   return (
     <ResponsiveShell
@@ -155,18 +223,21 @@ export default function InvitesHistoryPage() {
             </section>
           )}
 
-          {groupedInvites?.[InviteStatus.Accepted] && groupedInvites[InviteStatus.Accepted].length > 0 && (
+          {hasEarnedHistory && (
             <section>
               <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">Earned</h3>
               <div className="rounded-xl bg-card/50 surface-card divide-y divide-border/30">
-                {groupedInvites[InviteStatus.Accepted].map((invite) => (
+                {filteredRewards.map((reward) => (
+                  <RewardItem key={`${reward.transactionHash}-${reward.logIndex}`} reward={reward} />
+                ))}
+                {legacyEarnedInvites.map((invite) => (
                   <InviteItem key={invite.id} invite={invite} />
                 ))}
               </div>
             </section>
           )}
 
-          {filteredInvites?.length === 0 && (
+          {!hasVisibleHistory && (
             <div className="text-center py-12">
               <p className="text-muted-foreground">No invites found</p>
             </div>

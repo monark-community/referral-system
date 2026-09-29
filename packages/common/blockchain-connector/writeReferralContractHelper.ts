@@ -11,7 +11,7 @@ export class WriteReferralContractHelper {
       abi: contracts.referral.abi,
       address: contracts.referral.address.local,
       functionName: "acceptInvite",
-    };
+    } as const;
   }
 
   static async joinProgramContext() {
@@ -19,7 +19,7 @@ export class WriteReferralContractHelper {
       abi: contracts.referral.abi,
       address: contracts.referral.address.local,
       functionName: "joinProgram",
-    };
+    } as const;
   }
 
   static async setPointsForActionContext() {
@@ -27,7 +27,15 @@ export class WriteReferralContractHelper {
       abi: contracts.referral.abi,
       address: contracts.referral.address.local,
       functionName: "setPointsForAction",
-    };
+    } as const;
+  }
+
+  static async setReferralSplitContext() {
+    return {
+      abi: contracts.referral.abi,
+      address: contracts.referral.address.local,
+      functionName: "setReferralSplit",
+    } as const;
   }
 
   static async addMilestoneContext() {
@@ -35,7 +43,7 @@ export class WriteReferralContractHelper {
       abi: contracts.referral.abi,
       address: contracts.referral.address.local,
       functionName: "addNewMilestone",
-    };
+    } as const;
   }
 
   static async createInviteContext() {
@@ -43,6 +51,6 @@ export class WriteReferralContractHelper {
       abi: contracts.referral.abi,
       address: contracts.referral.address.local,
       functionName: "createInvite",
-    };
+    } as const;
   }
 }

@@ -11,6 +11,7 @@ import {
   disableAccount,
   enableAccount,
   getInvites,
+  getReferralRewardHistory,
   createPrivateInvite,
   acceptTerms,
 } from "@/controllers/user.controller.js";
@@ -28,12 +29,16 @@ jest.mock("@/lib/prisma", () => ({
       findFirst: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
+      findMany: jest.fn(),
     },
     referral: {
       create: jest.fn(),
       findMany: jest.fn(),
       count: jest.fn(),
       findUnique: jest.fn(),
+    },
+    referralPointAllocation: {
+      findMany: jest.fn(),
     },
   },
 }));
@@ -533,6 +538,92 @@ describe("User Controller test", () => {
     });
   });
 
+  test("getReferralRewardHistory should fail on an unauthenticated user", async () => {
+    req = {};
+
+    await getReferralRewardHistory(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(res.json).toHaveBeenCalledWith({ error: "Not authenticated" });
+  });
+
+  test("getReferralRewardHistory should expose direct and grandchild interactions", async () => {
+    req = { user: { id: "user1", walletAddress: "0xGRANDPARENT" } };
+    const observedAt = new Date("2026-09-29T12:00:00.000Z");
+    (prisma.referralPointAllocation.findMany as jest.Mock).mockResolvedValue([
+      {
+        id: "allocation-grandchild",
+        transactionHash: "0xtwo",
+        blockNumber: 22n,
+        logIndex: 3,
+        participantWalletAddress: "0xgrandchild",
+        pool: 100,
+        directRecipientWalletAddress: "0xparent",
+        directAmount: 80,
+        grandparentRecipientWalletAddress: "0xgrandparent",
+        grandparentAmount: 20,
+        unallocatedAmount: 0,
+        observedAt,
+      },
+      {
+        id: "allocation-child",
+        transactionHash: "0xone",
+        blockNumber: 21n,
+        logIndex: 1,
+        participantWalletAddress: "0xchild",
+        pool: 100,
+        directRecipientWalletAddress: "0xgrandparent",
+        directAmount: 80,
+        grandparentRecipientWalletAddress: "0xzero",
+        grandparentAmount: 0,
+        unallocatedAmount: 20,
+        observedAt,
+      },
+    ]);
+    (prisma.user.findMany as jest.Mock).mockResolvedValue([
+      { walletAddress: "0xgrandchild", name: "Grandchild" },
+    ]);
+
+    await getReferralRewardHistory(req, res);
+
+    expect(prisma.referralPointAllocation.findMany).toHaveBeenCalledWith({
+      where: {
+        OR: [
+          {
+            directRecipientWalletAddress: "0xgrandparent",
+            directAmount: { gt: 0 },
+          },
+          {
+            grandparentRecipientWalletAddress: "0xgrandparent",
+            grandparentAmount: { gt: 0 },
+          },
+        ],
+      },
+      orderBy: [{ blockNumber: "desc" }, { logIndex: "desc" }],
+    });
+    expect(res.json).toHaveBeenCalledWith({
+      rewardHistory: [
+        expect.objectContaining({
+          id: "allocation-grandchild",
+          blockNumber: "22",
+          participant: {
+            walletAddress: "0xgrandchild",
+            name: "Grandchild",
+          },
+          referralLevel: 2,
+          points: 20,
+        }),
+        expect.objectContaining({
+          id: "allocation-child",
+          blockNumber: "21",
+          participant: { walletAddress: "0xchild", name: null },
+          referralLevel: 1,
+          points: 80,
+        }),
+      ],
+    });
+  });
+
   test("createPrivateInvite should fail on non authenticated user", async () => {
     req = {};
 
@@ -743,6 +834,13 @@ describe("User Controller test", () => {
         failing: prisma.referral.findMany,
         request: { user: { id: "user1", walletAddress: "0xABC" } },
         error: "Failed to get invites",
+      },
+      {
+        name: "getReferralRewardHistory",
+        handler: getReferralRewardHistory,
+        failing: prisma.referralPointAllocation.findMany,
+        request: { user: { id: "user1", walletAddress: "0xABC" } },
+        error: "Failed to get referral reward history",
       },
       {
         name: "createPrivateInvite",

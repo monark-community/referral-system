@@ -1,7 +1,7 @@
 // Purpose: Unit tests for the blockchain listener, which turns contract events into database updates
 // Notes:
 // - Mocks Prisma and the blockchain connector, then feeds events to the handlers the listener registers
-// - Covers live events (PointsAdded, InviteChanged), the catch-up sync on startup, and stopping
+// - Covers live events (PointsAdded, InviteChanged, ReferralPointsAllocated), catch-up, and stopping
 
 import { BlockchainListenerService } from "@/services/blockchainListener.service.js";
 import { prisma } from "@/lib/prisma.js";
@@ -15,17 +15,21 @@ const mockPublicClient = {
 const mockReadService = {
   listenToPointsAddedEvent: jest.fn(),
   listenToInviteChangedEvent: jest.fn(),
+  listenToReferralPointsAllocatedEvent: jest.fn(),
   getUserCurrentMilestone: jest.fn(),
   getPointsAddedEvents: jest.fn(),
   getInviteChangedEvents: jest.fn(),
+  getReferralPointsAllocatedEvents: jest.fn(),
   stopListeningToPointsAddedEvent: jest.fn(),
   stopListeningToInviteChangedEvent: jest.fn(),
+  stopListeningToReferralPointsAllocatedEvent: jest.fn(),
 };
 
 jest.mock("@/lib/prisma", () => ({
   prisma: {
     user: { findUnique: jest.fn(), update: jest.fn() },
     referral: { findFirst: jest.fn(), update: jest.fn(), updateMany: jest.fn() },
+    referralPointAllocation: { upsert: jest.fn() },
     chainSyncState: { findUnique: jest.fn(), upsert: jest.fn() },
   },
 }));
@@ -83,6 +87,8 @@ async function startListener() {
     listener,
     onPointsAdded: mockReadService.listenToPointsAddedEvent.mock.calls[0][0],
     onInviteChanged: mockReadService.listenToInviteChangedEvent.mock.calls[0][0],
+    onReferralPointsAllocated:
+      mockReadService.listenToReferralPointsAllocatedEvent.mock.calls[0][0],
   };
 }
 
@@ -97,21 +103,31 @@ describe("BlockchainListenerService", () => {
     mockPublicClient.getBlockNumber.mockReset().mockResolvedValue(100n);
     mockReadService.listenToPointsAddedEvent.mockReset().mockResolvedValue(undefined);
     mockReadService.listenToInviteChangedEvent.mockReset().mockResolvedValue(undefined);
+    mockReadService.listenToReferralPointsAllocatedEvent.mockReset().mockResolvedValue(undefined);
     mockReadService.getUserCurrentMilestone.mockReset().mockResolvedValue(2n);
     mockReadService.getPointsAddedEvents.mockReset().mockResolvedValue([]);
     mockReadService.getInviteChangedEvents.mockReset().mockResolvedValue([]);
+    mockReadService.getReferralPointsAllocatedEvents.mockReset().mockResolvedValue([]);
     mockReadService.stopListeningToPointsAddedEvent.mockReset();
     mockReadService.stopListeningToInviteChangedEvent.mockReset();
+    mockReadService.stopListeningToReferralPointsAllocatedEvent.mockReset();
     db.user.findUnique.mockReset().mockResolvedValue(savedUser());
     db.user.update.mockReset().mockResolvedValue({});
     db.referral.findFirst.mockReset().mockResolvedValue({ id: "ref1" });
     db.referral.update.mockReset().mockResolvedValue({});
     db.referral.updateMany.mockReset().mockResolvedValue({ count: 1 });
+    db.referralPointAllocation.upsert.mockReset().mockResolvedValue({});
     db.chainSyncState.upsert.mockReset().mockResolvedValue({});
     // Already up to date with the chain unless a test says otherwise
     db.chainSyncState.findUnique
       .mockReset()
-      .mockResolvedValue({ id: 1, lastProcessedBlock: 100n, lastProcessedLogIndex: 0 });
+      .mockResolvedValue({
+        id: 1,
+        lastProcessedBlock: 100n,
+        lastProcessedLogIndex: 0,
+        lastReferralAllocationBlock: 100n,
+        lastReferralAllocationLogIndex: -1,
+      });
   });
 
   afterAll(() => {
@@ -121,7 +137,7 @@ describe("BlockchainListenerService", () => {
   });
 
   describe("startup", () => {
-    test("catches up with the chain, then starts both event listeners", async () => {
+    test("catches up with the chain, then starts all event listeners", async () => {
       await startListener();
 
       expect(mockPublicClient.getBlockNumber).toHaveBeenCalled();
@@ -133,6 +149,9 @@ describe("BlockchainListenerService", () => {
         expect.any(Function),
         10000,
       );
+      expect(
+        mockReadService.listenToReferralPointsAllocatedEvent,
+      ).toHaveBeenCalledWith(expect.any(Function), 10000);
     });
 
     test("does not register the listeners twice", async () => {
@@ -142,6 +161,9 @@ describe("BlockchainListenerService", () => {
 
       expect(mockReadService.listenToPointsAddedEvent).toHaveBeenCalledTimes(1);
       expect(mockReadService.listenToInviteChangedEvent).toHaveBeenCalledTimes(1);
+      expect(
+        mockReadService.listenToReferralPointsAllocatedEvent,
+      ).toHaveBeenCalledTimes(1);
     });
 
     test("logs startup errors instead of crashing the API", async () => {
@@ -156,7 +178,11 @@ describe("BlockchainListenerService", () => {
       expect(mockReadService.listenToPointsAddedEvent).not.toHaveBeenCalled();
     });
 
-    test.each(["listenToPointsAddedEvent", "listenToInviteChangedEvent"] as const)(
+    test.each([
+      "listenToPointsAddedEvent",
+      "listenToInviteChangedEvent",
+      "listenToReferralPointsAllocatedEvent",
+    ] as const)(
       "reports a clear error when %s cannot start",
       async (method) => {
         mockReadService[method].mockRejectedValue(new Error("socket closed"));
@@ -171,6 +197,64 @@ describe("BlockchainListenerService", () => {
         );
       },
     );
+  });
+
+  describe("ReferralPointsAllocated events", () => {
+    const allocationEvent = {
+      participant: "0xPARTICIPANT",
+      pool: 100n,
+      directRecipient: "0xDIRECT",
+      directAmount: 80n,
+      grandparentRecipient: "0xGRANDPARENT",
+      grandparentAmount: 20n,
+      unallocatedAmount: 0n,
+      blockNumber: 103n,
+      logIndex: 4,
+      transactionHash: "0xABCDEF",
+    };
+
+    test("persists an allocation idempotently and records its chain position", async () => {
+      const { onReferralPointsAllocated } = await startListener();
+
+      await onReferralPointsAllocated(allocationEvent);
+
+      const data = {
+        transactionHash: "0xabcdef",
+        logIndex: 4,
+        blockNumber: 103n,
+        participantWalletAddress: "0xparticipant",
+        pool: 100,
+        directRecipientWalletAddress: "0xdirect",
+        directAmount: 80,
+        grandparentRecipientWalletAddress: "0xgrandparent",
+        grandparentAmount: 20,
+        unallocatedAmount: 0,
+      };
+      expect(db.referralPointAllocation.upsert).toHaveBeenCalledWith({
+        where: {
+          transactionHash_logIndex: {
+            transactionHash: "0xabcdef",
+            logIndex: 4,
+          },
+        },
+        update: data,
+        create: data,
+      });
+      expect(db.chainSyncState.upsert).toHaveBeenCalledWith({
+        where: { id: 1 },
+        update: {
+          lastReferralAllocationBlock: 103n,
+          lastReferralAllocationLogIndex: 4,
+        },
+        create: {
+          id: 1,
+          lastProcessedBlock: 0n,
+          lastProcessedLogIndex: 0,
+          lastReferralAllocationBlock: 103n,
+          lastReferralAllocationLogIndex: 4,
+        },
+      });
+    });
   });
 
   describe("PointsAdded events", () => {
@@ -352,6 +436,7 @@ describe("BlockchainListenerService", () => {
 
       expect(mockReadService.getPointsAddedEvents).toHaveBeenCalledWith({ fromBlock: 0n, toBlock: 20n });
       expect(mockReadService.getInviteChangedEvents).toHaveBeenCalledWith({ fromBlock: 0n, toBlock: 20n });
+      expect(mockReadService.getReferralPointsAllocatedEvents).toHaveBeenCalledWith({ fromBlock: 0n, toBlock: 20n });
       expect(db.chainSyncState.upsert).toHaveBeenCalledWith({
         where: { id: 1 },
         update: { lastProcessedBlock: 0n, lastProcessedLogIndex: 0 },
@@ -364,12 +449,52 @@ describe("BlockchainListenerService", () => {
         id: 1,
         lastProcessedBlock: 20n,
         lastProcessedLogIndex: 0,
+        lastReferralAllocationBlock: 20n,
+        lastReferralAllocationLogIndex: -1,
       });
 
       await startListener();
 
       expect(mockReadService.getPointsAddedEvents).not.toHaveBeenCalled();
+      expect(mockReadService.getReferralPointsAllocatedEvents).not.toHaveBeenCalled();
       expect(db.chainSyncState.upsert).not.toHaveBeenCalled();
+    });
+
+    test("replays allocation history during catch-up", async () => {
+      mockReadService.getReferralPointsAllocatedEvents.mockResolvedValue([
+        {
+          blockNumber: 12n,
+          logIndex: 2,
+          transactionHash: "0xCATCHUP",
+          args: {
+            participant: "0xCHILD",
+            pool: 100n,
+            directRecipient: "0xPARENT",
+            directAmount: 80n,
+            grandparentRecipient: "0xGRANDPARENT",
+            grandparentAmount: 20n,
+            unallocatedAmount: 0n,
+          },
+        },
+      ]);
+
+      await startListener();
+
+      expect(db.referralPointAllocation.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            transactionHash_logIndex: {
+              transactionHash: "0xcatchup",
+              logIndex: 2,
+            },
+          },
+          create: expect.objectContaining({
+            participantWalletAddress: "0xchild",
+            grandparentRecipientWalletAddress: "0xgrandparent",
+            grandparentAmount: 20,
+          }),
+        }),
+      );
     });
 
     test("replays missed events in chain order and skips ones already processed", async () => {
@@ -464,7 +589,7 @@ describe("BlockchainListenerService", () => {
   });
 
   describe("stop", () => {
-    test("stops watching for both points and invite events, only once", async () => {
+    test("stops watching all events, only once", async () => {
       const { listener } = await startListener();
 
       listener.stop();
@@ -472,6 +597,9 @@ describe("BlockchainListenerService", () => {
 
       expect(mockReadService.stopListeningToPointsAddedEvent).toHaveBeenCalledTimes(1);
       expect(mockReadService.stopListeningToInviteChangedEvent).toHaveBeenCalledTimes(1);
+      expect(
+        mockReadService.stopListeningToReferralPointsAllocatedEvent,
+      ).toHaveBeenCalledTimes(1);
     });
 
     test("can start listening again after stopping", async () => {
@@ -482,6 +610,9 @@ describe("BlockchainListenerService", () => {
 
       expect(mockReadService.listenToPointsAddedEvent).toHaveBeenCalledTimes(2);
       expect(mockReadService.listenToInviteChangedEvent).toHaveBeenCalledTimes(2);
+      expect(
+        mockReadService.listenToReferralPointsAllocatedEvent,
+      ).toHaveBeenCalledTimes(2);
     });
 
     test("does nothing if the listener never started", () => {
@@ -489,6 +620,9 @@ describe("BlockchainListenerService", () => {
 
       expect(mockReadService.stopListeningToPointsAddedEvent).not.toHaveBeenCalled();
       expect(mockReadService.stopListeningToInviteChangedEvent).not.toHaveBeenCalled();
+      expect(
+        mockReadService.stopListeningToReferralPointsAllocatedEvent,
+      ).not.toHaveBeenCalled();
     });
   });
 });

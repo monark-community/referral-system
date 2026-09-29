@@ -1,5 +1,7 @@
 // Purpose: Exposes the referral contract ABI for consumption by other workspace packages
 
+import type { Abi } from "viem";
+
 export const RefferalABI = [
   {
     inputs: [],
@@ -695,4 +697,4 @@ export const RefferalABI = [
     stateMutability: "view",
     type: "function",
   },
-];
+] as const satisfies Abi;
