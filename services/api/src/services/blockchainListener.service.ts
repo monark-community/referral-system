@@ -2,6 +2,9 @@
 // Notes:
 // - Passes callable functions to the blockchain-connector listener
 // - Syncs to the chain on startup
+// - An invite's points come from the payout event that names it, or for a pending invite from the
+//   referrer's share of the pool; balance changes are never used, since they can't tell which invite
+//   (or whether a grandparent's share) they belong to
 
 import { prisma } from "../lib/prisma.js";
 import { type PublicClient } from "viem";
@@ -12,6 +15,11 @@ import {
 } from "@reffinity/blockchain-connector/clients";
 import { log } from "console";
 import { bytes32ToUuid } from "@reffinity/blockchain-connector/uuidBytesConverter";
+
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+const BASIS_POINTS = 10_000n;
+// Matches InviteStatus.Pending in the contract
+const INVITE_PENDING = 0;
 
 export class BlockchainListenerService {
   private isListeningToPointsAdded: boolean = false;
@@ -76,6 +84,69 @@ export class BlockchainListenerService {
       update: data,
       create: data,
     });
+
+    // The invite this payout came from is the one between the direct recipient and the new user.
+    // The grandparent's share belongs to no invite of theirs, so it only lives in the payout above
+    if (data.directAmount > 0) {
+      await prisma.referral.updateMany({
+        where: {
+          referrer: { walletAddress: data.directRecipientWalletAddress },
+          referee: { walletAddress: data.participantWalletAddress },
+        },
+        data: { points: data.directAmount },
+      });
+    }
+  }
+
+  // Saves an invite's new on-chain status. A newly pending invite also gets the points its
+  // referrer will earn once it is accepted
+  private async applyInviteChange(
+    inviteId: `0x${string}`,
+    referrer: string,
+    status: number,
+  ): Promise<void> {
+    const id = bytes32ToUuid(inviteId);
+    await prisma.referral.updateMany({
+      where: { id },
+      data: { status, isVerified: true },
+    });
+
+    if (status === INVITE_PENDING) {
+      let points: number;
+      try {
+        points = await this.referrerShareOfPool(referrer);
+      } catch {
+        // Like a failed milestone read, this must not stop the listener from starting
+        console.warn(
+          `Could not read the referral pool for invite ${inviteId}, leaving its points`,
+        );
+        return;
+      }
+      // An invite someone already signed up with gets its points from the payout instead
+      await prisma.referral.updateMany({
+        where: { id, refereeId: null },
+        data: { points },
+      });
+    }
+  }
+
+  // The referrer's share of the referral pool, split the same way as ReferralAllocation.allocate:
+  // all of it without a grandparent, otherwise the pool minus the grandparent's rounded-down share.
+  // Uses the current pool and split; the contract fixes them when the invite is created, so the
+  // two only differ if an admin changes them in between
+  private async referrerShareOfPool(referrer: string): Promise<number> {
+    const [pool, grandparentBps, grandparent] = await Promise.all([
+      this.readReferralContractService.getReferralPointPool(),
+      this.readReferralContractService.getGrandparentReferralBps(),
+      this.readReferralContractService.getReferrers(referrer),
+    ]);
+    const poolPoints = BigInt(pool);
+    if (String(grandparent).toLowerCase() === ZERO_ADDRESS) {
+      return Number(poolPoints);
+    }
+    return Number(
+      poolPoints - (poolPoints * BigInt(grandparentBps)) / BASIS_POINTS,
+    );
   }
 
   private async startReferralPointsAllocatedListener(): Promise<void> {
@@ -144,51 +215,15 @@ export class BlockchainListenerService {
               );
             }
 
-            if (!isPending) {
-              const earnedDelta = Number(points) - existingUser.earnedPoints;
-              await prisma.user.update({
-                where: { walletAddress: normalizedAddress },
-                data: {
-                  earnedPoints: Number(points),
-                  milestoneLevel,
-                },
-              });
-              // Assign per-referral points to the most recent accepted referral with 0 points
-              if (earnedDelta > 0) {
-                const referral = await prisma.referral.findFirst({
-                  where: { referrerId: existingUser.id, status: 1, points: 0 },
-                  orderBy: { updatedAt: "desc" },
-                });
-                if (referral) {
-                  await prisma.referral.update({
-                    where: { id: referral.id },
-                    data: { points: earnedDelta },
-                  });
-                }
-              }
-            } else {
-              const pendingDelta = Number(points) - existingUser.pendingPoints;
-              await prisma.user.update({
-                where: { walletAddress: normalizedAddress },
-                data: {
-                  pendingPoints: Number(points),
-                  milestoneLevel,
-                },
-              });
-              // Assign per-referral points to the most recent pending referral with 0 points
-              if (pendingDelta > 0) {
-                const referral = await prisma.referral.findFirst({
-                  where: { referrerId: existingUser.id, status: 0, points: 0 },
-                  orderBy: { createdAt: "desc" },
-                });
-                if (referral) {
-                  await prisma.referral.update({
-                    where: { id: referral.id },
-                    data: { points: pendingDelta },
-                  });
-                }
-              }
-            }
+            await prisma.user.update({
+              where: { walletAddress: normalizedAddress },
+              data: {
+                ...(isPending
+                  ? { pendingPoints: Number(points) }
+                  : { earnedPoints: Number(points) }),
+                milestoneLevel,
+              },
+            });
           } else {
             console.warn(
               `User ${normalizedAddress} not found in DB, skipping points update`,
@@ -238,13 +273,7 @@ export class BlockchainListenerService {
           const normalizedReferrer = referrer.toLowerCase();
 
           try {
-            await prisma.referral.updateMany({
-              where: { id: bytes32ToUuid(inviteId) },
-              data: {
-                status: status,
-                isVerified: true,
-              },
-            });
+            await this.applyInviteChange(inviteId, referrer, status);
 
             console.log(
               `Invite ${inviteId} stored with status ${status} for referrer ${normalizedReferrer}`,
@@ -352,58 +381,21 @@ export class BlockchainListenerService {
             // Keep existing milestone level on error
           }
 
-          if (!isPending) {
-            const earnedDelta = Number(points) - existingUser.earnedPoints;
-            await prisma.user.update({
-              where: { walletAddress: normalizedAddress },
-              data: {
-                earnedPoints: Number(points),
-                milestoneLevel,
-              },
-            });
-            if (earnedDelta > 0) {
-              const referral = await prisma.referral.findFirst({
-                where: { referrerId: existingUser.id, status: 1, points: 0 },
-                orderBy: { updatedAt: "desc" },
-              });
-              if (referral) {
-                await prisma.referral.update({
-                  where: { id: referral.id },
-                  data: { points: earnedDelta },
-                });
-              }
-            }
-          } else {
-            const pendingDelta = Number(points) - existingUser.pendingPoints;
-            await prisma.user.update({
-              where: { walletAddress: normalizedAddress },
-              data: {
-                pendingPoints: Number(points),
-                milestoneLevel,
-              },
-            });
-            if (pendingDelta > 0) {
-              const referral = await prisma.referral.findFirst({
-                where: { referrerId: existingUser.id, status: 0, points: 0 },
-                orderBy: { createdAt: "desc" },
-              });
-              if (referral) {
-                await prisma.referral.update({
-                  where: { id: referral.id },
-                  data: { points: pendingDelta },
-                });
-              }
-            }
-          }
+          await prisma.user.update({
+            where: { walletAddress: normalizedAddress },
+            data: {
+              ...(isPending
+                ? { pendingPoints: Number(points) }
+                : { earnedPoints: Number(points) }),
+              milestoneLevel,
+            },
+          });
         }
       } else if ("inviteId" in event.args) {
         // InviteChanged event
         const { inviteId, referrer, status } = event.args;
 
-        await prisma.referral.updateMany({
-          where: { id: bytes32ToUuid(inviteId) },
-          data: { status: status, isVerified: true },
-        });
+        await this.applyInviteChange(inviteId, referrer, status);
         console.log(
           `InviteChanged: inviteId=${inviteId}, referrer=${referrer}, status=${status}`,
         );

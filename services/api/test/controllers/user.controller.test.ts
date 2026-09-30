@@ -12,6 +12,7 @@ import {
   enableAccount,
   getInvites,
   getReferralRewardHistory,
+  getReferralNetwork,
   createPrivateInvite,
   acceptTerms,
 } from "@/controllers/user.controller.js";
@@ -34,6 +35,7 @@ jest.mock("@/lib/prisma", () => ({
     referral: {
       create: jest.fn(),
       findMany: jest.fn(),
+      findFirst: jest.fn(),
       count: jest.fn(),
       findUnique: jest.fn(),
     },
@@ -563,6 +565,7 @@ describe("User Controller test", () => {
         grandparentRecipientWalletAddress: "0xgrandparent",
         grandparentAmount: 20,
         unallocatedAmount: 0,
+        source: "signup",
         observedAt,
       },
       {
@@ -577,6 +580,7 @@ describe("User Controller test", () => {
         grandparentRecipientWalletAddress: "0xzero",
         grandparentAmount: 0,
         unallocatedAmount: 20,
+        source: "signup",
         observedAt,
       },
     ]);
@@ -612,6 +616,7 @@ describe("User Controller test", () => {
           },
           referralLevel: 2,
           points: 20,
+          source: "signup",
         }),
         expect.objectContaining({
           id: "allocation-child",
@@ -619,8 +624,142 @@ describe("User Controller test", () => {
           participant: { walletAddress: "0xchild", name: null },
           referralLevel: 1,
           points: 80,
+          source: "signup",
         }),
       ],
+    });
+  });
+
+  describe("getReferralNetwork", () => {
+    const joinedAt = new Date("2026-09-20T12:00:00.000Z");
+    const person = (id: string, name: string | null = null) => ({
+      id,
+      walletAddress: `0x${id}`,
+      name,
+      createdAt: joinedAt,
+    });
+
+    // A payout as the listener stores it
+    const payout = (participant: string, direct: string, grandparent: string) => ({
+      participantWalletAddress: `0x${participant}`,
+      directRecipientWalletAddress: `0x${direct}`,
+      directAmount: 80,
+      grandparentRecipientWalletAddress: `0x${grandparent}`,
+      grandparentAmount: 20,
+    });
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
+    test("fails on an unauthenticated user", async () => {
+      req = {};
+
+      await getReferralNetwork(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(res.json).toHaveBeenCalledWith({ error: "Not authenticated" });
+    });
+
+    test("returns who referred the user and two levels of referrals, with the points each earned them", async () => {
+      req = { user: { id: "me", walletAddress: "0xME" } };
+      (prisma.referral.findFirst as jest.Mock)
+        .mockResolvedValueOnce({ referrer: person("parent", "Parent") })
+        .mockResolvedValueOnce({ referrer: person("grandparent", "Grandparent") });
+      (prisma.referral.findMany as jest.Mock)
+        .mockResolvedValueOnce([{ referee: person("alice", "Alice") }, { referee: person("bob", "Bob") }])
+        .mockResolvedValueOnce([{ referrerId: "alice", referee: person("carol") }]);
+      (prisma.referralPointAllocation.findMany as jest.Mock).mockResolvedValueOnce([
+        payout("alice", "me", "parent"), // I get the direct 80
+        payout("bob", "me", "parent"),
+        payout("carol", "alice", "me"), // I get the grandparent 20
+      ]);
+
+      await getReferralNetwork(req, res);
+
+      // Walks up the chain through accepted invites
+      expect(prisma.referral.findFirst).toHaveBeenNthCalledWith(1, {
+        where: { refereeId: "me", status: 1 },
+        select: { referrer: { select: expect.any(Object) } },
+      });
+      expect(prisma.referral.findFirst).toHaveBeenNthCalledWith(2, {
+        where: { refereeId: "parent", status: 1 },
+        select: { referrer: { select: expect.any(Object) } },
+      });
+      // Only sign-ups the chain confirmed count
+      expect(prisma.referral.findMany).toHaveBeenNthCalledWith(1, expect.objectContaining({
+        where: { referrerId: "me", status: 1, refereeId: { not: null } },
+      }));
+      expect(prisma.referral.findMany).toHaveBeenNthCalledWith(2, expect.objectContaining({
+        where: { referrerId: { in: ["alice", "bob"] }, status: 1, refereeId: { not: null } },
+      }));
+      expect(prisma.referralPointAllocation.findMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: {
+          OR: [
+            { directRecipientWalletAddress: "0xme" },
+            { grandparentRecipientWalletAddress: "0xme" },
+          ],
+        },
+      }));
+      expect(res.json).toHaveBeenCalledWith({
+        ancestors: {
+          parent: { walletAddress: "0xparent", name: "Parent" },
+          grandparent: { walletAddress: "0xgrandparent", name: "Grandparent" },
+        },
+        referrals: [
+          {
+            walletAddress: "0xalice",
+            name: "Alice",
+            level: 1,
+            joinedAt,
+            pointsEarned: 80,
+            referrals: [
+              { walletAddress: "0xcarol", name: null, level: 2, joinedAt, pointsEarned: 20 },
+            ],
+          },
+          { walletAddress: "0xbob", name: "Bob", level: 1, joinedAt, pointsEarned: 80, referrals: [] },
+        ],
+        totals: { level1Count: 2, level2Count: 1, level1Points: 160, level2Points: 20 },
+      });
+    });
+
+    test("returns an empty network for a user who joined without an invite and referred nobody", async () => {
+      req = { user: { id: "me", walletAddress: "0xME" } };
+      (prisma.referral.findFirst as jest.Mock).mockResolvedValueOnce(null);
+      (prisma.referral.findMany as jest.Mock).mockResolvedValueOnce([]);
+      (prisma.referralPointAllocation.findMany as jest.Mock).mockResolvedValueOnce([]);
+
+      await getReferralNetwork(req, res);
+
+      // No parent means no grandparent lookup, and no level 1 means no level 2 lookup
+      expect(prisma.referral.findFirst).toHaveBeenCalledTimes(1);
+      expect(prisma.referral.findMany).toHaveBeenCalledTimes(1);
+      expect(res.json).toHaveBeenCalledWith({
+        ancestors: { parent: null, grandparent: null },
+        referrals: [],
+        totals: { level1Count: 0, level2Count: 0, level1Points: 0, level2Points: 0 },
+      });
+    });
+
+    test("shows a referral who has not earned the user anything yet with 0 points", async () => {
+      req = { user: { id: "me", walletAddress: "0xME" } };
+      (prisma.referral.findFirst as jest.Mock)
+        .mockResolvedValueOnce({ referrer: person("parent", "Parent") })
+        .mockResolvedValueOnce(null); // the parent joined without an invite
+      (prisma.referral.findMany as jest.Mock)
+        .mockResolvedValueOnce([{ referee: person("alice", "Alice") }])
+        .mockResolvedValueOnce([]);
+      (prisma.referralPointAllocation.findMany as jest.Mock).mockResolvedValueOnce([]);
+
+      await getReferralNetwork(req, res);
+
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+        ancestors: {
+          parent: { walletAddress: "0xparent", name: "Parent" },
+          grandparent: null,
+        },
+        referrals: [expect.objectContaining({ walletAddress: "0xalice", pointsEarned: 0, referrals: [] })],
+      }));
     });
   });
 
@@ -841,6 +980,13 @@ describe("User Controller test", () => {
         failing: prisma.referralPointAllocation.findMany,
         request: { user: { id: "user1", walletAddress: "0xABC" } },
         error: "Failed to get referral reward history",
+      },
+      {
+        name: "getReferralNetwork",
+        handler: getReferralNetwork,
+        failing: prisma.referral.findFirst,
+        request: { user: { id: "user1", walletAddress: "0xABC" } },
+        error: "Failed to get referral network",
       },
       {
         name: "createPrivateInvite",

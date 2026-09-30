@@ -2,6 +2,8 @@
 // Notes:
 // - Mocks Prisma and the blockchain connector, then feeds events to the handlers the listener registers
 // - Covers live events (PointsAdded, InviteChanged, ReferralPointsAllocated), catch-up, and stopping
+// - "per-invite points" replays whole two-level sign-ups against an in-memory database, to check
+//   which invite each share of the pool ends up on
 
 import { BlockchainListenerService } from "@/services/blockchainListener.service.js";
 import { prisma } from "@/lib/prisma.js";
@@ -17,6 +19,9 @@ const mockReadService = {
   listenToInviteChangedEvent: jest.fn(),
   listenToReferralPointsAllocatedEvent: jest.fn(),
   getUserCurrentMilestone: jest.fn(),
+  getReferralPointPool: jest.fn(),
+  getGrandparentReferralBps: jest.fn(),
+  getReferrers: jest.fn(),
   getPointsAddedEvents: jest.fn(),
   getInviteChangedEvents: jest.fn(),
   getReferralPointsAllocatedEvents: jest.fn(),
@@ -54,6 +59,8 @@ jest.mock(
 
 // The mocked Prisma client, untyped so tests can set return values freely
 const db = prisma as any;
+
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
 // A user row as the listener finds it in the database
 function savedUser(overrides = {}) {
@@ -105,6 +112,10 @@ describe("BlockchainListenerService", () => {
     mockReadService.listenToInviteChangedEvent.mockReset().mockResolvedValue(undefined);
     mockReadService.listenToReferralPointsAllocatedEvent.mockReset().mockResolvedValue(undefined);
     mockReadService.getUserCurrentMilestone.mockReset().mockResolvedValue(2n);
+    // The deployed settings: a 100-point pool split 80/20, and no referrer above the inviter
+    mockReadService.getReferralPointPool.mockReset().mockResolvedValue(100n);
+    mockReadService.getGrandparentReferralBps.mockReset().mockResolvedValue(2000);
+    mockReadService.getReferrers.mockReset().mockResolvedValue(ZERO_ADDRESS);
     mockReadService.getPointsAddedEvents.mockReset().mockResolvedValue([]);
     mockReadService.getInviteChangedEvents.mockReset().mockResolvedValue([]);
     mockReadService.getReferralPointsAllocatedEvents.mockReset().mockResolvedValue([]);
@@ -255,10 +266,41 @@ describe("BlockchainListenerService", () => {
         },
       });
     });
+
+    test("puts the direct share on the invite between the direct recipient and the new user", async () => {
+      const { onReferralPointsAllocated } = await startListener();
+
+      await onReferralPointsAllocated(allocationEvent);
+
+      expect(db.referral.updateMany).toHaveBeenCalledTimes(1);
+      expect(db.referral.updateMany).toHaveBeenCalledWith({
+        where: {
+          referrer: { walletAddress: "0xdirect" },
+          referee: { walletAddress: "0xparticipant" },
+        },
+        data: { points: 80 },
+      });
+    });
+
+    test("leaves invites alone when nothing went to a direct recipient", async () => {
+      const { onReferralPointsAllocated } = await startListener();
+
+      await onReferralPointsAllocated({
+        ...allocationEvent,
+        directRecipient: ZERO_ADDRESS,
+        directAmount: 0n,
+        grandparentRecipient: ZERO_ADDRESS,
+        grandparentAmount: 0n,
+        unallocatedAmount: 100n,
+      });
+
+      expect(db.referralPointAllocation.upsert).toHaveBeenCalled();
+      expect(db.referral.updateMany).not.toHaveBeenCalled();
+    });
   });
 
   describe("PointsAdded events", () => {
-    test("saves earned points and the chain milestone, and credits the latest accepted referral", async () => {
+    test("saves earned points and the chain milestone", async () => {
       const { onPointsAdded } = await startListener();
       mockReadService.getUserCurrentMilestone.mockResolvedValue(1n);
 
@@ -271,14 +313,6 @@ describe("BlockchainListenerService", () => {
         where: { walletAddress: "0xabc" },
         data: { earnedPoints: 100, milestoneLevel: 1 },
       });
-      expect(db.referral.findFirst).toHaveBeenCalledWith({
-        where: { referrerId: "user1", status: 1, points: 0 },
-        orderBy: { updatedAt: "desc" },
-      });
-      expect(db.referral.update).toHaveBeenCalledWith({
-        where: { id: "ref1" },
-        data: { points: 100 },
-      });
       expect(db.chainSyncState.upsert).toHaveBeenCalledWith({
         where: { id: 1 },
         update: { lastProcessedBlock: 101n, lastProcessedLogIndex: 3 },
@@ -286,19 +320,7 @@ describe("BlockchainListenerService", () => {
       });
     });
 
-    test("gives the referral only the newly earned points", async () => {
-      const { onPointsAdded } = await startListener();
-      db.user.findUnique.mockResolvedValue(savedUser({ earnedPoints: 100 }));
-
-      await onPointsAdded(pointsEvent({ points: 180n }));
-
-      expect(db.referral.update).toHaveBeenCalledWith({
-        where: { id: "ref1" },
-        data: { points: 80 },
-      });
-    });
-
-    test("saves pending points and credits the latest pending referral", async () => {
+    test("saves pending points", async () => {
       const { onPointsAdded } = await startListener();
 
       await onPointsAdded(pointsEvent({ isPending: true }));
@@ -307,40 +329,18 @@ describe("BlockchainListenerService", () => {
         where: { walletAddress: "0xabc" },
         data: { pendingPoints: 100, milestoneLevel: 2 },
       });
-      expect(db.referral.findFirst).toHaveBeenCalledWith({
-        where: { referrerId: "user1", status: 0, points: 0 },
-        orderBy: { createdAt: "desc" },
-      });
-      expect(db.referral.update).toHaveBeenCalledWith({
-        where: { id: "ref1" },
-        data: { points: 100 },
-      });
     });
 
-    test.each([
-      ["earned", false, { earnedPoints: 100 }],
-      ["pending", true, { pendingPoints: 100 }],
-    ])("leaves referrals alone when %s points did not go up", async (_label, isPending, saved) => {
+    // A balance can go up from a direct referral or a grandparent's share, so it can't say which invite it is for
+    test.each([false, true])("never changes an invite's points (pending: %s)", async (isPending) => {
       const { onPointsAdded } = await startListener();
-      db.user.findUnique.mockResolvedValue(savedUser(saved));
 
       await onPointsAdded(pointsEvent({ isPending }));
 
-      expect(db.user.update).toHaveBeenCalled();
       expect(db.referral.findFirst).not.toHaveBeenCalled();
+      expect(db.referral.update).not.toHaveBeenCalled();
+      expect(db.referral.updateMany).not.toHaveBeenCalled();
     });
-
-    test.each([false, true])(
-      "does not change referrals when none is waiting for points (pending: %s)",
-      async (isPending) => {
-        const { onPointsAdded } = await startListener();
-        db.referral.findFirst.mockResolvedValue(null);
-
-        await onPointsAdded(pointsEvent({ isPending }));
-
-        expect(db.referral.update).not.toHaveBeenCalled();
-      },
-    );
 
     test("keeps the saved milestone when the chain read fails", async () => {
       const { onPointsAdded } = await startListener();
@@ -389,10 +389,12 @@ describe("BlockchainListenerService", () => {
       await onInviteChanged(inviteEvent);
 
       expect(bytes32ToUuid).toHaveBeenCalledWith("0xinvite");
+      expect(db.referral.updateMany).toHaveBeenCalledTimes(1);
       expect(db.referral.updateMany).toHaveBeenCalledWith({
         where: { id: "invite-uuid" },
         data: { status: 1, isVerified: true },
       });
+      expect(mockReadService.getReferralPointPool).not.toHaveBeenCalled();
       expect(db.chainSyncState.upsert).toHaveBeenCalledWith({
         where: { id: 1 },
         update: { lastProcessedBlock: 102n, lastProcessedLogIndex: 0 },
@@ -408,6 +410,54 @@ describe("BlockchainListenerService", () => {
       await onInviteChanged(inviteEvent);
 
       expect(consoleError).toHaveBeenCalledWith("Failed to update invite 0xinvite", error);
+      expect(db.chainSyncState.upsert).toHaveBeenCalled();
+    });
+
+    test("gives a new pending invite the whole pool when its referrer has no referrer", async () => {
+      const { onInviteChanged } = await startListener();
+
+      await onInviteChanged({ ...inviteEvent, status: 0 });
+
+      expect(mockReadService.getReferrers).toHaveBeenCalledWith("0xREF");
+      expect(db.referral.updateMany).toHaveBeenCalledWith({
+        where: { id: "invite-uuid" },
+        data: { status: 0, isVerified: true },
+      });
+      // Only an invite nobody has signed up with yet; a used one gets its points from the payout
+      expect(db.referral.updateMany).toHaveBeenCalledWith({
+        where: { id: "invite-uuid", refereeId: null },
+        data: { points: 100 },
+      });
+    });
+
+    test("gives a new pending invite the pool minus the grandparent's rounded-down share", async () => {
+      const { onInviteChanged } = await startListener();
+      mockReadService.getReferralPointPool.mockResolvedValue(101n);
+      mockReadService.getReferrers.mockResolvedValue("0xGRANDPARENT");
+
+      await onInviteChanged({ ...inviteEvent, status: 0 });
+
+      // 20% of 101 rounds down to 20, so the referrer gets the other 81
+      expect(db.referral.updateMany).toHaveBeenCalledWith({
+        where: { id: "invite-uuid", refereeId: null },
+        data: { points: 81 },
+      });
+    });
+
+    test("still saves the status and records the block when the pool cannot be read", async () => {
+      const { onInviteChanged } = await startListener();
+      mockReadService.getReferralPointPool.mockRejectedValue(new Error("rpc error"));
+
+      await onInviteChanged({ ...inviteEvent, status: 0 });
+
+      expect(db.referral.updateMany).toHaveBeenCalledTimes(1);
+      expect(db.referral.updateMany).toHaveBeenCalledWith({
+        where: { id: "invite-uuid" },
+        data: { status: 0, isVerified: true },
+      });
+      expect(consoleWarn).toHaveBeenCalledWith(
+        "Could not read the referral pool for invite 0xinvite, leaving its points",
+      );
       expect(db.chainSyncState.upsert).toHaveBeenCalled();
     });
   });
@@ -526,7 +576,7 @@ describe("BlockchainListenerService", () => {
       });
     });
 
-    test("credits pending points while catching up", async () => {
+    test("saves pending points while catching up", async () => {
       db.user.findUnique.mockResolvedValue(savedUser({ pendingPoints: 10 }));
       mockReadService.getPointsAddedEvents.mockResolvedValue([pastPoints(12n, 0, "0xAAA", 40n, true)]);
 
@@ -536,14 +586,25 @@ describe("BlockchainListenerService", () => {
         where: { walletAddress: "0xaaa" },
         data: { pendingPoints: 40, milestoneLevel: 2 },
       });
-      expect(db.referral.findFirst).toHaveBeenCalledWith({
-        where: { referrerId: "user1", status: 0, points: 0 },
-        orderBy: { createdAt: "desc" },
-      });
-      expect(db.referral.update).toHaveBeenCalledWith({
-        where: { id: "ref1" },
-        data: { points: 30 },
-      });
+      expect(db.referral.updateMany).not.toHaveBeenCalled();
+    });
+
+    test("keeps catching up when the pool for a pending invite cannot be read", async () => {
+      mockReadService.getReferralPointPool.mockRejectedValue(new Error("rpc error"));
+      mockReadService.getInviteChangedEvents.mockResolvedValue([
+        { blockNumber: 12n, logIndex: 0, args: { inviteId: "0xinvite", referrer: "0xAAA", status: 0 } },
+      ]);
+      mockReadService.getPointsAddedEvents.mockResolvedValue([pastPoints(13n, 0, "0xAAA", 100n)]);
+
+      await startListener();
+
+      expect(db.user.update).toHaveBeenCalled();
+      expect(db.chainSyncState.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          update: { lastProcessedBlock: 13n, lastProcessedLogIndex: 0 },
+        }),
+      );
+      expect(mockReadService.listenToPointsAddedEvent).toHaveBeenCalled();
     });
 
     test("keeps going past unknown users and failed milestone reads", async () => {
@@ -570,21 +631,140 @@ describe("BlockchainListenerService", () => {
       );
     });
 
-    test("leaves referrals alone when there is nothing to credit", async () => {
-      db.user.findUnique.mockResolvedValue(savedUser({ earnedPoints: 100, pendingPoints: 50 }));
-      db.referral.findFirst.mockResolvedValue(null);
-      mockReadService.getPointsAddedEvents.mockResolvedValue([
-        pastPoints(12n, 0, "0xAAA", 100n), // earned points unchanged
-        pastPoints(12n, 1, "0xAAA", 50n, true), // pending points unchanged
-        pastPoints(12n, 2, "0xAAA", 150n), // earned went up, but no referral is waiting
-        pastPoints(12n, 3, "0xAAA", 80n, true), // pending went up, but no referral is waiting
-      ]);
+    describe("per-invite points in a two-level referral", () => {
+      // A small in-memory database, so a whole chain of events runs against real rows
+      let users: Record<string, any>;
+      let referrals: any[];
 
-      await startListener();
+      const matches = (row: any, where: any) =>
+        Object.entries(where).every(([key, value]: [string, any]) => {
+          if (key === "referrer" || key === "referee") {
+            const user = Object.values(users).find((u) => u.id === row[`${key}Id`]);
+            return user?.walletAddress === value.walletAddress;
+          }
+          return row[key] === value;
+        });
 
-      expect(db.user.update).toHaveBeenCalledTimes(4);
-      expect(db.referral.findFirst).toHaveBeenCalledTimes(2);
-      expect(db.referral.update).not.toHaveBeenCalled();
+      const pastAllocation = (
+        blockNumber: bigint,
+        logIndex: number,
+        participant: string,
+        directRecipient: string,
+        directAmount: bigint,
+        grandparentRecipient: string,
+        grandparentAmount: bigint,
+      ) => ({
+        blockNumber,
+        logIndex,
+        transactionHash: `0xtx${blockNumber}`,
+        args: {
+          participant,
+          pool: 100n,
+          directRecipient,
+          directAmount,
+          grandparentRecipient,
+          grandparentAmount,
+          unallocatedAmount: 0n,
+        },
+      });
+
+      // The invite ID on chain is the row ID here, so events point straight at rows
+      const pastInvite = (blockNumber: bigint, logIndex: number, inviteId: string, referrer: string, status: number) => ({
+        blockNumber,
+        logIndex,
+        args: { inviteId, referrer, status },
+      });
+
+      beforeEach(() => {
+        users = {
+          "0xgrandparent": savedUser({ id: "grandparent", walletAddress: "0xgrandparent" }),
+          "0xparent": savedUser({ id: "parent", walletAddress: "0xparent" }),
+          "0xchild": savedUser({ id: "child", walletAddress: "0xchild" }),
+        };
+        referrals = [];
+        (bytes32ToUuid as jest.Mock).mockImplementation((inviteId: string) => inviteId);
+        db.user.findUnique.mockImplementation(({ where }: any) =>
+          Promise.resolve(users[where.walletAddress] ?? null),
+        );
+        db.user.update.mockImplementation(({ where, data }: any) =>
+          Promise.resolve(Object.assign(users[where.walletAddress], data)),
+        );
+        db.referral.findFirst.mockImplementation(({ where }: any) =>
+          Promise.resolve([...referrals].reverse().find((row) => matches(row, where)) ?? null),
+        );
+        db.referral.update.mockImplementation(({ where, data }: any) =>
+          Promise.resolve(Object.assign(referrals.find((row) => row.id === where.id), data)),
+        );
+        db.referral.updateMany.mockImplementation(({ where, data }: any) => {
+          const rows = referrals.filter((row) => matches(row, where));
+          rows.forEach((row) => Object.assign(row, data));
+          return Promise.resolve({ count: rows.length });
+        });
+      });
+
+      afterEach(() => {
+        (bytes32ToUuid as jest.Mock).mockImplementation(() => "invite-uuid");
+      });
+
+      test("each invite gets its referrer's share, and a grandparent's share never lands on their own invite", async () => {
+        // Rows the API creates at sign-up, before each chain transaction
+        referrals.push(
+          { id: "grandparent-invites-parent", referrerId: "grandparent", refereeId: "parent", status: 0, points: 0 },
+          { id: "parent-invites-child", referrerId: "parent", refereeId: "child", status: 0, points: 0 },
+        );
+        // Two acceptInvite transactions, with events in the order the contract emits them:
+        // the parent joins through the grandparent (block 12), then the child through the parent (block 13)
+        mockReadService.getPointsAddedEvents.mockResolvedValue([
+          pastPoints(12n, 0, "0xGRANDPARENT", 100n),
+          pastPoints(12n, 2, "0xPARENT", 50n),
+          pastPoints(13n, 0, "0xPARENT", 130n),
+          pastPoints(13n, 1, "0xGRANDPARENT", 120n),
+          pastPoints(13n, 3, "0xCHILD", 50n),
+        ]);
+        mockReadService.getReferralPointsAllocatedEvents.mockResolvedValue([
+          pastAllocation(12n, 1, "0xPARENT", "0xGRANDPARENT", 100n, ZERO_ADDRESS, 0n),
+          pastAllocation(13n, 2, "0xCHILD", "0xPARENT", 80n, "0xGRANDPARENT", 20n),
+        ]);
+        mockReadService.getInviteChangedEvents.mockResolvedValue([
+          pastInvite(12n, 3, "grandparent-invites-parent", "0xGRANDPARENT", 1),
+          pastInvite(13n, 4, "parent-invites-child", "0xPARENT", 1),
+        ]);
+
+        await startListener();
+
+        expect(referrals).toEqual([
+          expect.objectContaining({ id: "grandparent-invites-parent", status: 1, points: 100 }),
+          expect.objectContaining({ id: "parent-invites-child", status: 1, points: 80 }),
+        ]);
+        expect(users["0xgrandparent"].earnedPoints).toBe(120);
+        expect(users["0xparent"].earnedPoints).toBe(130);
+      });
+
+      test("a new pending invite shows its referrer's share, and the grandparent's pending share stays off their invites", async () => {
+        referrals.push(
+          // The grandparent created an invite but never sent its chain transaction
+          { id: "grandparent-unsent", referrerId: "grandparent", refereeId: null, status: 0, points: 0 },
+          { id: "parent-private", referrerId: "parent", refereeId: null, status: 0, points: 0 },
+        );
+        // The parent was referred by the grandparent
+        mockReadService.getReferrers.mockResolvedValue("0xGRANDPARENT");
+        // createInvite raises both pending balances, then registers the invite
+        mockReadService.getPointsAddedEvents.mockResolvedValue([
+          pastPoints(12n, 0, "0xPARENT", 80n, true),
+          pastPoints(12n, 1, "0xGRANDPARENT", 20n, true),
+        ]);
+        mockReadService.getInviteChangedEvents.mockResolvedValue([
+          pastInvite(12n, 2, "parent-private", "0xPARENT", 0),
+        ]);
+
+        await startListener();
+
+        expect(referrals).toEqual([
+          expect.objectContaining({ id: "grandparent-unsent", points: 0 }),
+          expect.objectContaining({ id: "parent-private", status: 0, points: 80 }),
+        ]);
+        expect(users["0xgrandparent"].pendingPoints).toBe(20);
+      });
     });
   });
 

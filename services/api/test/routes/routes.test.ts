@@ -11,6 +11,7 @@ import { generateJWT } from "@/services/auth.service.js";
 jest.mock("@/lib/prisma", () => ({
   prisma: {
     user: { findUnique: jest.fn(), findFirst: jest.fn(), findMany: jest.fn(), update: jest.fn() },
+    referral: { findFirst: jest.fn(), findMany: jest.fn() },
     referralPointAllocation: { findMany: jest.fn() },
     milestoneTier: { findMany: jest.fn() },
   },
@@ -45,6 +46,8 @@ describe("API routes", () => {
     db.user.findFirst.mockReset();
     db.user.update.mockReset();
     db.user.findMany.mockReset().mockResolvedValue([]);
+    db.referral.findFirst.mockReset();
+    db.referral.findMany.mockReset();
     db.referralPointAllocation.findMany.mockReset().mockResolvedValue([]);
     db.milestoneTier.findMany.mockReset();
   });
@@ -104,6 +107,7 @@ describe("API routes", () => {
       ["post", "/api/users/accept-terms"],
       ["get", "/api/users/referrals"],
       ["get", "/api/users/referral-rewards"],
+      ["get", "/api/users/referral-network"],
       ["post", "/api/users/disable"],
       ["post", "/api/users/enable"],
       ["post", "/api/users/referrals/private"],
@@ -120,6 +124,20 @@ describe("API routes", () => {
 
       expect(res.status).toBe(200);
       expect(res.body.user).toMatchObject({ id: "user1", walletAddress: "0xabc" });
+    });
+
+    test("a logged-in user gets their referral network through the full chain", async () => {
+      db.referral.findFirst.mockResolvedValue(null);
+      db.referral.findMany.mockResolvedValue([]);
+
+      const res = await request(app).get("/api/users/referral-network").set(loggedIn());
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({
+        ancestors: { parent: null, grandparent: null },
+        referrals: [],
+        totals: { level1Count: 0, level2Count: 0, level1Points: 0, level2Points: 0 },
+      });
     });
 
     test("a disabled account can read but not change data", async () => {
