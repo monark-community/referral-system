@@ -1,0 +1,52 @@
+# Runs the API, blockchain connector and web unit tests on every push and pull request to main
+# These tests mock the database, blockchain and wallet, so no Postgres, Hardhat node or MetaMask is needed
+
+name: Unit Tests
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      # Keep running the other packages' tests when one fails, so a PR shows every failure at once
+      fail-fast: false
+      matrix:
+        include:
+          - name: API tests
+            workspace: reffinity-api
+          - name: Blockchain connector tests
+            workspace: "@reffinity/blockchain-connector"
+          - name: Web tests
+            workspace: reffinity-web
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Use Node.js 22.x
+      uses: actions/setup-node@v4
+      with:
+        node-version: 22.x
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    # The API and connector import the built contracts ABI and connector (dist/ folders are gitignored)
+    - name: Build shared packages
+      run: npm run build:packages
+
+    # The API imports types from the generated Prisma client
+    - name: Generate Prisma client
+      run: npm run db:generate
+
+    - name: Run tests
+      run: npm test -w ${{ matrix.workspace }}
