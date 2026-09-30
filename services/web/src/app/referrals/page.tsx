@@ -309,10 +309,11 @@ export default function ReferralsPage() {
   useEffect(() => setMounted(true), []);
 
   // Auto-open verification modal if email not verified
+  // openOnboarding resets to the wallet step, so the step is set after opening
   useEffect(() => {
     if (!isLoading && isAuthenticated && needsVerification) {
-      goToStep("verify-email");
       openOnboarding();
+      goToStep("verify-email");
     }
   }, [isLoading, isAuthenticated, needsVerification, goToStep, openOnboarding]);
 
