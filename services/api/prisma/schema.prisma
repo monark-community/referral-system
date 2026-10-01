@@ -110,6 +110,8 @@ model ReferralPointAllocation {
   grandparentRecipientWalletAddress   String   @map("grandparent_recipient_wallet_address")
   grandparentAmount                   Int      @map("grandparent_amount")
   unallocatedAmount                   Int      @map("unallocated_amount")
+  // What paid the pool: "signup" (someone joined through an invite) or "campaign"
+  source                              String   @default("signup")
   observedAt                          DateTime @default(now()) @map("observed_at")
 
   @@unique([transactionHash, logIndex])

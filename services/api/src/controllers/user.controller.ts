@@ -480,6 +480,7 @@ export async function getReferralRewardHistory(
           : allocation.directAmount,
         pointPool: allocation.pool,
         unallocatedPoints: allocation.unallocatedAmount,
+        source: allocation.source,
         observedAt: allocation.observedAt,
       };
     });
@@ -488,6 +489,139 @@ export async function getReferralRewardHistory(
   } catch (error) {
     console.error("Get referral reward history error:", error);
     res.status(500).json({ error: "Failed to get referral reward history" });
+  }
+}
+
+// Matches InviteStatus.Accepted in the contract; the listener sets it once a sign-up is on chain
+const INVITE_ACCEPTED = 1;
+
+const memberSelect = {
+  id: true,
+  walletAddress: true,
+  name: true,
+  createdAt: true,
+} as const;
+
+/**
+ * GET /api/users/referral-network
+ * Return who referred the current user (parent and grandparent), and the people they referred
+ * two levels down with the points each one earned them.
+ */
+export async function getReferralNetwork(
+  req: Request,
+  res: Response,
+): Promise<void> {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: "Not authenticated" });
+      return;
+    }
+
+    const walletAddress = req.user.walletAddress.toLowerCase();
+
+    // Only sign-ups confirmed on chain count, so the network matches the contract's
+    const acceptedInvite = {
+      status: INVITE_ACCEPTED,
+      refereeId: { not: null },
+    };
+
+    const parentInvite = await prisma.referral.findFirst({
+      where: { refereeId: req.user.id, status: INVITE_ACCEPTED },
+      select: { referrer: { select: memberSelect } },
+    });
+    const parent = parentInvite?.referrer ?? null;
+    const grandparentInvite = parent
+      ? await prisma.referral.findFirst({
+          where: { refereeId: parent.id, status: INVITE_ACCEPTED },
+          select: { referrer: { select: memberSelect } },
+        })
+      : null;
+    const grandparent = grandparentInvite?.referrer ?? null;
+
+    const directInvites = await prisma.referral.findMany({
+      where: { referrerId: req.user.id, ...acceptedInvite },
+      select: { referee: { select: memberSelect } },
+      orderBy: { referee: { createdAt: "asc" } },
+    });
+    const directReferrals = directInvites.flatMap((invite) =>
+      invite.referee ? [invite.referee] : [],
+    );
+    const indirectInvites = directReferrals.length
+      ? await prisma.referral.findMany({
+          where: {
+            referrerId: { in: directReferrals.map((referral) => referral.id) },
+            ...acceptedInvite,
+          },
+          select: { referrerId: true, referee: { select: memberSelect } },
+          orderBy: { referee: { createdAt: "asc" } },
+        })
+      : [];
+
+    // What each person earned this user: the direct share for people they referred,
+    // and the grandparent share for people their referrals referred
+    const allocations = await prisma.referralPointAllocation.findMany({
+      where: {
+        OR: [
+          { directRecipientWalletAddress: walletAddress },
+          { grandparentRecipientWalletAddress: walletAddress },
+        ],
+      },
+      select: {
+        participantWalletAddress: true,
+        directRecipientWalletAddress: true,
+        directAmount: true,
+        grandparentRecipientWalletAddress: true,
+        grandparentAmount: true,
+      },
+    });
+    const pointsFrom = new Map<string, number>();
+    for (const allocation of allocations) {
+      const points =
+        allocation.directRecipientWalletAddress === walletAddress
+          ? allocation.directAmount
+          : allocation.grandparentAmount;
+      const participant = allocation.participantWalletAddress.toLowerCase();
+      pointsFrom.set(participant, (pointsFrom.get(participant) ?? 0) + points);
+    }
+
+    const summary = (user: { walletAddress: string; name: string | null } | null) =>
+      user ? { walletAddress: user.walletAddress, name: user.name } : null;
+    const member = (
+      user: { walletAddress: string; name: string | null; createdAt: Date },
+      level: 1 | 2,
+    ) => ({
+      walletAddress: user.walletAddress,
+      name: user.name,
+      level,
+      joinedAt: user.createdAt,
+      pointsEarned: pointsFrom.get(user.walletAddress.toLowerCase()) ?? 0,
+    });
+
+    const referrals = directReferrals.map((referral) => ({
+      ...member(referral, 1),
+      referrals: indirectInvites.flatMap((invite) =>
+        invite.referrerId === referral.id && invite.referee
+          ? [member(invite.referee, 2)]
+          : [],
+      ),
+    }));
+    const indirectReferrals = referrals.flatMap((referral) => referral.referrals);
+    const sumPoints = (members: { pointsEarned: number }[]) =>
+      members.reduce((total, current) => total + current.pointsEarned, 0);
+
+    res.json({
+      ancestors: { parent: summary(parent), grandparent: summary(grandparent) },
+      referrals,
+      totals: {
+        level1Count: referrals.length,
+        level2Count: indirectReferrals.length,
+        level1Points: sumPoints(referrals),
+        level2Points: sumPoints(indirectReferrals),
+      },
+    });
+  } catch (error) {
+    console.error("Get referral network error:", error);
+    res.status(500).json({ error: "Failed to get referral network" });
   }
 }
 

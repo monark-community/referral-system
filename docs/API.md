@@ -375,6 +375,99 @@ Get all referrals (invites) sent by the current user.
 | 1 | Accepted — confirmed on-chain |
 | 2 | Closed |
 
+`points` is what the invite earns its referrer: their share of the referral pool (80 when they have a referrer, 100 when they don't). A grandparent's 20-point share is never put on an invite; see `GET /api/users/referral-rewards`.
+
+---
+
+### `GET /api/users/referral-rewards`
+
+Get every referral payout the current user received, newest first. Includes direct referrals (level 1) and people their referrals referred (level 2).
+
+**Auth required:** Yes
+
+**Response (200):**
+
+```json
+{
+  "rewardHistory": [
+    {
+      "id": "uuid",
+      "transactionHash": "0x...",
+      "blockNumber": "22",
+      "logIndex": 3,
+      "participant": {
+        "walletAddress": "0x...",
+        "name": "Carol"
+      },
+      "referralLevel": 2,
+      "points": 20,
+      "pointPool": 100,
+      "unallocatedPoints": 0,
+      "source": "signup",
+      "observedAt": "2026-09-29T12:00:00.000Z"
+    }
+  ]
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `participant` | The person who joined; `name` is `null` if they have no account in the database |
+| `referralLevel` | `1` if the user referred them directly, `2` if the user is their grandparent |
+| `points` | What the user received from this payout |
+| `pointPool` | The whole pool that was split between parent and grandparent |
+| `source` | What paid the pool: `"signup"` (someone joined through an invite) or `"campaign"` |
+
+---
+
+### `GET /api/users/referral-network`
+
+Get who referred the current user, and the people they referred two levels down with the points each one earned them. Only sign-ups confirmed on-chain are included.
+
+**Auth required:** Yes
+
+**Response (200):**
+
+```json
+{
+  "ancestors": {
+    "parent": { "walletAddress": "0x...", "name": "Bob" },
+    "grandparent": { "walletAddress": "0x...", "name": "Carol" }
+  },
+  "referrals": [
+    {
+      "walletAddress": "0x...",
+      "name": "Alice",
+      "level": 1,
+      "joinedAt": "2026-09-20T12:00:00.000Z",
+      "pointsEarned": 80,
+      "referrals": [
+        {
+          "walletAddress": "0x...",
+          "name": "Dave",
+          "level": 2,
+          "joinedAt": "2026-09-21T12:00:00.000Z",
+          "pointsEarned": 20
+        }
+      ]
+    }
+  ],
+  "totals": {
+    "level1Count": 1,
+    "level2Count": 1,
+    "level1Points": 80,
+    "level2Points": 20
+  }
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `ancestors.parent` | Who referred the user, or `null` if they joined without an invite |
+| `ancestors.grandparent` | Who referred the parent, or `null` |
+| `referrals` | People the user referred (level 1), each with the people they referred (level 2) |
+| `pointsEarned` | Points that person earned the user: the direct share for level 1, the grandparent share for level 2 |
+
 ---
 
 ### `POST /api/users/referrals/private`
@@ -574,6 +667,22 @@ Get the current user's milestone progress, including their current tier and the 
 | `createdAt` | DateTime | When the referral was created |
 | `updatedAt` | DateTime | Last update timestamp |
 
+### ReferralPointAllocation
+
+One row per `ReferralPointsAllocated` event, unique by `transactionHash` + `logIndex`, so a payout is stored once however many times the event is read.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | UUID | Primary key |
+| `transactionHash`, `logIndex`, `blockNumber` | String, Int, BigInt | Where the event is on chain |
+| `participantWalletAddress` | String | The person who joined |
+| `pool` | Int | The whole referral pool |
+| `directRecipientWalletAddress`, `directAmount` | String, Int | The parent and their share |
+| `grandparentRecipientWalletAddress`, `grandparentAmount` | String, Int | The grandparent and their share (zero address and 0 if none) |
+| `unallocatedAmount` | Int | Points nobody received |
+| `source` | String | `"signup"` or `"campaign"`; defaults to `"signup"` |
+| `observedAt` | DateTime | When the API stored the event |
+
 ### MilestoneTier
 
 | Column | Type | Description |
@@ -601,18 +710,26 @@ Get the current user's milestone progress, including their current tier and the 
 
 ## Blockchain Integration
 
-The API includes a background blockchain listener service that watches the smart contract for two events:
+The API includes a background blockchain listener service that watches the smart contract for three events:
 
 ### PointsAdded Event
 When points are awarded on-chain, the listener:
 1. Finds the user by wallet address
-2. Updates their `earnedPoints` in the database
+2. Updates their `earnedPoints` (or `pendingPoints`) in the database
 3. Reads and updates their `milestoneLevel` from the chain
+
+It never changes an invite's `points`: a balance can go up from a direct referral or from a grandparent's share, so it can't tell which invite the points belong to.
 
 ### InviteChanged Event
 When an invite status changes on-chain, the listener:
 1. Converts the bytes32 invite ID to a UUID
 2. Finds the matching Referral record
 3. Updates its `status` in the database
+4. For a new pending invite, sets its `points` to the referrer's share of the pool (read from the contract)
+
+### ReferralPointsAllocated Event
+When someone joins through an invite and the pool is split, the listener:
+1. Stores the payout in `ReferralPointAllocation`
+2. Sets the `points` of the invite between the parent and the new user to the parent's share
 
 The listener tracks its sync position in the `ChainSyncState` table to avoid reprocessing events after restarts.
