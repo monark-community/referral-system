@@ -76,6 +76,35 @@ describe("sendVerificationEmail", () => {
     expect(consoleLog).toHaveBeenCalledWith("Name: User");
   });
 
+  test("stores verification data in the guarded E2E mailbox", async () => {
+    const { sendVerificationEmail } = await loadEmailService({
+      API_URL: "http://api.test",
+      NODE_ENV: "test",
+      EMAIL_PROVIDER: "memory",
+      E2E_ENABLE_EMAIL_MAILBOX: "true",
+      E2E_MAILBOX_KEY: "test-mailbox-key-123",
+    });
+    const { listE2EEmails } = await import("@/services/e2eMailbox.service.js");
+
+    await sendVerificationEmail("alice@example.com", "token123", "Alice");
+
+    expect(listE2EEmails("alice@example.com")).toEqual([
+      expect.objectContaining({
+        to: "alice@example.com",
+        name: "Alice",
+        token: "token123",
+        verificationUrl: "http://api.test/api/users/verify-email/token123",
+      }),
+    ]);
+    expect(mockSendMail).not.toHaveBeenCalled();
+  });
+
+  test("refuses to enable the memory mailbox outside the guarded E2E environment", async () => {
+    await expect(loadEmailService({ EMAIL_PROVIDER: "memory", NODE_ENV: "production" })).rejects.toThrow(
+      "in-memory email provider requires NODE_ENV=test",
+    );
+  });
+
   test("sends the email through SMTP when it is configured", async () => {
     const { sendVerificationEmail } = await loadEmailService({
       ...smtpSettings,

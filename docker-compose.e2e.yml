@@ -1,0 +1,90 @@
+# E2E-only overrides. Always combine this file with docker-compose.yml and give
+# each run a unique project name, for example:
+# docker compose -p reffinity-e2e-123 -f docker-compose.yml -f docker-compose.e2e.yml --profile local-chain up
+
+services:
+  postgres:
+    ports: !reset []
+
+  hardhat:
+    ports: !reset []
+
+  hardhat-deploy:
+    environment:
+      DEPLOYMENT_OUTPUT_PATH: /test-deployment/referral-program.json
+    volumes:
+      - deployment_data:/test-deployment
+
+  db-migrate:
+    # Integration runs start from migrations only. Individual tests own their fixtures.
+    command: >
+      sh -c "npx prisma generate && npx prisma migrate deploy"
+
+  api:
+    ports: !reset []
+    environment:
+      NODE_ENV: test
+      JWT_SECRET: reffinity-e2e-only-not-for-production
+      FRONTEND_URL: http://web:3000
+      API_URL: http://api:3001
+      EMAIL_PROVIDER: memory
+      E2E_ENABLE_EMAIL_MAILBOX: "true"
+      E2E_MAILBOX_KEY: reffinity-e2e-mailbox-only
+      E2E_ENABLE_STATE_RESET: "true"
+      E2E_RESET_KEY: reffinity-e2e-reset-only
+      SMTP_HOST: ""
+      SMTP_USER: ""
+      SMTP_PASS: ""
+      REFERRAL_CONTRACT_ADDRESS: ${REFERRAL_CONTRACT_ADDRESS:-0x5fbdb2315678afecb367f032d93f642f64180aa3}
+    restart: "no"
+
+  web:
+    ports: !reset []
+    build:
+      args:
+        NEXT_PUBLIC_API_URL: http://api:3001/api
+        NEXT_PUBLIC_RPC_URL: http://hardhat:8545
+        NEXT_PUBLIC_REFERRAL_CONTRACT_ADDRESS: ${REFERRAL_CONTRACT_ADDRESS:-0x5fbdb2315678afecb367f032d93f642f64180aa3}
+        NEXT_PUBLIC_E2E_WALLET_ENABLED: "true"
+        E2E_BUILD: "true"
+    environment:
+      NODE_ENV: test
+      NEXT_PUBLIC_API_URL: http://api:3001/api
+      NEXT_PUBLIC_RPC_URL: http://hardhat:8545
+      NEXT_PUBLIC_REFERRAL_CONTRACT_ADDRESS: ${REFERRAL_CONTRACT_ADDRESS:-0x5fbdb2315678afecb367f032d93f642f64180aa3}
+      NEXT_PUBLIC_E2E_WALLET_ENABLED: "true"
+    restart: "no"
+
+  e2e:
+    profiles: [local-chain]
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.e2e
+    depends_on:
+      postgres:
+        condition: service_healthy
+      hardhat:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    environment:
+      CI: ${CI:-}
+      E2E_ARTIFACTS_ROOT: /e2e-artifacts
+      E2E_WEB_BASE_URL: http://web:3000
+      E2E_API_BASE_URL: http://api:3001
+      E2E_HARDHAT_RPC_URL: http://hardhat:8545
+      E2E_REFERRAL_CONTRACT_ADDRESS: ${REFERRAL_CONTRACT_ADDRESS:-0x5fbdb2315678afecb367f032d93f642f64180aa3}
+      E2E_RESET_KEY: reffinity-e2e-reset-only
+      E2E_MAILBOX_KEY: reffinity-e2e-mailbox-only
+    volumes:
+      - type: bind
+        source: ${E2E_ARTIFACTS_DIR:-./playwright-output/local}
+        target: /e2e-artifacts
+    init: true
+    ipc: host
+    restart: "no"
+
+volumes:
+  deployment_data:

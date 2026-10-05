@@ -4,6 +4,10 @@
 
 import nodemailer from "nodemailer";
 import type { Transporter } from "nodemailer";
+import {
+  assertE2EMailboxConfigured,
+  storeE2EEmail,
+} from "./e2eMailbox.service.js";
 
 const API_URL = process.env.API_URL || "http://localhost:3001";
 const EMAIL_PROVIDER = process.env.EMAIL_PROVIDER || "console"; // 'smtp' or 'console'
@@ -16,6 +20,10 @@ const SMTP_PORT = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT) : 587;
 const SMTP_SECURE = process.env.SMTP_SECURE === "true"; // true for port 465, false for other ports
 const SMTP_USER = process.env.SMTP_USER;
 const SMTP_PASS = process.env.SMTP_PASS;
+
+if (EMAIL_PROVIDER === "memory") {
+  assertE2EMailboxConfigured();
+}
 
 let smtpTransporter: Transporter | null = null;
 if (SMTP_HOST && SMTP_USER && SMTP_PASS) {
@@ -142,6 +150,17 @@ export async function sendVerificationEmail(
 
   const emailHtml = getVerificationEmailHtml(name, verificationUrl);
   const subject = "Verify your email for Reffinity";
+
+  if (EMAIL_PROVIDER === "memory") {
+    storeE2EEmail({
+      to: email,
+      name: name ?? null,
+      subject,
+      token,
+      verificationUrl,
+    });
+    return;
+  }
 
   // Console mode (development/testing)
   if (EMAIL_PROVIDER === "console" || !smtpTransporter) {

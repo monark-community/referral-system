@@ -7,6 +7,7 @@ import request from "supertest";
 import app from "@/app.js";
 import { prisma } from "@/lib/prisma.js";
 import { generateJWT } from "@/services/auth.service.js";
+import { markNotReady, markReady } from "@/readiness.js";
 
 jest.mock("@/lib/prisma", () => ({
   prisma: {
@@ -62,6 +63,18 @@ describe("API routes", () => {
 
       expect(res.status).toBe(200);
       expect(res.body).toEqual({ status: "ok", timestamp: expect.any(String) });
+    });
+
+    test("GET /ready reflects listener initialization", async () => {
+      markNotReady("blockchain_listener_initializing");
+      const starting = await request(app).get("/ready");
+      expect(starting.status).toBe(503);
+      expect(starting.body).toEqual({ ready: false, reason: "blockchain_listener_initializing" });
+
+      markReady();
+      const ready = await request(app).get("/ready");
+      expect(ready.status).toBe(200);
+      expect(ready.body).toEqual({ ready: true, reason: "ready" });
     });
 
     test("responses carry security headers", async () => {

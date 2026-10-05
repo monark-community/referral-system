@@ -177,10 +177,12 @@ describe("BlockchainListenerService", () => {
       ).toHaveBeenCalledTimes(1);
     });
 
-    test("logs startup errors instead of crashing the API", async () => {
+    test("reports startup errors so the API cannot become ready", async () => {
       mockPublicClient.getChainId.mockRejectedValue(new Error("node offline"));
 
-      await expect(new BlockchainListenerService().initialize()).resolves.toBeUndefined();
+      await expect(new BlockchainListenerService().initialize()).rejects.toThrow(
+        "node offline",
+      );
 
       expect(consoleError).toHaveBeenCalledWith(
         "Error initializing blockchain listener:",
@@ -198,7 +200,9 @@ describe("BlockchainListenerService", () => {
       async (method) => {
         mockReadService[method].mockRejectedValue(new Error("socket closed"));
 
-        await new BlockchainListenerService().initialize();
+        await expect(
+          new BlockchainListenerService().initialize(),
+        ).rejects.toThrow("Could not start blockchain listener: socket closed");
 
         expect(consoleError).toHaveBeenCalledWith(
           "Error initializing blockchain listener:",
@@ -772,8 +776,8 @@ describe("BlockchainListenerService", () => {
     test("stops watching all events, only once", async () => {
       const { listener } = await startListener();
 
-      listener.stop();
-      listener.stop();
+      await listener.stop();
+      await listener.stop();
 
       expect(mockReadService.stopListeningToPointsAddedEvent).toHaveBeenCalledTimes(1);
       expect(mockReadService.stopListeningToInviteChangedEvent).toHaveBeenCalledTimes(1);
@@ -785,7 +789,7 @@ describe("BlockchainListenerService", () => {
     test("can start listening again after stopping", async () => {
       const { listener } = await startListener();
 
-      listener.stop();
+      await listener.stop();
       await listener.initialize();
 
       expect(mockReadService.listenToPointsAddedEvent).toHaveBeenCalledTimes(2);
@@ -795,8 +799,8 @@ describe("BlockchainListenerService", () => {
       ).toHaveBeenCalledTimes(2);
     });
 
-    test("does nothing if the listener never started", () => {
-      new BlockchainListenerService().stop();
+    test("does nothing if the listener never started", async () => {
+      await new BlockchainListenerService().stop();
 
       expect(mockReadService.stopListeningToPointsAddedEvent).not.toHaveBeenCalled();
       expect(mockReadService.stopListeningToInviteChangedEvent).not.toHaveBeenCalled();

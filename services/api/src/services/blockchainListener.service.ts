@@ -45,6 +45,7 @@ export class BlockchainListenerService {
       console.log("Blockchain listener initialized successfully.");
     } catch (error) {
       console.error("Error initializing blockchain listener:", error);
+      throw error;
     }
   }
 
@@ -311,7 +312,9 @@ export class BlockchainListenerService {
 
     // Last processed state
     const state = await prisma.chainSyncState.findUnique({ where: { id: 1 } });
-    const latestBlock = await this.publicClient.getBlockNumber();
+    // A restart immediately after a mined transaction must not reuse viem's cached block
+    // number or the catch-up pass can incorrectly conclude that there is no new work.
+    const latestBlock = await this.publicClient.getBlockNumber({ cacheTime: 0 });
 
     await this.syncReferralPointAllocations(state, latestBlock);
 
@@ -496,19 +499,23 @@ export class BlockchainListenerService {
     });
   }
 
-  stop(): void {
+  async stop(): Promise<void> {
+    const stops: Promise<unknown>[] = [];
     if (this.isListeningToPointsAdded) {
-      this.readReferralContractService.stopListeningToPointsAddedEvent();
+      stops.push(this.readReferralContractService.stopListeningToPointsAddedEvent());
       this.isListeningToPointsAdded = false;
       console.log("Blockchain listener stopped");
     }
     if (this.isListeningToInviteChanged) {
-      this.readReferralContractService.stopListeningToInviteChangedEvent();
+      stops.push(this.readReferralContractService.stopListeningToInviteChangedEvent());
       this.isListeningToInviteChanged = false;
     }
     if (this.isListeningToReferralPointsAllocated) {
-      this.readReferralContractService.stopListeningToReferralPointsAllocatedEvent();
+      stops.push(
+        this.readReferralContractService.stopListeningToReferralPointsAllocatedEvent(),
+      );
       this.isListeningToReferralPointsAllocated = false;
     }
+    await Promise.all(stops);
   }
 }

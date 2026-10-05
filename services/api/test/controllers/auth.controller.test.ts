@@ -19,7 +19,10 @@ jest.mock("@/lib/prisma", () => ({
     referral: {
       create: jest.fn(),
       update: jest.fn(),
+      findUnique: jest.fn(),
+      updateMany: jest.fn(),
     },
+    $transaction: jest.fn(),
   },
 }));
 
@@ -53,6 +56,9 @@ describe("Test auth controller", () => {
     ) as { uuidToBytes32: jest.Mock };
 
     uuidToBytes32.mockReturnValue("BYTES32");
+    (prisma.$transaction as jest.Mock).mockImplementation(
+      (operation: (client: typeof prisma) => unknown) => operation(prisma),
+    );
 
     // Mock the database operations
     (prisma.user.create as jest.Mock).mockReturnValue({
@@ -107,7 +113,7 @@ describe("Test auth controller", () => {
 
     expect(prisma.user.findUnique).toHaveBeenCalledWith({
       where: { referralCode: req.body.referralCode.toUpperCase() },
-      select: { id: true, walletAddress: true },
+      select: { id: true, walletAddress: true, referralCode: true },
     });
 
     expect(prisma.user.create).toHaveBeenCalledWith({
@@ -320,16 +326,23 @@ describe("Test auth controller", () => {
       };
       (prisma.user.findUnique as jest.Mock)
         .mockResolvedValueOnce(null) // wallet is new
-        .mockResolvedValueOnce(null) // generated code is free
-        .mockResolvedValueOnce({ id: "referrer123", walletAddress: "0xreferrer" });
-      (prisma.referral.update as jest.Mock).mockResolvedValueOnce({ id: "invite1" });
+        .mockResolvedValueOnce(null); // generated code is free
+      (prisma.referral.findUnique as jest.Mock).mockResolvedValueOnce({
+        id: "invite1",
+        refereeId: null,
+        referrer: {
+          id: "referrer123",
+          walletAddress: "0xreferrer",
+          referralCode: "REFERRER1",
+        },
+      });
+      (prisma.referral.updateMany as jest.Mock).mockResolvedValueOnce({ count: 1 });
 
       await walletAuth(req, res);
 
-      expect(prisma.referral.update).toHaveBeenCalledWith({
-        where: { inviteCode: "INVITE01" },
+      expect(prisma.referral.updateMany).toHaveBeenCalledWith({
+        where: { id: "invite1", refereeId: null },
         data: {
-          referrerId: "referrer123",
           refereeId: "user1",
           status: 0,
           points: 0,

@@ -38,21 +38,20 @@ export function WalletConnectStep({ onSuccess, onReturningUser, onNeedsVerificat
   const { writeContractAsync } = useWriteContract();
   const { switchChainAsync } = useSwitchChain();
 
-  // Get MetaMask connector
-  const metaMaskConnector = connectors.find(
-    (c) => c.name === 'MetaMask' || c.id === 'metaMask'
-  );
+  const walletConnector = connectors.find(
+    (connector) => connector.id === 'reffinityE2E'
+  ) ?? connectors.find((connector) => connector.name === 'MetaMask' || connector.id === 'metaMask');
 
   const handleConnect = async () => {
     setError(null);
 
-    if (!metaMaskConnector) {
+    if (!walletConnector) {
       setError('MetaMask is not available. Please install MetaMask to continue.');
       return;
     }
 
     try {
-      connect({ connector: metaMaskConnector });
+      connect({ connector: walletConnector });
     } catch (err) {
       console.error('Connection error:', err);
       setError('Failed to connect wallet. Please try again.');
@@ -256,7 +255,7 @@ export function WalletConnectStep({ onSuccess, onReturningUser, onNeedsVerificat
                     fill="#E27625"
                   />
                 </svg>
-                Connect MetaMask
+                {walletConnector?.id === 'reffinityE2E' ? 'Connect Test Wallet' : 'Connect MetaMask'}
               </>
             )}
           </Button>
@@ -289,7 +288,7 @@ export function WalletConnectStep({ onSuccess, onReturningUser, onNeedsVerificat
       </div>
 
       {/* MetaMask Install Link */}
-      {!metaMaskConnector && (
+      {!walletConnector && (
         <p className="mt-4 text-center text-xs text-muted-foreground">
           Don&apos;t have MetaMask?{' '}
           <a

@@ -120,7 +120,7 @@ export class ReadReferralContractService {
       isPending: boolean;
       blockNumber: bigint;
       logIndex: number;
-    }) => void,
+    }) => void | Promise<void>,
     pollingInterval?: number,
   ) {
     const unwatch = this.clients.publicClient.watchContractEvent({
@@ -128,7 +128,7 @@ export class ReadReferralContractService {
       abi: contracts.referral.abi,
       eventName: "PointsAdded",
       pollingInterval: pollingInterval ? pollingInterval : 10000,
-      onLogs: (logs: any) => {
+      onLogs: async (logs: any) => {
         for (const log of logs) {
           if (!log.args) continue;
 
@@ -138,7 +138,7 @@ export class ReadReferralContractService {
             isPending: boolean;
           };
 
-          callback({
+          await callback({
             user,
             points,
             isPending,
@@ -187,7 +187,7 @@ export class ReadReferralContractService {
       blockNumber: bigint;
       logIndex: number;
       transactionHash: Hash;
-    }) => void,
+    }) => void | Promise<void>,
     pollingInterval?: number,
   ) {
     const unwatch = this.clients.publicClient.watchContractEvent({
@@ -195,7 +195,7 @@ export class ReadReferralContractService {
       abi: contracts.referral.abi,
       eventName: "ReferralPointsAllocated",
       pollingInterval: pollingInterval ? pollingInterval : 10000,
-      onLogs: (logs: any) => {
+      onLogs: async (logs: any) => {
         for (const log of logs) {
           if (!log.args) continue;
 
@@ -217,7 +217,7 @@ export class ReadReferralContractService {
             unallocatedAmount: bigint;
           };
 
-          callback({
+          await callback({
             participant,
             pool,
             directRecipient,
@@ -268,7 +268,7 @@ export class ReadReferralContractService {
       referrer: `0x${string}`;
       blockNumber: bigint;
       logIndex: number;
-    }) => void,
+    }) => void | Promise<void>,
     pollingInterval?: number,
   ) {
     const unwatch = this.clients.publicClient.watchContractEvent({
@@ -276,7 +276,7 @@ export class ReadReferralContractService {
       abi: contracts.referral.abi,
       eventName: "InviteChanged",
       pollingInterval: pollingInterval ? pollingInterval : 10000,
-      onLogs: (logs: any) => {
+      onLogs: async (logs: any) => {
         for (const log of logs) {
           if (!log.args) continue;
           const { inviteId, referrer, status } = log.args as {
@@ -284,7 +284,7 @@ export class ReadReferralContractService {
             referrer: `0x${string}`;
             status: InviteStatus;
           };
-          callback({
+          await callback({
             inviteId,
             status,
             referrer,

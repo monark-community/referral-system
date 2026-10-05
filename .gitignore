@@ -37,6 +37,9 @@ Thumbs.db
 dist/
 build/
 coverage/
+playwright-output/
+playwright-report/
+test-results/
 
 # Environment
 .env.*
