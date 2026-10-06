@@ -445,6 +445,7 @@ export default function ReferralsPage() {
             <NavMenuItem label="Referral Program" onClick={() => router.push("/referrals")} isActive />
             <NavMenuItem label="My Profile" onClick={() => router.push("/referrals/profile")} />
             <NavMenuItem label="How it Works" onClick={() => router.push("/referrals/how-it-works")} />
+            <NavMenuItem label="Referrals" onClick={() => router.push("/referrals/tree")} />
             <NavMenuItem label="Invites History" onClick={() => router.push("/referrals/history")} badge={userData.pendingPoints > 0 ? 1 : 0} />
             <NavMenuItem label="Preferences" onClick={() => router.push("/referrals/preferences")} />
             <NavMenuItem label="Rewards" onClick={() => router.push("/referrals/rewards")} />
