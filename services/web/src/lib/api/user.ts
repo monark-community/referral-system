@@ -56,6 +56,19 @@ export interface ReferralRewardHistoryResponse {
   rewardHistory: ReferralReward[];
 }
 
+export interface TreeUser {
+  id: string;
+  name: string | null;
+  walletAddress: string;
+}
+
+export interface ReferralTreeResponse {
+  me: TreeUser;
+  parent: TreeUser | null;
+  grandparent: TreeUser | null;
+  children: (TreeUser & { referrals: TreeUser[] })[];
+}
+
 export interface PrivateInviteRequest {
   description: string | null;
 }
@@ -110,6 +123,13 @@ export async function getInvites(): Promise<GetInvitesResponse> {
  */
 export async function getReferralRewardHistory(): Promise<ReferralRewardHistoryResponse> {
   return apiClient<ReferralRewardHistoryResponse>("/users/referral-rewards");
+}
+
+/**
+ * Get the user's referral tree (grandparent, parent, children, grandchildren).
+ */
+export async function getReferralTree(): Promise<ReferralTreeResponse> {
+  return apiClient<ReferralTreeResponse>("/users/referral-tree");
 }
 
 /**
