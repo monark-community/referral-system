@@ -19,14 +19,21 @@
     "dev:api": "npm run dev -w reffinity-api",
     "dev:web": "npm run dev -w reffinity-web",
     "contracts:setup-local": "npm run setup-local -w @reffinity/common-contracts",
+    "test:e2e": "node scripts/e2e/run.mjs",
+    "test:e2e:smoke": "npm run test:e2e -- --grep @smoke",
+    "test:e2e:api": "npm run test:e2e -- --grep @api",
+    "test:e2e:browser": "npm run test:e2e -- --grep @phase6",
+    "test:e2e:runner": "node --test scripts/e2e/run.test.mjs",
     "db:migrate": "npm run db:migrate -w reffinity-api",
     "db:generate": "npm run db:generate -w reffinity-api",
     "lint": "npm run lint -w reffinity-api && npm run lint -w reffinity-web"
   },
   "devDependencies": {
+    "@playwright/test": "1.51.1",
     "concurrently": "^8.2.2",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3",
+    "viem": "^2.21.54",
     "wait-on": "^9.0.4"
   }
 }

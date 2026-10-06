@@ -5,27 +5,41 @@
 
 import { createConfig, http } from "wagmi";
 import { mainnet, sepolia, hardhat } from "wagmi/chains";
-import { metaMask } from "wagmi/connectors";
+import { injected, metaMask } from "wagmi/connectors";
+import { getE2EProvider } from "./e2e-provider";
 
 // Hardhat local chain first so it's the default during development
 const chains = [hardhat, sepolia, mainnet] as const;
 
 const rpcURL = process.env.NEXT_PUBLIC_RPC_URL || "http://127.0.0.1:8545";
+const e2eWalletEnabled = process.env.NEXT_PUBLIC_E2E_WALLET_ENABLED === "true";
+
+const connectors = e2eWalletEnabled
+  ? [
+      injected({
+        target: {
+          id: "reffinityE2E",
+          name: "Reffinity Test Wallet",
+          provider: () => getE2EProvider(rpcURL) as any,
+        },
+      }),
+    ]
+  : [
+      metaMask({
+        dappMetadata: {
+          name: "Reffinity",
+          url:
+            typeof window !== "undefined"
+              ? window.location.origin
+              : "https://reffinity.io",
+        },
+        enableAnalytics: false,
+      }),
+    ];
 
 export const wagmiConfig = createConfig({
   chains,
-  connectors: [
-    metaMask({
-      dappMetadata: {
-        name: "Reffinity",
-        url:
-          typeof window !== "undefined"
-            ? window.location.origin
-            : "https://reffinity.io",
-      },
-      enableAnalytics: false,
-    }),
-  ],
+  connectors,
   transports: {
     [hardhat.id]: http(rpcURL),
     [mainnet.id]: http(),

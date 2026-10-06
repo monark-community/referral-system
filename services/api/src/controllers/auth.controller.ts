@@ -12,6 +12,8 @@ import {
 } from "../services/auth.service.js";
 import { uuidToBytes32 } from "@reffinity/blockchain-connector/uuidBytesConverter";
 
+class PrivateInviteUnavailableError extends Error {}
+
 /**
  * POST /api/auth/wallet
  * Authenticate with wallet signature, create user if new
@@ -66,60 +68,84 @@ export async function walletAuth(req: Request, res: Response): Promise<void> {
         }
       }
 
-      // Look up referrer if a referral code was provided
-      let referredBy: string | undefined;
-      if (incomingReferralCode) {
-        const referrer = await prisma.user.findUnique({
-          where: { referralCode: incomingReferralCode.toUpperCase() },
-          select: { id: true, walletAddress: true },
-        });
-        if (referrer) {
-          referredBy = referrer.id;
-          referrerWalletAddress = referrer.walletAddress;
-        }
-      }
+      const created = await prisma.$transaction(async (tx) => {
+        let referrer: { id: string; walletAddress: string; referralCode: string } | null = null;
+        let privateInviteId: string | undefined;
 
-      user = await prisma.user.create({
-        data: {
-          walletAddress: normalizedAddress,
-          referralCode,
-          referredBy,
-          termsAcceptedAt: null,
-        },
+        if (incomingInviteCode) {
+          const privateInvite = await tx.referral.findUnique({
+            where: { inviteCode: incomingInviteCode },
+            select: {
+              id: true,
+              refereeId: true,
+              referrer: {
+                select: { id: true, walletAddress: true, referralCode: true },
+              },
+            },
+          });
+          if (
+            !privateInvite ||
+            privateInvite.refereeId ||
+            (incomingReferralCode &&
+              privateInvite.referrer.referralCode !== incomingReferralCode.toUpperCase())
+          ) {
+            throw new PrivateInviteUnavailableError(
+              "Private invite is invalid or has already been used",
+            );
+          }
+          referrer = privateInvite.referrer;
+          privateInviteId = privateInvite.id;
+        } else if (incomingReferralCode) {
+          referrer = await tx.user.findUnique({
+            where: { referralCode: incomingReferralCode.toUpperCase() },
+            select: { id: true, walletAddress: true, referralCode: true },
+          });
+        }
+
+        const createdUser = await tx.user.create({
+          data: {
+            walletAddress: normalizedAddress,
+            referralCode,
+            referredBy: referrer?.id,
+            termsAcceptedAt: null,
+          },
+        });
+
+        let inviteId: string | undefined;
+        if (privateInviteId) {
+          const claimed = await tx.referral.updateMany({
+            where: { id: privateInviteId, refereeId: null },
+            data: { refereeId: createdUser.id, status: 0, points: 0 },
+          });
+          if (claimed.count !== 1) {
+            throw new PrivateInviteUnavailableError(
+              "Private invite is invalid or has already been used",
+            );
+          }
+          inviteId = privateInviteId;
+        } else if (referrer) {
+          const invite = await tx.referral.create({
+            data: {
+              referrerId: referrer.id,
+              refereeId: createdUser.id,
+              status: 0,
+              points: 0,
+            },
+          });
+          inviteId = invite.id;
+        }
+
+        return { user: createdUser, referrer, inviteId };
       });
 
-      var inviteId: string | undefined;
-
-      //If this is a private invite then we use that existing invite
-      if (incomingInviteCode) {
-        let privateInvite = await prisma.referral.update({
-          where: { inviteCode: incomingInviteCode },
-          data: {
-            referrerId: referredBy,
-            refereeId: user.id,
-            status: 0,
-            points: 0,
-          },
-        });
-        inviteId = privateInvite?.id
-      }    
-      // Create a Referral record to track this individual referral
-      else if (referredBy) {
-        let invite = await prisma.referral.create({
-          data: {
-            referrerId: referredBy,
-            refereeId: user.id,
-            status: 0,
-            points: 0,
-          },
-        });
-        inviteId = invite.id;
-      }
+      user = created.user;
+      referrerWalletAddress = created.referrer?.walletAddress;
+      const inviteId = created.inviteId;
 
       bytesInviteId = inviteId ? uuidToBytes32(inviteId) : "";
 
       console.log(
-        `New user created: ${user.id} (${normalizedAddress})${referredBy ? ` referred by ${referredBy}` : ""}`,
+        `New user created: ${user.id} (${normalizedAddress})${created.referrer ? ` referred by ${created.referrer.id}` : ""}`,
       );
     }
 
@@ -150,6 +176,10 @@ export async function walletAuth(req: Request, res: Response): Promise<void> {
     });
   } catch (error) {
     console.error("Wallet auth error:", error);
+    if (error instanceof PrivateInviteUnavailableError) {
+      res.status(409).json({ error: error.message });
+      return;
+    }
     res.status(500).json({ error: "Authentication failed" });
   }
 }

@@ -39,8 +39,8 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
   const { signMessageAsync } = useSignMessage();
 
   const metaMaskConnector = connectors.find(
-    (c) => c.name === 'MetaMask' || c.id === 'metaMask'
-  );
+    (c) => c.id === 'reffinityE2E'
+  ) ?? connectors.find((c) => c.name === 'MetaMask' || c.id === 'metaMask');
 
   const handleConnect = async () => {
     setError(null);
@@ -170,7 +170,7 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
                         fill="#E27625"
                       />
                     </svg>
-                    Connect MetaMask
+                    {metaMaskConnector?.id === 'reffinityE2E' ? 'Connect Test Wallet' : 'Connect MetaMask'}
                   </>
                 )}
               </Button>

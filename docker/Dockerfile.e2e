@@ -1,0 +1,13 @@
+FROM mcr.microsoft.com/playwright:v1.51.1-noble
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+
+# The browser harness only needs root tooling, not the application workspaces.
+RUN npm ci --ignore-scripts --workspaces=false
+
+COPY playwright.config.ts ./
+COPY e2e ./e2e
+
+CMD ["npx", "playwright", "test"]

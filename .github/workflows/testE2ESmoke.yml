@@ -1,0 +1,58 @@
+name: Browser E2E Smoke Tests
+
+on:
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-smoke-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  browser-e2e-smoke:
+    name: Clean boot and public referral
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+    - uses: actions/checkout@v7
+
+    - name: Use Node.js 22.x
+      uses: actions/setup-node@v7
+      with:
+        node-version: 22.x
+        cache: npm
+
+    - name: Install runner dependencies
+      run: npm ci
+
+    # The E2E image contains Chromium and npm dependencies. Caching its BuildKit layers
+    # avoids caching any database, chain, mailbox, or Playwright output state.
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v4
+
+    - name: Cache E2E dependencies and Chromium image layers
+      uses: docker/bake-action@v7
+      with:
+        files: docker-compose.yml,docker-compose.e2e.yml
+        targets: e2e
+        load: true
+        set: |
+          *.cache-from=type=gha,scope=reffinity-e2e
+          *.cache-to=type=gha,scope=reffinity-e2e,mode=max
+
+    - name: Run isolated browser smoke test
+      run: npm run test:e2e:smoke
+
+    - name: Upload failure diagnostics
+      if: failure()
+      uses: actions/upload-artifact@v7
+      with:
+        name: e2e-smoke-${{ github.run_id }}-${{ github.run_attempt }}
+        path: playwright-output/
+        if-no-files-found: warn
+        retention-days: 14

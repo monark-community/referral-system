@@ -7,6 +7,21 @@
 import hre from "hardhat";
 import { createWalletClient, createPublicClient, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
+import { mkdir, rename, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
+
+async function writeDeploymentArtifact(deployment) {
+  const outputPath = process.env.DEPLOYMENT_OUTPUT_PATH;
+  if (!outputPath) {
+    return;
+  }
+
+  await mkdir(dirname(outputPath), { recursive: true });
+  const temporaryPath = `${outputPath}.tmp`;
+  await writeFile(temporaryPath, `${JSON.stringify(deployment, null, 2)}\n`, "utf8");
+  await rename(temporaryPath, outputPath);
+  console.log("Deployment artifact written to:", outputPath);
+}
 
 
 async function main() {
@@ -98,6 +113,14 @@ async function main() {
         await publicClient.waitForTransactionReceipt({ hash });
     }
     console.log("Milestones set:", milestoneThresholds);
+
+    await writeDeploymentArtifact({
+      chainId: await publicClient.getChainId(),
+      contractName: "ReferralProgram",
+      address: receipt.contractAddress,
+      deploymentTransactionHash: receipt.transactionHash,
+      deploymentBlockNumber: receipt.blockNumber.toString(),
+    });
 }
 
 main().catch((error) => {
