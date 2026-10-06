@@ -17,6 +17,7 @@ import {
   History,
   Settings,
   Gift,
+  Network,
   FileText,
   LogOut,
   ChevronRight,
@@ -28,6 +29,7 @@ const navItems = [
   { label: "Home", href: "/referrals", icon: Home },
   { label: "Profile", href: "/referrals/profile", icon: User },
   { label: "How it Works", href: "/referrals/how-it-works", icon: HelpCircle },
+  { label: "Referrals", href: "/referrals/tree", icon: Network },
   { label: "History", href: "/referrals/history", icon: History },
   { label: "Rewards", href: "/referrals/rewards", icon: Gift },
 ];
