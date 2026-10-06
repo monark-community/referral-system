@@ -686,3 +686,50 @@ export async function createPrivateInvite(
     res.status(500).json({ error: "Failed to create a private invites" });
   }
 }
+
+
+/**
+ * GET /api/users/referral-tree
+ * Return the current user's grandparent, parent, children and grandchildren.
+ */
+export async function getReferralTree(
+  req: Request,
+  res: Response,
+): Promise<void> {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: "Not authenticated" });
+      return;
+    }
+
+    const node = { id: true, name: true, walletAddress: true } as const;
+    const me = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: {
+        ...node,
+        referrer: {
+          select: { ...node, referrer: { select: node } },
+        },
+        referrals: {
+          select: { ...node, referrals: { select: node } },
+        },
+      },
+    });
+
+    if (!me) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+
+    const { referrer, referrals, ...self } = me;
+    res.json({
+      me: self,
+      parent: referrer ? { ...referrer, referrer: undefined } : null,
+      grandparent: referrer?.referrer ?? null,
+      children: referrals,
+    });
+  } catch (error) {
+    console.error("Get referral tree error:", error);
+    res.status(500).json({ error: "Failed to get referral tree" });
+  }
+}
