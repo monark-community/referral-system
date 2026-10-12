@@ -18,8 +18,16 @@ async function joinThroughUi(page: import("@playwright/test").Page) {
 test("restores the database, contract, mailbox, and listener to a clean baseline", async ({
   page,
   resetState,
-  cleanBaseline: _cleanBaseline,
+  cleanBaseline,
 }) => {
+  expect(cleanBaseline.counts).toEqual(expect.objectContaining({
+    campaigns: 1,
+    campaignTasks: 1,
+    campaignVerificationPolicies: 1,
+    campaignRewardPolicies: 1,
+    campaignFulfillments: 0,
+  }));
+
   await page.addInitScript(() => {
     localStorage.setItem("reffinity:e2e-wallet-index", "0");
   });
@@ -54,6 +62,11 @@ test("restores the database, contract, mailbox, and listener to a clean baseline
     referralPointAllocations: 0,
     chainSyncStates: 1,
     milestoneTiers: 0,
+    campaigns: 1,
+    campaignTasks: 1,
+    campaignVerificationPolicies: 1,
+    campaignRewardPolicies: 1,
+    campaignFulfillments: 0,
   }));
 
   await page.evaluate(() => localStorage.clear());

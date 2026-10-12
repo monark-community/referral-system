@@ -1,1 +1,1 @@
-// Purpose: Placeholder barrel for API model-level exports when domain model helpers are added
+export * from "./campaign.js";
