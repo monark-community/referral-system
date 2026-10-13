@@ -5,7 +5,7 @@
   "dependencies": {
     "@reffinity/common-contracts": "*",
     "dotenv": "^17.3.1",
-    "viem": "^2.45.1"
+    "viem": "^2.48.8"
   },
   "exports": {
     "./readReferralContract": {
