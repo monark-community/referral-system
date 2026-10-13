@@ -10,6 +10,7 @@ import {
   sendVerificationEmail,
   getInvites,
   getReferralRewardHistory,
+  getReferralTree,
   acceptTerms,
   disableAccount,
   enableAccount,
@@ -33,6 +34,7 @@ test.each([
   ["getProfile", getProfile, "/users/profile"],
   ["getInvites", getInvites, "/users/referrals"],
   ["getReferralRewardHistory", getReferralRewardHistory, "/users/referral-rewards"],
+  ["getReferralTree", getReferralTree, "/users/referral-tree"],
   ["getMilestoneTiers", getMilestoneTiers, "/milestones/tiers"],
   ["getUserMilestone", getUserMilestone, "/milestones/user"],
 ])("%s sends GET %s", async (_name, call, endpoint) => {

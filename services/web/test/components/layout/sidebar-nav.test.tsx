@@ -29,6 +29,7 @@ test.each([
   ["Home", "/referrals"],
   ["Profile", "/referrals/profile"],
   ["How it Works", "/referrals/how-it-works"],
+  ["Referrals", "/referrals/tree"],
   ["History", "/referrals/history"],
   ["Rewards", "/referrals/rewards"],
   ["Preferences", "/referrals/preferences"],

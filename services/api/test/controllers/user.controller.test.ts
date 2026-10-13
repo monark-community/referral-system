@@ -13,6 +13,7 @@ import {
   getInvites,
   getReferralRewardHistory,
   getReferralNetwork,
+  getReferralTree,
   createPrivateInvite,
   acceptTerms,
 } from "@/controllers/user.controller.js";
@@ -763,6 +764,113 @@ describe("User Controller test", () => {
     });
   });
 
+  describe("getReferralTree", () => {
+    const person = (id: string, name: string | null = null) => ({ id, name, walletAddress: `0x${id}` });
+    // The only fields the tree shares about anyone
+    const publicFields = { id: true, name: true, walletAddress: true };
+
+    beforeEach(() => {
+      (prisma.user.findUnique as jest.Mock).mockReset();
+    });
+
+    test("fails on an unauthenticated user", async () => {
+      req = {};
+
+      await getReferralTree(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(res.json).toHaveBeenCalledWith({ error: "Not authenticated" });
+      expect(prisma.user.findUnique).not.toHaveBeenCalled();
+    });
+
+    test("returns the user with their parent, grandparent, children and grandchildren", async () => {
+      req = { user: { id: "me" } };
+      (prisma.user.findUnique as jest.Mock).mockResolvedValueOnce({
+        ...person("me", "Me"),
+        referrer: { ...person("parent", "Parent"), referrer: person("grandparent", "Grandparent") },
+        referrals: [
+          { ...person("alice", "Alice"), referrals: [person("carol")] },
+          { ...person("bob", "Bob"), referrals: [] },
+        ],
+      });
+
+      await getReferralTree(req, res);
+
+      expect(res.json).toHaveBeenCalledWith({
+        me: person("me", "Me"),
+        parent: person("parent", "Parent"),
+        grandparent: person("grandparent", "Grandparent"),
+        children: [
+          { ...person("alice", "Alice"), referrals: [person("carol")] },
+          { ...person("bob", "Bob"), referrals: [] },
+        ],
+      });
+      // The grandparent is returned on its own, not nested inside the parent as well
+      expect(res.json.mock.calls[0][0].parent.referrer).toBeUndefined();
+    });
+
+    test("only reads each person's id, name and wallet address, two levels up and two levels down", async () => {
+      req = { user: { id: "me" } };
+      (prisma.user.findUnique as jest.Mock).mockResolvedValueOnce({ ...person("me"), referrer: null, referrals: [] });
+
+      await getReferralTree(req, res);
+
+      // No email, phone or points at any level
+      expect(prisma.user.findUnique).toHaveBeenCalledWith({
+        where: { id: "me" },
+        select: {
+          ...publicFields,
+          referrer: { select: { ...publicFields, referrer: { select: publicFields } } },
+          referrals: { select: { ...publicFields, referrals: { select: publicFields } } },
+        },
+      });
+    });
+
+    test("returns no parent or grandparent for a user who joined without an invite and referred nobody", async () => {
+      req = { user: { id: "me" } };
+      (prisma.user.findUnique as jest.Mock).mockResolvedValueOnce({
+        ...person("me", "Me"),
+        referrer: null,
+        referrals: [],
+      });
+
+      await getReferralTree(req, res);
+
+      expect(res.json).toHaveBeenCalledWith({
+        me: person("me", "Me"),
+        parent: null,
+        grandparent: null,
+        children: [],
+      });
+    });
+
+    test("returns a parent without a grandparent when the parent joined without an invite", async () => {
+      req = { user: { id: "me" } };
+      (prisma.user.findUnique as jest.Mock).mockResolvedValueOnce({
+        ...person("me", "Me"),
+        referrer: { ...person("parent", "Parent"), referrer: null },
+        referrals: [],
+      });
+
+      await getReferralTree(req, res);
+
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+        parent: person("parent", "Parent"),
+        grandparent: null,
+      }));
+    });
+
+    test("responds 404 when the user no longer exists", async () => {
+      req = { user: { id: "gone" } };
+      (prisma.user.findUnique as jest.Mock).mockResolvedValueOnce(null);
+
+      await getReferralTree(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({ error: "User not found" });
+    });
+  });
+
   test("createPrivateInvite should fail on non authenticated user", async () => {
     req = {};
 
@@ -987,6 +1095,13 @@ describe("User Controller test", () => {
         failing: prisma.referral.findFirst,
         request: { user: { id: "user1", walletAddress: "0xABC" } },
         error: "Failed to get referral network",
+      },
+      {
+        name: "getReferralTree",
+        handler: getReferralTree,
+        failing: prisma.user.findUnique,
+        request: { user: { id: "user1" } },
+        error: "Failed to get referral tree",
       },
       {
         name: "createPrivateInvite",
