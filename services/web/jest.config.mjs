@@ -18,6 +18,8 @@ export default createJestConfig({
     "^@/(.*)$": "<rootDir>/src/$1",
   },
 
-  // Count every source file in coverage, not just the ones a test imports
-  collectCoverageFrom: ["src/**/*.{ts,tsx}"],
+  // Count every source file in coverage, not just the ones a test imports.
+  // The E2E test wallet is left out: it is only used when the Playwright build turns it on,
+  // and that suite exercises it for real (see e2e/README.md).
+  collectCoverageFrom: ["src/**/*.{ts,tsx}", "!src/lib/wagmi/e2e-provider.ts"],
 });

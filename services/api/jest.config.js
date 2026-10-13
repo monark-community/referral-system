@@ -21,6 +21,8 @@ export default {
     "^.+\\.ts$": ["ts-jest", { useESM: true, diagnostics: { ignoreCodes: [151002] } }],
   },
 
-  // Count every source file in coverage, not just the ones a test imports
-  collectCoverageFrom: ["src/**/*.ts"],
+  // Count every source file in coverage, not just the ones a test imports.
+  // The E2E reset and mailbox helpers are left out: they only switch on inside the Playwright stack,
+  // which exercises them for real (see e2e/README.md).
+  collectCoverageFrom: ["src/**/*.ts", "!src/**/e2e*.ts"],
 };
