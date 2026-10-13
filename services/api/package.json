@@ -20,7 +20,7 @@
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
-    "@prisma/client": "^5.22.0",
+    "@prisma/client": "^7.8.0",
     "@reffinity/blockchain-connector": "*",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
