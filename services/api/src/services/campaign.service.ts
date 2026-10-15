@@ -1,3 +1,7 @@
+// Purpose: Loads and validates the installed built-in Referral campaign definition
+// Notes:
+// - Performs read-only configuration access and rejects missing, duplicate, archived, or invalid data
+
 import { prisma } from "../lib/prisma.js";
 import {
   BUILTIN_REFERRAL_CAMPAIGN_KEY,

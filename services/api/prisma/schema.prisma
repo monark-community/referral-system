@@ -1,3 +1,6 @@
+// Purpose: Defines the PostgreSQL persistence model for users, referrals, chain projections, and campaigns
+// Notes: Migrations are authoritative for deployed schema changes; keep mapped names stable
+
 generator client {
   provider = "prisma-client-js"
 }

@@ -1,4 +1,4 @@
-// Purpose: Root API router - mounts auth, user, and milestone route modules under /api
+// Purpose: Root API router - mounts auth, user, milestone, and campaign modules under /api
 
 import { Router } from 'express';
 import authRoutes from './auth.routes.js';

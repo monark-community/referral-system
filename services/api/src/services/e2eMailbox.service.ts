@@ -1,3 +1,7 @@
+// Purpose: Provides the guarded in-memory email mailbox used by disposable E2E environments
+// Notes:
+// - Remains unavailable unless every explicit test-mode guard and mailbox key is configured
+
 export interface E2EEmailMessage {
   id: number;
   to: string;

@@ -1,3 +1,7 @@
+// Purpose: Coordinates guarded database, chain, mailbox, and listener resets for disposable E2E runs
+// Notes:
+// - Refuses normal environments and preserves the installed built-in campaign definition
+
 import { prisma } from "../lib/prisma.js";
 import { markNotReady, markReady } from "../readiness.js";
 import { clearE2EEmails } from "./e2eMailbox.service.js";

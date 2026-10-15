@@ -1,3 +1,7 @@
+// Purpose: Defines and validates the supported built-in campaign, task, verification, and reward shapes
+// Notes:
+// - Accepts only the versioned Referral campaign combination currently installed by the migration
+
 export const BUILTIN_REFERRAL_CAMPAIGN_KEY = "builtin-referral" as const;
 
 export type CampaignStatus = "ACTIVE" | "ARCHIVED";

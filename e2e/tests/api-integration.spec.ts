@@ -293,6 +293,21 @@ test.describe("@api real-dependency authentication", () => {
       functionName: "viewReferrer",
       args: [refereeWallet.address],
     })).toLowerCase()).toBe(referrerWallet.address.toLowerCase());
+
+    await expect.poll(async () => {
+      const response = await request.get(
+        `${apiBaseUrl}/api/campaigns/builtin-referral/fulfillments/me`,
+        { headers: { authorization: `Bearer ${referee.token}` } },
+      );
+      return response.ok() ? (await response.json()).fulfillment : null;
+    }, { timeout: 25_000, intervals: [500, 1_000, 2_000] }).toEqual(
+      expect.objectContaining({
+        status: "REWARDED",
+        referralId: expect.any(String),
+        verification: expect.objectContaining({ transactionHash: acceptHash }),
+        reward: expect.objectContaining({ transactionHash: acceptHash }),
+      }),
+    );
   });
 
   test("catches up events emitted while the listener is stopped without duplicating projections", async ({
@@ -381,6 +396,19 @@ test.describe("@api real-dependency authentication", () => {
       };
     }).toEqual({ points: 100, rewards: 1 });
 
+    const firstFulfillmentResponse = await request.get(
+      `${apiBaseUrl}/api/campaigns/builtin-referral/fulfillments/me`,
+      { headers: { authorization: `Bearer ${referee.token}` } },
+    );
+    expect(
+      firstFulfillmentResponse.ok(),
+      await firstFulfillmentResponse.text(),
+    ).toBeTruthy();
+    const firstFulfillment = (await firstFulfillmentResponse.json()).fulfillment;
+    expect(firstFulfillment).toEqual(
+      expect.objectContaining({ status: "REWARDED" }),
+    );
+
     const secondRestart = await request.post(`${apiBaseUrl}/__e2e/listener/restart`, {
       headers: resetHeaders,
     });
@@ -389,6 +417,13 @@ test.describe("@api real-dependency authentication", () => {
       headers: { authorization: `Bearer ${referrer.token}` },
     });
     expect((await rewards.json()).rewardHistory).toHaveLength(1);
+    const replayedFulfillment = await request.get(
+      `${apiBaseUrl}/api/campaigns/builtin-referral/fulfillments/me`,
+      { headers: { authorization: `Bearer ${referee.token}` } },
+    );
+    expect((await replayedFulfillment.json()).fulfillment.id).toBe(
+      firstFulfillment.id,
+    );
   });
 
   test("enforces private-invite ownership, uniqueness, and single use across API, database, and chain", async ({
@@ -471,6 +506,27 @@ test.describe("@api real-dependency authentication", () => {
       status: 1,
       referee: refereeWallet.address.toLowerCase(),
     });
+
+    const expectedReferralId = privateInvite.bytesinviteId
+      .replace(/^0x/, "")
+      .replace(
+        /^(........)(....)(....)(....)(............).*$/,
+        "$1-$2-$3-$4-$5",
+      );
+    await expect.poll(async () => {
+      const response = await request.get(
+        `${apiBaseUrl}/api/campaigns/builtin-referral/fulfillments/me`,
+        { headers: { authorization: `Bearer ${referee.token}` } },
+      );
+      return response.ok() ? (await response.json()).fulfillment : null;
+    }, { timeout: 25_000, intervals: [500, 1_000, 2_000] }).toEqual(
+      expect.objectContaining({
+        status: "REWARDED",
+        referralId: expectedReferralId,
+        verification: expect.objectContaining({ transactionHash: acceptHash }),
+        reward: expect.objectContaining({ transactionHash: acceptHash }),
+      }),
+    );
 
     const replay = await authenticate(request, observerWallet, "observer", {
       referralCode: referrer.user.referralCode,

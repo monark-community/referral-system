@@ -1,4 +1,6 @@
-// Process-local readiness state. Liveness remains available at /health while startup runs.
+// Purpose: Tracks process-local API readiness while database catch-up and listeners initialize
+// Notes:
+// - Liveness remains available at /health while /ready reports startup or shutdown state
 
 export interface ReadinessSnapshot {
   ready: boolean;

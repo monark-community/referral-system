@@ -599,8 +599,9 @@ Tiers are sorted by `level` ascending.
 
 ## Campaigns
 
-Campaign reads are public and currently expose the single system-managed Referral campaign.
-They do not include user fulfillment state or mutable on-chain point amounts.
+Campaign definition reads are public and currently expose the single system-managed Referral
+campaign. Fulfillment state is an additive, authenticated view of the existing referral flow;
+the contract and existing referral APIs remain responsible for execution and points.
 
 ### `GET /api/campaigns`
 
@@ -678,6 +679,45 @@ verification and points-reward policies.
 |--------|-------|-------|
 | 404 | `"Campaign not found"` | The identifier or key is unknown |
 | 503 | `"Campaign configuration unavailable"` | Installed campaign configuration failed its invariant checks |
+
+### `GET /api/campaigns/:idOrKey/fulfillments/me`
+
+Return the authenticated user's current fulfillment for the built-in Referral campaign. A user
+who has not completed it receives `{ "fulfillment": null }`. A `VERIFIED` row gets one safe
+read-through refresh attempt before the durable status is returned.
+
+**Auth required:** Yes
+
+**Response (200):**
+
+```json
+{
+  "fulfillment": {
+    "id": "00000000-0000-4000-8000-000000000010",
+    "campaignId": "00000000-0000-4000-8000-000000000001",
+    "taskId": "00000000-0000-4000-8000-000000000002",
+    "referralId": "00000000-0000-4000-8000-000000000020",
+    "attempt": 1,
+    "status": "REWARDED",
+    "chainId": 31337,
+    "verification": {
+      "transactionHash": "0x...",
+      "blockNumber": "42",
+      "logIndex": 4,
+      "observedAt": "2026-10-13T12:00:00.000Z"
+    },
+    "reward": {
+      "transactionHash": "0x...",
+      "blockNumber": "42",
+      "logIndex": 5,
+      "observedAt": "2026-10-13T12:00:00.000Z"
+    }
+  }
+}
+```
+
+This endpoint never awards points or creates referral records. If receipt evidence remains
+incomplete or temporarily unavailable, it returns the current durable status.
 
 ---
 

@@ -8,6 +8,10 @@
 import { BlockchainListenerService } from "@/services/blockchainListener.service.js";
 import { prisma } from "@/lib/prisma.js";
 import { bytes32ToUuid } from "@reffinity/blockchain-connector/uuidBytesConverter";
+import {
+  projectBuiltinReferralFulfillment,
+  reconcileBuiltinReferralFulfillments,
+} from "@/services/campaignFulfillment.service.js";
 
 // Stand-ins for the viem client and the connector service the listener creates
 const mockPublicClient = {
@@ -56,9 +60,22 @@ jest.mock(
   () => ({ bytes32ToUuid: jest.fn(() => "invite-uuid") }),
   { virtual: true },
 );
+jest.mock("@/services/campaignFulfillment.service", () => ({
+  CampaignFulfillmentProjectionError: class CampaignFulfillmentProjectionError extends Error {
+    constructor(public code: string, message: string) {
+      super(message);
+    }
+  },
+  projectBuiltinReferralFulfillment: jest.fn(),
+  reconcileBuiltinReferralFulfillments: jest.fn(),
+}));
 
 // The mocked Prisma client, untyped so tests can set return values freely
 const db = prisma as any;
+const mockProjectBuiltinReferralFulfillment =
+  projectBuiltinReferralFulfillment as jest.Mock;
+const mockReconcileBuiltinReferralFulfillments =
+  reconcileBuiltinReferralFulfillments as jest.Mock;
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
@@ -122,6 +139,23 @@ describe("BlockchainListenerService", () => {
     mockReadService.stopListeningToPointsAddedEvent.mockReset();
     mockReadService.stopListeningToInviteChangedEvent.mockReset();
     mockReadService.stopListeningToReferralPointsAllocatedEvent.mockReset();
+    mockProjectBuiltinReferralFulfillment.mockReset().mockResolvedValue({
+      outcome: "REWARDED",
+      fulfillmentId: "fulfillment-1",
+      referralId: "ref1",
+      participantId: "participant-1",
+      transactionHash: "0xabcdef",
+      replayed: false,
+    });
+    mockReconcileBuiltinReferralFulfillments.mockReset().mockResolvedValue({
+      scanned: 0,
+      rewarded: 0,
+      verified: 0,
+      deferred: 0,
+      replayed: 0,
+      legacy: 0,
+      failed: 0,
+    });
     db.user.findUnique.mockReset().mockResolvedValue(savedUser());
     db.user.update.mockReset().mockResolvedValue({});
     db.referral.findFirst.mockReset().mockResolvedValue({ id: "ref1" });
@@ -163,6 +197,38 @@ describe("BlockchainListenerService", () => {
       expect(
         mockReadService.listenToReferralPointsAllocatedEvent,
       ).toHaveBeenCalledWith(expect.any(Function), 10000);
+      expect(mockReconcileBuiltinReferralFulfillments).toHaveBeenCalledWith(
+        mockPublicClient,
+        expect.objectContaining({ onIssue: expect.any(Function) }),
+      );
+      expect(
+        mockPublicClient.getBlockNumber.mock.invocationCallOrder[0],
+      ).toBeLessThan(
+        mockReconcileBuiltinReferralFulfillments.mock.invocationCallOrder[0],
+      );
+      expect(
+        mockReconcileBuiltinReferralFulfillments.mock.invocationCallOrder[0],
+      ).toBeLessThan(
+        mockReadService.listenToPointsAddedEvent.mock.invocationCallOrder[0],
+      );
+    });
+
+    test("still starts legacy listeners when campaign reconciliation fails", async () => {
+      mockReconcileBuiltinReferralFulfillments.mockRejectedValue(
+        new Error("receipt provider unavailable"),
+      );
+
+      await expect(startListener()).resolves.toBeDefined();
+
+      expect(mockReadService.listenToPointsAddedEvent).toHaveBeenCalled();
+      expect(mockReadService.listenToInviteChangedEvent).toHaveBeenCalled();
+      expect(
+        mockReadService.listenToReferralPointsAllocatedEvent,
+      ).toHaveBeenCalled();
+      expect(consoleError).toHaveBeenCalledWith(
+        "Campaign fulfillment reconciliation failed",
+        { message: "receipt provider unavailable" },
+      );
     });
 
     test("does not register the listeners twice", async () => {
@@ -255,6 +321,16 @@ describe("BlockchainListenerService", () => {
         update: data,
         create: data,
       });
+      expect(mockProjectBuiltinReferralFulfillment).toHaveBeenCalledWith(
+        mockPublicClient,
+        expect.objectContaining({
+          transactionHash: "0xABCDEF",
+          logIndex: 4,
+        }),
+      );
+      expect(db.referralPointAllocation.upsert.mock.invocationCallOrder[0]).toBeLessThan(
+        mockProjectBuiltinReferralFulfillment.mock.invocationCallOrder[0],
+      );
       expect(db.chainSyncState.upsert).toHaveBeenCalledWith({
         where: { id: 1 },
         update: {
@@ -269,6 +345,33 @@ describe("BlockchainListenerService", () => {
           lastReferralAllocationLogIndex: 4,
         },
       });
+    });
+
+    test("keeps the existing allocation and cursor updates when campaign projection fails", async () => {
+      mockProjectBuiltinReferralFulfillment.mockRejectedValue(
+        new Error("receipt temporarily unavailable"),
+      );
+      const { onReferralPointsAllocated } = await startListener();
+
+      await expect(onReferralPointsAllocated(allocationEvent)).resolves.toBeUndefined();
+
+      expect(db.referralPointAllocation.upsert).toHaveBeenCalled();
+      expect(db.chainSyncState.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          update: {
+            lastReferralAllocationBlock: 103n,
+            lastReferralAllocationLogIndex: 4,
+          },
+        }),
+      );
+      expect(consoleError).toHaveBeenCalledWith(
+        "Campaign fulfillment projection failed",
+        expect.objectContaining({
+          source: "live",
+          transactionHash: "0xabcdef",
+          code: "UNEXPECTED_ERROR",
+        }),
+      );
     });
 
     test("puts the direct share on the invite between the direct recipient and the new user", async () => {
@@ -317,6 +420,7 @@ describe("BlockchainListenerService", () => {
         where: { walletAddress: "0xabc" },
         data: { earnedPoints: 100, milestoneLevel: 1 },
       });
+      expect(mockProjectBuiltinReferralFulfillment).not.toHaveBeenCalled();
       expect(db.chainSyncState.upsert).toHaveBeenCalledWith({
         where: { id: 1 },
         update: { lastProcessedBlock: 101n, lastProcessedLogIndex: 3 },
@@ -398,6 +502,7 @@ describe("BlockchainListenerService", () => {
         where: { id: "invite-uuid" },
         data: { status: 1, isVerified: true },
       });
+      expect(mockProjectBuiltinReferralFulfillment).not.toHaveBeenCalled();
       expect(mockReadService.getReferralPointPool).not.toHaveBeenCalled();
       expect(db.chainSyncState.upsert).toHaveBeenCalledWith({
         where: { id: 1 },
@@ -549,6 +654,43 @@ describe("BlockchainListenerService", () => {
           }),
         }),
       );
+      expect(mockProjectBuiltinReferralFulfillment).toHaveBeenCalledWith(
+        mockPublicClient,
+        { transactionHash: "0xCATCHUP", logIndex: 2 },
+      );
+    });
+
+    test("keeps catch-up moving when historical campaign projection fails", async () => {
+      mockReadService.getReferralPointsAllocatedEvents.mockResolvedValue([
+        {
+          blockNumber: 12n,
+          logIndex: 2,
+          transactionHash: "0xCATCHUP",
+          args: {
+            participant: "0xCHILD",
+            pool: 100n,
+            directRecipient: "0xPARENT",
+            directAmount: 100n,
+            grandparentRecipient: ZERO_ADDRESS,
+            grandparentAmount: 0n,
+            unallocatedAmount: 0n,
+          },
+        },
+      ]);
+      mockProjectBuiltinReferralFulfillment.mockRejectedValue(new Error("rpc lag"));
+
+      await expect(startListener()).resolves.toBeDefined();
+
+      expect(db.referralPointAllocation.upsert).toHaveBeenCalled();
+      expect(db.chainSyncState.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          update: expect.objectContaining({
+            lastReferralAllocationBlock: 20n,
+            lastReferralAllocationLogIndex: -1,
+          }),
+        }),
+      );
+      expect(mockReadService.listenToReferralPointsAllocatedEvent).toHaveBeenCalled();
     });
 
     test("replays missed events in chain order and skips ones already processed", async () => {

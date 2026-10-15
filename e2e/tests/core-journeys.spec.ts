@@ -212,7 +212,7 @@ test.describe("@phase6 core browser journeys", () => {
     await refereeBrowser.page.goto(`/invite/${referrer.user.referralCode}`);
     await expect(refereeBrowser.page).toHaveURL(/\/referrals\/welcome$/);
     await refereeBrowser.page.getByRole("button", { name: "Join the Program" }).click();
-    await completeUiOnboarding(refereeBrowser.page, request, {
+    const referee = await completeUiOnboarding(refereeBrowser.page, request, {
       name: "Public Referee",
       email: "smoke-referee@example.test",
     });
@@ -225,6 +225,14 @@ test.describe("@phase6 core browser journeys", () => {
     }, { timeout: 25_000, intervals: [500, 1_000, 2_000] }).toEqual(
       expect.objectContaining({ level1Count: 1, level1Points: 100 }),
     );
+
+    await expect.poll(async () => {
+      const response = await request.get(
+        `${apiBaseUrl}/api/campaigns/builtin-referral/fulfillments/me`,
+        { headers: { authorization: `Bearer ${referee.token}` } },
+      );
+      return response.ok() ? (await response.json()).fulfillment?.status : null;
+    }, { timeout: 25_000, intervals: [500, 1_000, 2_000] }).toBe("REWARDED");
 
     expect(await publicClient.readContract({
       address: contractAddress,

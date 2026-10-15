@@ -1,3 +1,7 @@
+// Purpose: Guarded E2E-only routes for reset and blockchain-listener lifecycle control
+// Notes:
+// - Every request requires the run-specific reset key and the router is absent in normal environments
+
 import { Router, type RequestHandler } from "express";
 import {
   pauseE2EListener,

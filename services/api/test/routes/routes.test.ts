@@ -16,11 +16,17 @@ jest.mock("@/lib/prisma", () => ({
     referralPointAllocation: { findMany: jest.fn() },
     milestoneTier: { findMany: jest.fn() },
     campaign: { findMany: jest.fn() },
+    campaignFulfillment: { findFirst: jest.fn(), findUnique: jest.fn() },
   },
 }));
 jest.mock(
   "@reffinity/blockchain-connector/uuidBytesConverter",
   () => ({ uuidToBytes32: jest.fn() }),
+  { virtual: true },
+);
+jest.mock(
+  "@reffinity/blockchain-connector/clients",
+  () => ({ createClient: jest.fn(() => ({ publicClient: {} })) }),
   { virtual: true },
 );
 
@@ -90,6 +96,8 @@ describe("API routes", () => {
     db.referralPointAllocation.findMany.mockReset().mockResolvedValue([]);
     db.milestoneTier.findMany.mockReset();
     db.campaign.findMany.mockReset().mockResolvedValue([storedCampaign]);
+    db.campaignFulfillment.findFirst.mockReset().mockResolvedValue(null);
+    db.campaignFulfillment.findUnique.mockReset();
   });
 
   afterAll(() => {
@@ -267,6 +275,49 @@ describe("API routes", () => {
 
       expect(res.status).toBe(404);
       expect(res.body).toEqual({ error: "Campaign not found" });
+    });
+
+    test("GET /api/campaigns/:idOrKey/fulfillments/me requires authentication", async () => {
+      const res = await request(app).get(
+        "/api/campaigns/builtin-referral/fulfillments/me",
+      );
+
+      expect(res.status).toBe(401);
+      expect(res.body).toEqual({ error: "No token provided" });
+    });
+
+    test("GET /api/campaigns/:idOrKey/fulfillments/me returns current durable status", async () => {
+      db.campaignFulfillment.findFirst.mockResolvedValue({
+        id: "fulfillment-1",
+        taskId: storedCampaign.task.id,
+        participantId: user.id,
+        referralId: "referral-1",
+        attempt: 1,
+        status: "REWARDED",
+        chainId: 31337,
+        verificationTransactionHash: `0x${"ab".repeat(32)}`,
+        verificationBlockNumber: 42n,
+        verificationLogIndex: 4,
+        rewardTransactionHash: `0x${"ab".repeat(32)}`,
+        rewardBlockNumber: 42n,
+        rewardLogIndex: 5,
+        verifiedAt: new Date("2026-10-13T12:00:00.000Z"),
+        rewardedAt: new Date("2026-10-13T12:00:00.000Z"),
+      });
+
+      const res = await request(app)
+        .get("/api/campaigns/builtin-referral/fulfillments/me")
+        .set(loggedIn());
+
+      expect(res.status).toBe(200);
+      expect(res.body.fulfillment).toEqual(
+        expect.objectContaining({
+          id: "fulfillment-1",
+          status: "REWARDED",
+          verification: expect.objectContaining({ blockNumber: "42" }),
+          reward: expect.objectContaining({ blockNumber: "42" }),
+        }),
+      );
     });
 
     test("GET /api/users/referral/:code works without a login", async () => {
