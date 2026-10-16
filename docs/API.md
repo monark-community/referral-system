@@ -597,6 +597,132 @@ Tiers are sorted by `level` ascending.
 
 ---
 
+## Campaigns
+
+Campaign definition reads are public and currently expose the single system-managed Referral
+campaign. Fulfillment state is an additive, authenticated view of the existing referral flow;
+the contract and existing referral APIs remain responsible for execution and points.
+
+### `GET /api/campaigns`
+
+Return active campaign summaries.
+
+**Auth required:** No
+
+**Response (200):**
+
+```json
+{
+  "campaigns": [
+    {
+      "id": "00000000-0000-4000-8000-000000000001",
+      "key": "builtin-referral",
+      "title": "Referral",
+      "description": "Invite a new participant and establish the referral relationship used by campaign rewards.",
+      "status": "ACTIVE",
+      "isSystem": true,
+      "schemaVersion": 1
+    }
+  ]
+}
+```
+
+### `GET /api/campaigns/:idOrKey`
+
+Return campaign detail by stable UUID or key. The response includes the task and its automatic
+verification and points-reward policies.
+
+**Auth required:** No
+
+**Response (200):**
+
+```json
+{
+  "campaign": {
+    "id": "00000000-0000-4000-8000-000000000001",
+    "key": "builtin-referral",
+    "title": "Referral",
+    "description": "Invite a new participant and establish the referral relationship used by campaign rewards.",
+    "status": "ACTIVE",
+    "isSystem": true,
+    "schemaVersion": 1,
+    "task": {
+      "id": "00000000-0000-4000-8000-000000000002",
+      "type": "REFERRAL",
+      "strategyKey": "REFERRAL_V1",
+      "schemaVersion": 1,
+      "configuration": {},
+      "verificationPolicy": {
+        "id": "00000000-0000-4000-8000-000000000003",
+        "type": "AUTOMATIC_CHAIN",
+        "strategyKey": "REFERRAL_ACCEPTED_V1",
+        "schemaVersion": 1,
+        "configuration": {}
+      },
+      "rewardPolicy": {
+        "id": "00000000-0000-4000-8000-000000000004",
+        "type": "POINTS",
+        "strategyKey": "REFERRAL_POINTS_V1",
+        "schemaVersion": 1,
+        "configuration": {
+          "completerAction": "ACCEPTED_INVITE",
+          "referralPoolAction": "REFERRED_NEW_USER",
+          "referralAllocation": "CONTRACT_CONFIGURED_SPLIT"
+        }
+      }
+    }
+  }
+}
+```
+
+| Status | Error | Cause |
+|--------|-------|-------|
+| 404 | `"Campaign not found"` | The identifier or key is unknown |
+| 503 | `"Campaign configuration unavailable"` | Installed campaign configuration failed its invariant checks |
+
+### `GET /api/campaigns/:idOrKey/fulfillments/me`
+
+Return the authenticated user's current fulfillment for the built-in Referral campaign. A user
+who has not completed it receives `{ "fulfillment": null }`. A `VERIFIED` row gets one safe
+read-through refresh attempt before the durable status is returned.
+
+**Auth required:** Yes
+
+**Response (200):**
+
+```json
+{
+  "fulfillment": {
+    "id": "00000000-0000-4000-8000-000000000010",
+    "campaignId": "00000000-0000-4000-8000-000000000001",
+    "taskId": "00000000-0000-4000-8000-000000000002",
+    "referralId": "00000000-0000-4000-8000-000000000020",
+    "attempt": 1,
+    "status": "REWARDED",
+    "chainId": 31337,
+    "verification": {
+      "transactionHash": "0x...",
+      "blockNumber": "42",
+      "logIndex": 4,
+      "observedAt": "2026-10-13T12:00:00.000Z"
+    },
+    "reward": {
+      "transactionHash": "0x...",
+      "blockNumber": "42",
+      "logIndex": 5,
+      "observedAt": "2026-10-13T12:00:00.000Z"
+    }
+  }
+}
+```
+
+This endpoint never awards points or creates referral records. If receipt evidence remains
+incomplete or temporarily unavailable, it returns the current durable status.
+
+---
+
+## User Milestone Progress
+
 ### `GET /api/milestones/user`
 
 Get the current user's milestone progress, including their current tier and the next tier to reach.

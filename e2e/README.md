@@ -51,6 +51,11 @@ tag. They use Playwright's request client against the same real API, PostgreSQL,
 stack as browser tests, avoiding a duplicate integration environment alongside the mocked Jest
 unit suites.
 
+Key harness files are [fixtures.ts](fixtures.ts),
+[tests/api-integration.spec.ts](tests/api-integration.spec.ts),
+[tests/core-journeys.spec.ts](tests/core-journeys.spec.ts), and
+[tests/state-reset.spec.ts](tests/state-reset.spec.ts).
+
 Core browser journeys live in `e2e/tests/core-journeys.spec.ts` and carry the `@phase6` tag.
 Their preconditions, actions, and expected postconditions are summarized in
 `docs/Phase_6_Browser_Test_Cases.md`.

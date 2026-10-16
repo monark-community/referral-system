@@ -15,11 +15,18 @@ jest.mock("@/lib/prisma", () => ({
     referral: { findFirst: jest.fn(), findMany: jest.fn() },
     referralPointAllocation: { findMany: jest.fn() },
     milestoneTier: { findMany: jest.fn() },
+    campaign: { findMany: jest.fn() },
+    campaignFulfillment: { findFirst: jest.fn(), findUnique: jest.fn() },
   },
 }));
 jest.mock(
   "@reffinity/blockchain-connector/uuidBytesConverter",
   () => ({ uuidToBytes32: jest.fn() }),
+  { virtual: true },
+);
+jest.mock(
+  "@reffinity/blockchain-connector/clients",
+  () => ({ createClient: jest.fn(() => ({ publicClient: {} })) }),
   { virtual: true },
 );
 
@@ -31,6 +38,43 @@ const user = {
   walletAddress: "0xabc",
   disabledAt: null,
   referralCode: "ABC123",
+};
+
+const storedCampaign = {
+  id: "00000000-0000-4000-8000-000000000001",
+  key: "builtin-referral",
+  title: "Referral",
+  description: "Built-in referral campaign",
+  isSystem: true,
+  status: "ACTIVE",
+  schemaVersion: 1,
+  task: {
+    id: "00000000-0000-4000-8000-000000000002",
+    type: "REFERRAL",
+    strategyKey: "REFERRAL_V1",
+    schemaVersion: 1,
+    configuration: {},
+    verificationPolicy: {
+      id: "00000000-0000-4000-8000-000000000003",
+      taskId: "00000000-0000-4000-8000-000000000002",
+      type: "AUTOMATIC_CHAIN",
+      strategyKey: "REFERRAL_ACCEPTED_V1",
+      schemaVersion: 1,
+      configuration: {},
+    },
+    rewardPolicy: {
+      id: "00000000-0000-4000-8000-000000000004",
+      taskId: "00000000-0000-4000-8000-000000000002",
+      type: "POINTS",
+      strategyKey: "REFERRAL_POINTS_V1",
+      schemaVersion: 1,
+      configuration: {
+        completerAction: "ACCEPTED_INVITE",
+        referralPoolAction: "REFERRED_NEW_USER",
+        referralAllocation: "CONTRACT_CONFIGURED_SPLIT",
+      },
+    },
+  },
 };
 
 // Authorization header for a logged-in user, using a real signed token
@@ -51,6 +95,9 @@ describe("API routes", () => {
     db.referral.findMany.mockReset();
     db.referralPointAllocation.findMany.mockReset().mockResolvedValue([]);
     db.milestoneTier.findMany.mockReset();
+    db.campaign.findMany.mockReset().mockResolvedValue([storedCampaign]);
+    db.campaignFulfillment.findFirst.mockReset().mockResolvedValue(null);
+    db.campaignFulfillment.findUnique.mockReset();
   });
 
   afterAll(() => {
@@ -220,6 +267,84 @@ describe("API routes", () => {
 
       expect(res.status).toBe(200);
       expect(res.body.tiers).toHaveLength(1);
+    });
+
+    test("GET /api/campaigns exposes the built-in summary without a login", async () => {
+      const res = await request(app).get("/api/campaigns");
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({
+        campaigns: [expect.objectContaining({
+          id: "00000000-0000-4000-8000-000000000001",
+          key: "builtin-referral",
+          status: "ACTIVE",
+        })],
+      });
+      expect(res.body.campaigns[0]).not.toHaveProperty("task");
+    });
+
+    test("GET /api/campaigns/:idOrKey exposes typed detail to authenticated users", async () => {
+      const res = await request(app)
+        .get("/api/campaigns/00000000-0000-4000-8000-000000000001")
+        .set(loggedIn());
+
+      expect(res.status).toBe(200);
+      expect(res.body.campaign.task).toMatchObject({
+        type: "REFERRAL",
+        verificationPolicy: { type: "AUTOMATIC_CHAIN" },
+        rewardPolicy: { type: "POINTS" },
+      });
+      expect(res.body.campaign.task.rewardPolicy).not.toHaveProperty("taskId");
+    });
+
+    test("GET /api/campaigns/:idOrKey returns 404 for an unknown campaign", async () => {
+      const res = await request(app).get("/api/campaigns/not-a-campaign");
+
+      expect(res.status).toBe(404);
+      expect(res.body).toEqual({ error: "Campaign not found" });
+    });
+
+    test("GET /api/campaigns/:idOrKey/fulfillments/me requires authentication", async () => {
+      const res = await request(app).get(
+        "/api/campaigns/builtin-referral/fulfillments/me",
+      );
+
+      expect(res.status).toBe(401);
+      expect(res.body).toEqual({ error: "No token provided" });
+    });
+
+    test("GET /api/campaigns/:idOrKey/fulfillments/me returns current durable status", async () => {
+      db.campaignFulfillment.findFirst.mockResolvedValue({
+        id: "fulfillment-1",
+        taskId: storedCampaign.task.id,
+        participantId: user.id,
+        referralId: "referral-1",
+        attempt: 1,
+        status: "REWARDED",
+        chainId: 31337,
+        verificationTransactionHash: `0x${"ab".repeat(32)}`,
+        verificationBlockNumber: 42n,
+        verificationLogIndex: 4,
+        rewardTransactionHash: `0x${"ab".repeat(32)}`,
+        rewardBlockNumber: 42n,
+        rewardLogIndex: 5,
+        verifiedAt: new Date("2026-10-13T12:00:00.000Z"),
+        rewardedAt: new Date("2026-10-13T12:00:00.000Z"),
+      });
+
+      const res = await request(app)
+        .get("/api/campaigns/builtin-referral/fulfillments/me")
+        .set(loggedIn());
+
+      expect(res.status).toBe(200);
+      expect(res.body.fulfillment).toEqual(
+        expect.objectContaining({
+          id: "fulfillment-1",
+          status: "REWARDED",
+          verification: expect.objectContaining({ blockNumber: "42" }),
+          reward: expect.objectContaining({ blockNumber: "42" }),
+        }),
+      );
     });
 
     test("GET /api/users/referral/:code works without a login", async () => {

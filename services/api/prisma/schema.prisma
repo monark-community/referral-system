@@ -1,3 +1,6 @@
+// Purpose: Defines the PostgreSQL persistence model for users, referrals, chain projections, and campaigns
+// Notes: Migrations are authoritative for deployed schema changes; keep mapped names stable
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -5,6 +8,39 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+enum CampaignStatus {
+  ACTIVE
+  ARCHIVED
+
+  @@map("campaign_status")
+}
+
+enum CampaignTaskType {
+  REFERRAL
+
+  @@map("campaign_task_type")
+}
+
+enum CampaignVerificationType {
+  AUTOMATIC_CHAIN
+
+  @@map("campaign_verification_type")
+}
+
+enum CampaignRewardType {
+  POINTS
+
+  @@map("campaign_reward_type")
+}
+
+enum CampaignFulfillmentStatus {
+  PENDING
+  VERIFIED
+  REWARDED
+
+  @@map("campaign_fulfillment_status")
 }
 
 model User {
@@ -45,9 +81,11 @@ model User {
   referrals User[] @relation("Referrals")
 
   // Referral records where this user is the referrer
-  sentReferrals    Referral[] @relation("SentReferrals")
+  sentReferrals     Referral[] @relation("SentReferrals")
   // Referral record where this user is the referee
-  receivedReferrals Referral[]  @relation("ReceivedReferral")
+  receivedReferrals Referral[] @relation("ReceivedReferral")
+
+  campaignFulfillments CampaignFulfillment[] @relation("CampaignParticipant")
 
   @@map("users")
 }
@@ -84,35 +122,37 @@ model Referral {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  campaignFulfillment CampaignFulfillment?
+
   @@map("referrals")
 }
 
 //Used for the listener service to determine the last block updated_at
 model ChainSyncState {
-  id                                 Int    @id @default(1)
-  lastProcessedBlock                 BigInt
-  lastProcessedLogIndex              Int
-  lastReferralAllocationBlock        BigInt @default(0)
-  lastReferralAllocationLogIndex     Int    @default(-1)
+  id                             Int    @id @default(1)
+  lastProcessedBlock             BigInt
+  lastProcessedLogIndex          Int
+  lastReferralAllocationBlock    BigInt @default(0)
+  lastReferralAllocationLogIndex Int    @default(-1)
 }
 
 // Immutable projection of ReferralPointsAllocated events. Addresses are kept as
 // chain identifiers so event history can be recorded even before a User row exists.
 model ReferralPointAllocation {
-  id                                  String   @id @default(uuid())
-  transactionHash                     String   @map("transaction_hash")
-  logIndex                            Int      @map("log_index")
-  blockNumber                         BigInt   @map("block_number")
-  participantWalletAddress            String   @map("participant_wallet_address")
-  pool                                Int
-  directRecipientWalletAddress        String   @map("direct_recipient_wallet_address")
-  directAmount                        Int      @map("direct_amount")
-  grandparentRecipientWalletAddress   String   @map("grandparent_recipient_wallet_address")
-  grandparentAmount                   Int      @map("grandparent_amount")
-  unallocatedAmount                   Int      @map("unallocated_amount")
+  id                                String   @id @default(uuid())
+  transactionHash                   String   @map("transaction_hash")
+  logIndex                          Int      @map("log_index")
+  blockNumber                       BigInt   @map("block_number")
+  participantWalletAddress          String   @map("participant_wallet_address")
+  pool                              Int
+  directRecipientWalletAddress      String   @map("direct_recipient_wallet_address")
+  directAmount                      Int      @map("direct_amount")
+  grandparentRecipientWalletAddress String   @map("grandparent_recipient_wallet_address")
+  grandparentAmount                 Int      @map("grandparent_amount")
+  unallocatedAmount                 Int      @map("unallocated_amount")
   // What paid the pool: "signup" (someone joined through an invite) or "campaign"
-  source                              String   @default("signup")
-  observedAt                          DateTime @default(now()) @map("observed_at")
+  source                            String   @default("signup")
+  observedAt                        DateTime @default(now()) @map("observed_at")
 
   @@unique([transactionHash, logIndex])
   @@index([participantWalletAddress])
@@ -129,4 +169,101 @@ model MilestoneTier {
   benefits       String[] // list of benefit descriptions
 
   @@map("milestone_tiers")
+}
+
+model Campaign {
+  id            String         @id @default(uuid())
+  key           String         @unique
+  title         String
+  description   String         @default("")
+  isSystem      Boolean        @default(false) @map("is_system")
+  status        CampaignStatus @default(ACTIVE)
+  schemaVersion Int            @default(1) @map("schema_version")
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+
+  task CampaignTask?
+
+  @@index([status, isSystem])
+  @@map("campaigns")
+}
+
+model CampaignTask {
+  id            String           @id @default(uuid())
+  campaignId    String           @unique @map("campaign_id")
+  type          CampaignTaskType
+  strategyKey   String           @map("strategy_key")
+  schemaVersion Int              @default(1) @map("schema_version")
+  configuration Json             @default("{}")
+  createdAt     DateTime         @default(now()) @map("created_at")
+  updatedAt     DateTime         @updatedAt @map("updated_at")
+
+  campaign           Campaign                    @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+  verificationPolicy CampaignVerificationPolicy?
+  rewardPolicy       CampaignRewardPolicy?
+  fulfillments       CampaignFulfillment[]
+
+  @@map("campaign_tasks")
+}
+
+model CampaignVerificationPolicy {
+  id            String                   @id @default(uuid())
+  taskId        String                   @unique @map("task_id")
+  type          CampaignVerificationType
+  strategyKey   String                   @map("strategy_key")
+  schemaVersion Int                      @default(1) @map("schema_version")
+  configuration Json                     @default("{}")
+  createdAt     DateTime                 @default(now()) @map("created_at")
+  updatedAt     DateTime                 @updatedAt @map("updated_at")
+
+  task CampaignTask @relation(fields: [taskId], references: [id], onDelete: Restrict)
+
+  @@map("campaign_verification_policies")
+}
+
+model CampaignRewardPolicy {
+  id            String             @id @default(uuid())
+  taskId        String             @unique @map("task_id")
+  type          CampaignRewardType
+  strategyKey   String             @map("strategy_key")
+  schemaVersion Int                @default(1) @map("schema_version")
+  configuration Json
+  createdAt     DateTime           @default(now()) @map("created_at")
+  updatedAt     DateTime           @updatedAt @map("updated_at")
+
+  task CampaignTask @relation(fields: [taskId], references: [id], onDelete: Restrict)
+
+  @@map("campaign_reward_policies")
+}
+
+model CampaignFulfillment {
+  id                          String                    @id @default(uuid())
+  taskId                      String                    @map("task_id")
+  participantId               String                    @map("participant_id")
+  referralId                  String?                   @unique @map("referral_id")
+  attempt                     Int                       @default(1)
+  idempotencyKey              String                    @unique @map("idempotency_key")
+  status                      CampaignFulfillmentStatus @default(PENDING)
+  chainId                     Int                       @map("chain_id")
+  verificationTransactionHash String?                   @map("verification_transaction_hash")
+  verificationBlockNumber     BigInt?                   @map("verification_block_number")
+  verificationLogIndex        Int?                      @map("verification_log_index")
+  rewardTransactionHash       String?                   @map("reward_transaction_hash")
+  rewardBlockNumber           BigInt?                   @map("reward_block_number")
+  rewardLogIndex              Int?                      @map("reward_log_index")
+  verifiedAt                  DateTime?                 @map("verified_at")
+  rewardedAt                  DateTime?                 @map("rewarded_at")
+  createdAt                   DateTime                  @default(now()) @map("created_at")
+  updatedAt                   DateTime                  @updatedAt @map("updated_at")
+
+  task        CampaignTask @relation(fields: [taskId], references: [id], onDelete: Restrict)
+  participant User         @relation("CampaignParticipant", fields: [participantId], references: [id], onDelete: Restrict)
+  referral    Referral?    @relation(fields: [referralId], references: [id], onDelete: Restrict)
+
+  @@unique([taskId, participantId, attempt], map: "campaign_fulfillments_task_participant_attempt_key")
+  @@unique([chainId, verificationTransactionHash, verificationLogIndex], map: "campaign_fulfillments_verification_event_key")
+  @@unique([chainId, rewardTransactionHash, rewardLogIndex], map: "campaign_fulfillments_reward_event_key")
+  @@index([participantId, status])
+  @@index([taskId, status])
+  @@map("campaign_fulfillments")
 }

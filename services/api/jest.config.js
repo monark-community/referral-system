@@ -11,7 +11,8 @@ export default {
   moduleNameMapper: {
     "^(\\.{1,2}/.*)\\.js$": "$1",        // fix relative .js imports
     "^@/(.*)\\.js$": "<rootDir>/src/$1", // fix alias .js imports
-    "^@/(.*)$": "<rootDir>/src/$1"
+    "^@/(.*)$": "<rootDir>/src/$1",
+    "^@reffinity/common-contracts$": "<rootDir>/../../packages/common/contracts/index.ts"
   },
 
   extensionsToTreatAsEsm: [".ts"],

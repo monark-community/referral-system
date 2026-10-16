@@ -1,3 +1,7 @@
+// Purpose: Guarded E2E-only routes for reading and clearing the in-memory email mailbox
+// Notes:
+// - Mounted only when the app's explicit mailbox configuration checks succeed
+
 import { Router, type RequestHandler } from "express";
 import {
   clearE2EEmails,

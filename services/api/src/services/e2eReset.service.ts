@@ -1,3 +1,7 @@
+// Purpose: Coordinates guarded database, chain, mailbox, and listener resets for disposable E2E runs
+// Notes:
+// - Refuses normal environments and preserves the installed built-in campaign definition
+
 import { prisma } from "../lib/prisma.js";
 import { markNotReady, markReady } from "../readiness.js";
 import { clearE2EEmails } from "./e2eMailbox.service.js";
@@ -18,6 +22,11 @@ export type E2EResetResult = {
     referralPointAllocations: number;
     chainSyncStates: number;
     milestoneTiers: number;
+    campaigns: number;
+    campaignTasks: number;
+    campaignVerificationPolicies: number;
+    campaignRewardPolicies: number;
+    campaignFulfillments: number;
   };
 };
 
@@ -88,15 +97,41 @@ export async function initializeE2EReset(
 }
 
 async function databaseCounts(): Promise<E2EResetResult["counts"]> {
-  const [users, referrals, referralPointAllocations, chainSyncStates, milestoneTiers] =
-    await Promise.all([
-      prisma.user.count(),
-      prisma.referral.count(),
-      prisma.referralPointAllocation.count(),
-      prisma.chainSyncState.count(),
-      prisma.milestoneTier.count(),
-    ]);
-  return { users, referrals, referralPointAllocations, chainSyncStates, milestoneTiers };
+  const [
+    users,
+    referrals,
+    referralPointAllocations,
+    chainSyncStates,
+    milestoneTiers,
+    campaigns,
+    campaignTasks,
+    campaignVerificationPolicies,
+    campaignRewardPolicies,
+    campaignFulfillments,
+  ] = await Promise.all([
+    prisma.user.count(),
+    prisma.referral.count(),
+    prisma.referralPointAllocation.count(),
+    prisma.chainSyncState.count(),
+    prisma.milestoneTier.count(),
+    prisma.campaign.count(),
+    prisma.campaignTask.count(),
+    prisma.campaignVerificationPolicy.count(),
+    prisma.campaignRewardPolicy.count(),
+    prisma.campaignFulfillment.count(),
+  ]);
+  return {
+    users,
+    referrals,
+    referralPointAllocations,
+    chainSyncStates,
+    milestoneTiers,
+    campaigns,
+    campaignTasks,
+    campaignVerificationPolicies,
+    campaignRewardPolicies,
+    campaignFulfillments,
+  };
 }
 
 async function performReset(): Promise<E2EResetResult> {
@@ -115,6 +150,7 @@ async function performReset(): Promise<E2EResetResult> {
 
     await prisma.$executeRaw`
       TRUNCATE TABLE
+        "campaign_fulfillments",
         "referral_point_allocations",
         "referrals",
         "users",
@@ -136,7 +172,12 @@ async function performReset(): Promise<E2EResetResult> {
       counts.users !== 0 ||
       counts.referrals !== 0 ||
       counts.referralPointAllocations !== 0 ||
-      counts.milestoneTiers !== 0
+      counts.milestoneTiers !== 0 ||
+      counts.campaigns !== 1 ||
+      counts.campaignTasks !== 1 ||
+      counts.campaignVerificationPolicies !== 1 ||
+      counts.campaignRewardPolicies !== 1 ||
+      counts.campaignFulfillments !== 0
     ) {
       throw new Error(`Database reset left application rows behind: ${JSON.stringify(counts)}`);
     }

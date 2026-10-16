@@ -7,14 +7,18 @@
 //   (or whether a grandparent's share) they belong to
 
 import { prisma } from "../lib/prisma.js";
-import { type PublicClient } from "viem";
+import { type Hash } from "viem";
 import { ReadReferralContractService } from "@reffinity/blockchain-connector/readReferralContract";
 import {
   createWebSocketClient,
   createClient,
 } from "@reffinity/blockchain-connector/clients";
-import { log } from "console";
 import { bytes32ToUuid } from "@reffinity/blockchain-connector/uuidBytesConverter";
+import {
+  CampaignFulfillmentProjectionError,
+  projectBuiltinReferralFulfillment,
+  reconcileBuiltinReferralFulfillments,
+} from "./campaignFulfillment.service.js";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 const BASIS_POINTS = 10_000n;
@@ -38,6 +42,7 @@ export class BlockchainListenerService {
       console.log("PublicClient:", await this.publicClient.getChainId());
 
       await this.syncToChain();
+      await this.reconcileCampaignFulfillments();
       await this.startPointsAddedListener();
       await this.startInviteChangedListener();
       await this.startReferralPointsAllocatedListener();
@@ -59,7 +64,7 @@ export class BlockchainListenerService {
     unallocatedAmount: bigint;
     blockNumber: bigint;
     logIndex: number;
-    transactionHash: string;
+    transactionHash: Hash;
   }): Promise<void> {
     const data = {
       transactionHash: event.transactionHash.toLowerCase(),
@@ -95,6 +100,64 @@ export class BlockchainListenerService {
           referee: { walletAddress: data.participantWalletAddress },
         },
         data: { points: data.directAmount },
+      });
+    }
+  }
+
+  private async projectCampaignFulfillment(
+    event: { transactionHash: Hash; logIndex: number },
+    source: "live" | "catch-up",
+  ): Promise<void> {
+    try {
+      const result = await projectBuiltinReferralFulfillment(
+        this.publicClient,
+        event,
+      );
+      const details = {
+        source,
+        transactionHash: result.transactionHash,
+        outcome: result.outcome,
+        ...(result.outcome === "DEFERRED"
+          ? { reason: result.reason }
+          : {
+              fulfillmentId: result.fulfillmentId,
+              referralId: result.referralId,
+              replayed: result.replayed,
+            }),
+      };
+      if (result.outcome === "REWARDED") {
+        console.log("Campaign fulfillment projected", details);
+      } else {
+        console.warn("Campaign fulfillment projection incomplete", details);
+      }
+    } catch (error) {
+      console.error("Campaign fulfillment projection failed", {
+        source,
+        transactionHash: event.transactionHash.toLowerCase(),
+        logIndex: event.logIndex,
+        code:
+          error instanceof CampaignFulfillmentProjectionError
+            ? error.code
+            : "UNEXPECTED_ERROR",
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  private async reconcileCampaignFulfillments(): Promise<void> {
+    try {
+      const summary = await reconcileBuiltinReferralFulfillments(
+        this.publicClient,
+        {
+          onIssue: (issue) =>
+            console.warn("Campaign fulfillment reconciliation issue", issue),
+        },
+      );
+      console.log("Campaign fulfillment reconciliation complete", summary);
+    } catch (error) {
+      // Recovery is best-effort. Existing listener startup and legacy projections remain primary.
+      console.error("Campaign fulfillment reconciliation failed", {
+        message: error instanceof Error ? error.message : String(error),
       });
     }
   }
@@ -159,6 +222,7 @@ export class BlockchainListenerService {
       await this.readReferralContractService.listenToReferralPointsAllocatedEvent(
         async (event) => {
           await this.persistReferralPointAllocation(event);
+          await this.projectCampaignFulfillment(event, "live");
           await prisma.chainSyncState.upsert({
             where: { id: 1 },
             update: {
@@ -442,7 +506,7 @@ export class BlockchainListenerService {
     )) as Array<{
       blockNumber: bigint;
       logIndex: number;
-      transactionHash: string;
+      transactionHash: Hash;
       args: {
         participant: string;
         pool: bigint;
@@ -474,6 +538,13 @@ export class BlockchainListenerService {
         logIndex: event.logIndex,
         transactionHash: event.transactionHash,
       });
+      await this.projectCampaignFulfillment(
+        {
+          transactionHash: event.transactionHash,
+          logIndex: event.logIndex,
+        },
+        "catch-up",
+      );
       lastProcessedBlock = event.blockNumber;
       lastProcessedLogIndex = event.logIndex;
     }
