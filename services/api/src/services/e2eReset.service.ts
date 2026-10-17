@@ -148,16 +148,26 @@ async function performReset(): Promise<E2EResetResult> {
     if (!reverted) throw new Error(`Hardhat could not revert snapshot ${baselineSnapshotId}`);
     baselineSnapshotId = await takeSnapshot();
 
-    await prisma.$executeRaw`
-      TRUNCATE TABLE
-        "campaign_fulfillments",
-        "referral_point_allocations",
-        "referrals",
-        "users",
-        "milestone_tiers",
-        "ChainSyncState"
-      RESTART IDENTITY CASCADE
-    `;
+    // User campaigns link to their owner, so TRUNCATE "users" CASCADE would also empty the campaigns
+    // table, built-in campaign included. Users' campaigns are deleted first instead, and users with
+    // DELETE, which leaves the ownerless built-in campaign alone
+    const ownedByAUser = { campaign: { ownerId: { not: null } } };
+    await prisma.$transaction([
+      prisma.$executeRaw`
+        TRUNCATE TABLE
+          "campaign_fulfillments",
+          "referral_point_allocations",
+          "referrals",
+          "milestone_tiers",
+          "ChainSyncState"
+        RESTART IDENTITY CASCADE
+      `,
+      prisma.campaignRewardPolicy.deleteMany({ where: { task: ownedByAUser } }),
+      prisma.campaignVerificationPolicy.deleteMany({ where: { task: ownedByAUser } }),
+      prisma.campaignTask.deleteMany({ where: ownedByAUser }),
+      prisma.campaign.deleteMany({ where: { ownerId: { not: null } } }),
+      prisma.user.deleteMany(),
+    ]);
     clearE2EEmails();
 
     const contractAddress = process.env.REFERRAL_CONTRACT_ADDRESS ?? "";

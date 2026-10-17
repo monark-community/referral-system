@@ -30,7 +30,10 @@ contract Campaigns is AccessControl, CampaignSignals {
         bytes32 campaignId,
         address owner,
         CampaignTypes.TaskType taskType,
-        CampaignTypes.VerificationType verificationType
+        CampaignTypes.VerificationType verificationType,
+        CampaignTypes.RewardType rewardType,
+        uint256 completerReward,
+        uint256 referralPool
     ) external onlyRole(ACCESS_ROLE) returns (CampaignTypes.Campaign memory) {
         if (campaignId == bytes32(0)) revert ZeroCampaignId();
         if (owner == address(0)) revert ZeroOwner();
@@ -47,7 +50,10 @@ contract Campaigns is AccessControl, CampaignSignals {
             owner: owner,
             taskType: taskType,
             verificationType: verificationType,
-            status: CampaignTypes.CampaignStatus.Active
+            status: CampaignTypes.CampaignStatus.Active,
+            rewardType: rewardType,
+            completerReward: completerReward,
+            referralPool: referralPool
         });
         return campaigns[campaignId];
     }
@@ -67,6 +73,9 @@ contract Campaigns is AccessControl, CampaignSignals {
         CampaignTypes.Campaign storage campaign = _requireCampaign(campaignId);
         if (campaign.status != CampaignTypes.CampaignStatus.Active) {
             revert CampaignNotActive(campaignId);
+        }
+        if (participant == campaign.owner) {
+            revert CampaignOwnerCannotParticipate(campaignId, participant);
         }
 
         _validateTaskSubmission(campaign.taskType);
@@ -96,29 +105,25 @@ contract Campaigns is AccessControl, CampaignSignals {
         bytes32 fulfillmentId,
         address verifier
     ) external onlyRole(ACCESS_ROLE) returns (CampaignTypes.Fulfillment memory) {
-        CampaignTypes.Fulfillment storage fulfillment = _requireFulfillment(
-            fulfillmentId
-        );
-        if (
-            fulfillment.status !=
-            CampaignTypes.FulfillmentStatus.Submitted
-        ) {
-            revert InvalidFulfillmentStatus(
+        return
+            _decideFulfillment(
                 fulfillmentId,
-                fulfillment.status
+                verifier,
+                CampaignTypes.FulfillmentStatus.Verified
             );
-        }
+    }
 
-        CampaignTypes.Campaign storage campaign = _requireCampaign(
-            fulfillment.campaignId
-        );
-        if (campaign.status != CampaignTypes.CampaignStatus.Active) {
-            revert CampaignNotActive(campaign.id);
-        }
-
-        _authorizeVerifier(campaign, verifier);
-        fulfillment.status = CampaignTypes.FulfillmentStatus.Verified;
-        return fulfillment;
+    // A rejected participant keeps their one submission, so they cannot submit again
+    function rejectFulfillment(
+        bytes32 fulfillmentId,
+        address verifier
+    ) external onlyRole(ACCESS_ROLE) returns (CampaignTypes.Fulfillment memory) {
+        return
+            _decideFulfillment(
+                fulfillmentId,
+                verifier,
+                CampaignTypes.FulfillmentStatus.Rejected
+            );
     }
 
     function getCampaign(
@@ -148,6 +153,37 @@ contract Campaigns is AccessControl, CampaignSignals {
         return
             taskType == CampaignTypes.TaskType.Bounty &&
             verificationType == CampaignTypes.VerificationType.Manual;
+    }
+
+    // Verifying and rejecting are the creator's two decisions on a submission; each can be made once
+    function _decideFulfillment(
+        bytes32 fulfillmentId,
+        address verifier,
+        CampaignTypes.FulfillmentStatus decision
+    ) private returns (CampaignTypes.Fulfillment memory) {
+        CampaignTypes.Fulfillment storage fulfillment = _requireFulfillment(
+            fulfillmentId
+        );
+        if (
+            fulfillment.status !=
+            CampaignTypes.FulfillmentStatus.Submitted
+        ) {
+            revert InvalidFulfillmentStatus(
+                fulfillmentId,
+                fulfillment.status
+            );
+        }
+
+        CampaignTypes.Campaign storage campaign = _requireCampaign(
+            fulfillment.campaignId
+        );
+        if (campaign.status != CampaignTypes.CampaignStatus.Active) {
+            revert CampaignNotActive(campaign.id);
+        }
+
+        _authorizeVerifier(campaign, verifier);
+        fulfillment.status = decision;
+        return fulfillment;
     }
 
     function _validateTaskSubmission(

@@ -5,14 +5,18 @@
 // - An invite's points come from the payout event that names it, or for a pending invite from the
 //   referrer's share of the pool; balance changes are never used, since they can't tell which invite
 //   (or whether a grandparent's share) they belong to
+// - User campaign events are applied by manualCampaignProjection.service.ts, live and in catch-up;
+//   their handlers are safe to repeat, so the two can overlap
 
 import { prisma } from "../lib/prisma.js";
 import { type Hash } from "viem";
 import {
   ReadReferralContractService,
   type CampaignCreatedEvent,
+  type CampaignFulfillmentRejectedEvent,
   type CampaignFulfillmentSubmittedEvent,
   type CampaignFulfillmentVerifiedEvent,
+  type CampaignRewardPaidEvent,
 } from "@reffinity/blockchain-connector/readReferralContract";
 import {
   createWebSocketClient,
@@ -24,6 +28,14 @@ import {
   projectBuiltinReferralFulfillment,
   reconcileBuiltinReferralFulfillments,
 } from "./campaignFulfillment.service.js";
+import {
+  applyCampaignCreated,
+  applyCampaignFulfillmentRejected,
+  applyCampaignFulfillmentSubmitted,
+  applyCampaignFulfillmentVerified,
+  applyCampaignRewardPaid,
+  type ProjectionResult,
+} from "./manualCampaignProjection.service.js";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 const BASIS_POINTS = 10_000n;
@@ -37,6 +49,8 @@ export class BlockchainListenerService {
   private isListeningToCampaignCreated: boolean = false;
   private isListeningToCampaignFulfillmentSubmitted: boolean = false;
   private isListeningToCampaignFulfillmentVerified: boolean = false;
+  private isListeningToCampaignFulfillmentRejected: boolean = false;
+  private isListeningToCampaignRewardPaid: boolean = false;
   private publicClient: any = createClient(
     process.env.CHAIN_TYPE as "localhost" | "sepolia",
   ).publicClient;
@@ -57,6 +71,8 @@ export class BlockchainListenerService {
       await this.startCampaignCreatedListener();
       await this.startCampaignFulfillmentSubmittedListener();
       await this.startCampaignFulfillmentVerifiedListener();
+      await this.startCampaignFulfillmentRejectedListener();
+      await this.startCampaignRewardPaidListener();
 
       console.log("Blockchain listener initialized successfully.");
     } catch (error) {
@@ -382,30 +398,105 @@ export class BlockchainListenerService {
     }
   }
 
-  // These handlers are the intentional Phase 7 boundary. Persistence and replay
-  // semantics for generalized campaigns are deferred to the backend projection slice.
-  private async handleCampaignCreated(
-    event: CampaignCreatedEvent,
-  ): Promise<void> {
-    console.log("CampaignCreated received; persistence deferred", event);
+  // Applies one user campaign event and logs what happened. A failure is logged rather than thrown,
+  // so one bad event can't stop the listener. Catch-up starts from where the last start's catch-up
+  // stopped, so an event that failed live is retried on the next start
+  private async applyCampaignEvent<T extends { transactionHash: Hash; logIndex: number }>(
+    eventName: string,
+    apply: (event: T) => Promise<ProjectionResult>,
+    event: T,
+    source: "live" | "catch-up",
+  ): Promise<boolean> {
+    const position = { source, transactionHash: event.transactionHash.toLowerCase(), logIndex: event.logIndex };
+    try {
+      const result = await apply(event);
+      if (result.outcome === "SKIPPED") {
+        console.warn(`${eventName} skipped`, { ...position, id: result.id, reason: result.reason });
+      } else {
+        console.log(`${eventName} ${result.outcome === "APPLIED" ? "applied" : "already applied"}`, {
+          ...position,
+          id: result.id,
+        });
+      }
+      return true;
+    } catch (error) {
+      console.error(`${eventName} could not be applied`, {
+        ...position,
+        message: error instanceof Error ? error.message : String(error),
+      });
+      return false;
+    }
+  }
+
+  private async handleCampaignCreated(event: CampaignCreatedEvent): Promise<void> {
+    await this.applyCampaignEvent("CampaignCreated", applyCampaignCreated, event, "live");
   }
 
   private async handleCampaignFulfillmentSubmitted(
     event: CampaignFulfillmentSubmittedEvent,
   ): Promise<void> {
-    console.log(
-      "CampaignFulfillmentSubmitted received; persistence deferred",
+    await this.applyCampaignEvent(
+      "CampaignFulfillmentSubmitted",
+      applyCampaignFulfillmentSubmitted,
       event,
+      "live",
     );
   }
 
   private async handleCampaignFulfillmentVerified(
     event: CampaignFulfillmentVerifiedEvent,
   ): Promise<void> {
-    console.log(
-      "CampaignFulfillmentVerified received; persistence deferred",
+    await this.applyCampaignEvent(
+      "CampaignFulfillmentVerified",
+      applyCampaignFulfillmentVerified,
       event,
+      "live",
     );
+  }
+
+  private async handleCampaignFulfillmentRejected(
+    event: CampaignFulfillmentRejectedEvent,
+  ): Promise<void> {
+    await this.applyCampaignEvent(
+      "CampaignFulfillmentRejected",
+      applyCampaignFulfillmentRejected,
+      event,
+      "live",
+    );
+  }
+
+  private async handleCampaignRewardPaid(event: CampaignRewardPaidEvent): Promise<void> {
+    await this.applyCampaignEvent("CampaignRewardPaid", applyCampaignRewardPaid, event, "live");
+  }
+
+  private async startCampaignFulfillmentRejectedListener(): Promise<void> {
+    if (this.isListeningToCampaignFulfillmentRejected) return;
+    try {
+      await this.readReferralContractService.listenToCampaignFulfillmentRejectedEvent(
+        (event) => this.handleCampaignFulfillmentRejected(event),
+        10000,
+      );
+      this.isListeningToCampaignFulfillmentRejected = true;
+    } catch (error) {
+      throw new Error(
+        `Could not start blockchain listener: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  private async startCampaignRewardPaidListener(): Promise<void> {
+    if (this.isListeningToCampaignRewardPaid) return;
+    try {
+      await this.readReferralContractService.listenToCampaignRewardPaidEvent(
+        (event) => this.handleCampaignRewardPaid(event),
+        10000,
+      );
+      this.isListeningToCampaignRewardPaid = true;
+    } catch (error) {
+      throw new Error(
+        `Could not start blockchain listener: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 
   private async startCampaignCreatedListener(): Promise<void> {
@@ -463,6 +554,7 @@ export class BlockchainListenerService {
     const latestBlock = await this.publicClient.getBlockNumber({ cacheTime: 0 });
 
     await this.syncReferralPointAllocations(state, latestBlock);
+    await this.syncCampaignEvents(state, latestBlock);
 
     const fromBlock: bigint = state?.lastProcessedBlock ?? 0n;
     const fromLogIndex: number = state?.lastProcessedLogIndex ?? 0;
@@ -652,6 +744,93 @@ export class BlockchainListenerService {
     });
   }
 
+  // Applies the user campaign events since the last catch-up, in chain order. The saved position stops
+  // before the first event that failed, so the next start tries it again
+  private async syncCampaignEvents(
+    state: { lastCampaignEventBlock?: bigint; lastCampaignEventLogIndex?: number } | null,
+    latestBlock: bigint,
+  ): Promise<void> {
+    const fromBlock = state?.lastCampaignEventBlock ?? 0n;
+    const fromLogIndex = state?.lastCampaignEventLogIndex ?? -1;
+    // Like the allocation catch-up, nothing to do once the saved block is the latest; an event that
+    // failed in the latest block is retried once a later block exists
+    if (fromBlock >= latestBlock) {
+      return;
+    }
+
+    const range = { fromBlock, toBlock: latestBlock };
+    const service = this.readReferralContractService;
+    const sources: [string, () => Promise<any[]>, (event: any) => Promise<ProjectionResult>][] = [
+      ["CampaignCreated", () => service.getCampaignCreatedEvents(range), applyCampaignCreated],
+      [
+        "CampaignFulfillmentSubmitted",
+        () => service.getCampaignFulfillmentSubmittedEvents(range),
+        applyCampaignFulfillmentSubmitted,
+      ],
+      [
+        "CampaignFulfillmentVerified",
+        () => service.getCampaignFulfillmentVerifiedEvents(range),
+        applyCampaignFulfillmentVerified,
+      ],
+      [
+        "CampaignFulfillmentRejected",
+        () => service.getCampaignFulfillmentRejectedEvents(range),
+        applyCampaignFulfillmentRejected,
+      ],
+      ["CampaignRewardPaid", () => service.getCampaignRewardPaidEvents(range), applyCampaignRewardPaid],
+    ];
+
+    const events: { eventName: string; apply: (event: any) => Promise<ProjectionResult>; event: any }[] = [];
+    for (const [eventName, read, apply] of sources) {
+      for (const log of await read()) {
+        events.push({
+          eventName,
+          apply,
+          event: {
+            ...log.args,
+            blockNumber: log.blockNumber,
+            logIndex: log.logIndex,
+            transactionHash: log.transactionHash,
+          },
+        });
+      }
+    }
+    events.sort((a, b) =>
+      a.event.blockNumber === b.event.blockNumber
+        ? a.event.logIndex - b.event.logIndex
+        : a.event.blockNumber < b.event.blockNumber
+          ? -1
+          : 1,
+    );
+
+    let resumeFrom: { block: bigint; logIndex: number } | null = null;
+    for (const { eventName, apply, event } of events) {
+      if (
+        event.blockNumber < fromBlock ||
+        (event.blockNumber === fromBlock && event.logIndex <= fromLogIndex)
+      ) {
+        continue;
+      }
+      const applied = await this.applyCampaignEvent(eventName, apply, event, "catch-up");
+      if (!applied && !resumeFrom) {
+        resumeFrom = { block: event.blockNumber, logIndex: event.logIndex - 1 };
+      }
+    }
+
+    const position = resumeFrom ?? { block: latestBlock, logIndex: -1 };
+    await prisma.chainSyncState.upsert({
+      where: { id: 1 },
+      update: { lastCampaignEventBlock: position.block, lastCampaignEventLogIndex: position.logIndex },
+      create: {
+        id: 1,
+        lastProcessedBlock: 0n,
+        lastProcessedLogIndex: 0,
+        lastCampaignEventBlock: position.block,
+        lastCampaignEventLogIndex: position.logIndex,
+      },
+    });
+  }
+
   async stop(): Promise<void> {
     const stops: Promise<unknown>[] = [];
     if (this.isListeningToPointsAdded) {
@@ -686,6 +865,16 @@ export class BlockchainListenerService {
         this.readReferralContractService.stopListeningToCampaignFulfillmentVerifiedEvent(),
       );
       this.isListeningToCampaignFulfillmentVerified = false;
+    }
+    if (this.isListeningToCampaignFulfillmentRejected) {
+      stops.push(
+        this.readReferralContractService.stopListeningToCampaignFulfillmentRejectedEvent(),
+      );
+      this.isListeningToCampaignFulfillmentRejected = false;
+    }
+    if (this.isListeningToCampaignRewardPaid) {
+      stops.push(this.readReferralContractService.stopListeningToCampaignRewardPaidEvent());
+      this.isListeningToCampaignRewardPaid = false;
     }
     await Promise.all(stops);
   }

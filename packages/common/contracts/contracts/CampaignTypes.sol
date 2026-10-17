@@ -24,10 +24,16 @@ library CampaignTypes {
         Archived
     }
 
+    // How a campaign pays each completion. Points is the only kind so far; others, like tokens, can be added
+    enum RewardType {
+        Points
+    }
+
     enum FulfillmentStatus {
         None,
         Submitted,
-        Verified
+        Verified,
+        Rejected
     }
 
     struct Campaign {
@@ -36,6 +42,11 @@ library CampaignTypes {
         TaskType taskType;
         VerificationType verificationType;
         CampaignStatus status;
+        RewardType rewardType;
+        // Paid to whoever completes the task
+        uint256 completerReward;
+        // Split between the completer's referrer and grandparent, like a sign-up's referral pool
+        uint256 referralPool;
     }
 
     struct Fulfillment {

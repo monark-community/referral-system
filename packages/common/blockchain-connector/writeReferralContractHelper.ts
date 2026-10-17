@@ -77,4 +77,12 @@ export class WriteReferralContractHelper {
       functionName: "verifyCampaignFulfillment",
     } as const;
   }
+
+  static async rejectCampaignFulfillmentContext() {
+    return {
+      abi: contracts.referral.abi,
+      address: contracts.referral.address.local,
+      functionName: "rejectCampaignFulfillment",
+    } as const;
+  }
 }

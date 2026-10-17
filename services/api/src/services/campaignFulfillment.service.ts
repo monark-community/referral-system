@@ -621,15 +621,28 @@ export async function refreshBuiltinReferralFulfillment(
   });
 }
 
+// The built-in referral task only uses these three; the other states belong to user campaigns
+const BUILTIN_FULFILLMENT_STATUSES: readonly string[] = ["PENDING", "VERIFIED", "REWARDED"];
+
+function asBuiltinFulfillment<T extends { id: string; status: string }>(
+  row: T,
+): T & { status: CurrentCampaignFulfillment["status"] } {
+  if (!BUILTIN_FULFILLMENT_STATUSES.includes(row.status)) {
+    throw new Error(`Fulfillment ${row.id} has status ${row.status}, which the built-in campaign never uses`);
+  }
+  return row as T & { status: CurrentCampaignFulfillment["status"] };
+}
+
 export async function getCurrentBuiltinReferralFulfillment(
   taskId: string,
   participantId: string,
 ): Promise<CurrentCampaignFulfillment | null> {
-  return prisma.campaignFulfillment.findFirst({
+  const row = await prisma.campaignFulfillment.findFirst({
     where: { taskId, participantId },
     orderBy: { attempt: "desc" },
     select: currentFulfillmentSelect,
   });
+  return row ? asBuiltinFulfillment(row) : null;
 }
 
 /**
@@ -649,10 +662,9 @@ export async function refreshCurrentBuiltinReferralFulfillment(
     onRefreshError?.(error);
   }
 
-  return (
-    (await prisma.campaignFulfillment.findUnique({
-      where: { id: fulfillment.id },
-      select: currentFulfillmentSelect,
-    })) ?? fulfillment
-  );
+  const refreshed = await prisma.campaignFulfillment.findUnique({
+    where: { id: fulfillment.id },
+    select: currentFulfillmentSelect,
+  });
+  return refreshed ? asBuiltinFulfillment(refreshed) : fulfillment;
 }

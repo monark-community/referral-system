@@ -599,13 +599,15 @@ Tiers are sorted by `level` ascending.
 
 ## Campaigns
 
-Campaign definition reads are public and currently expose the single system-managed Referral
-campaign. Fulfillment state is an additive, authenticated view of the existing referral flow;
-the contract and existing referral APIs remain responsible for execution and points.
+Campaign definition reads are public. They expose the system-managed Referral campaign and the
+user campaigns described under [User campaigns](#user-campaigns). Fulfillment state for the
+Referral campaign is an additive, authenticated view of the existing referral flow; the contract
+and existing referral APIs remain responsible for execution and points.
 
 ### `GET /api/campaigns`
 
-Return active campaign summaries.
+Return active campaign summaries: the built-in Referral campaign, then the user campaigns taking
+submissions (see [the board summary](#user-campaign-summary)).
 
 **Auth required:** No
 
@@ -719,6 +721,202 @@ read-through refresh attempt before the durable status is returned.
 This endpoint never awards points or creates referral records. If receipt evidence remains
 incomplete or temporarily unavailable, it returns the current durable status.
 
+For a user campaign, it returns the user's [submission](#user-campaign-submission) instead, or
+`{ "fulfillment": null }`.
+
+---
+
+## User Campaigns
+
+Any signed-in user can create a campaign with one manually checked task, such as following an
+account or joining a Discord. Whoever completes it gets the campaign's points reward, and their
+referrer and grandparent split the campaign's referral pool 80/20, like a sign-up. The creator
+approves or rejects each submission. A creator can't complete their own campaign or earn
+referral points from it, and each user can submit to a campaign once.
+
+**Who does what.** Every step that changes the chain is sent by the user's own wallet, since the
+contract records the sender as the creator or participant:
+
+1. The API saves the step and returns a `chain` object: the `ReferralProgram` function and the
+   arguments to send. Point amounts are plain numbers; pass them to the contract as bigints.
+2. The web app sends that transaction with the user's wallet.
+3. The blockchain listener sees the event and updates the database. Re-sending a `chain` call
+   that already went through fails on chain and changes nothing.
+
+Proof, instructions and limits stay in the database; only IDs, statuses and payouts go on chain.
+The contract caps what one completion can pay (the completer's reward plus the pool) at an
+admin-set maximum, `maxCampaignPointsPerCompletion` (1000 in the local deployment).
+
+**Campaign states.** `DRAFT` (only state that can be edited) → `ACTIVE` once the chain has it.
+The creator can then move it between `ACTIVE` and `PAUSED`, or to `ENDED` or `CANCELLED`, which
+are final; a draft can be cancelled too. Only an `ACTIVE` campaign before its `endsAt`, with a
+spot left, takes submissions. Pausing, ending and cancelling happen in the API only; the contract
+has no such states.
+
+**Submission states.** `SUBMITTED` (proof saved) → `UNDER_REVIEW` (on chain) → `APPROVED` or
+`REJECTED` (the creator's decision) → `REWARDED` (paid on chain). Every submission except a
+rejected one holds a spot. Until the chain has the creator's decision, they can change it or
+send it again; the chain's decision is final and wins over the API's.
+
+**Errors** add a `code`, and a `field` for invalid input:
+
+```json
+{ "error": "maxCompletions: must be a whole number of at least 1", "code": "INVALID_INPUT", "field": "maxCompletions" }
+```
+
+| Status | `code` | Cause |
+|--------|--------|-------|
+| 400 | `INVALID_INPUT` | A field is missing or invalid |
+| 400 | `REWARD_ABOVE_MAXIMUM` | The reward plus the pool is above the contract's maximum |
+| 403 | `NOT_CAMPAIGN_OWNER` | Only the campaign's creator can do this |
+| 403 | `OWN_CAMPAIGN` | Creators can't complete their own campaigns |
+| 404 | `CAMPAIGN_NOT_FOUND`, `SUBMISSION_NOT_FOUND` | Unknown campaign, or a submission not in it |
+| 409 | `NOT_EDITABLE` | Only a draft can be edited |
+| 409 | `INVALID_STATUS_CHANGE` | That state change isn't allowed from the current state |
+| 409 | `NOT_ACCEPTING_SUBMISSIONS` | Not active, or past its end date |
+| 409 | `CAMPAIGN_FULL` | No spots left |
+| 409 | `ALREADY_SUBMITTED` | The user has already submitted, even if rejected |
+| 409 | `NOT_REVIEWABLE` | Not on chain yet, or already decided on chain |
+| 503 | `CHAIN_UNAVAILABLE` | The points maximum could not be read from the chain |
+
+<a id="user-campaign-summary"></a>
+**A campaign** on the board (`GET /api/campaigns`). Detail (`GET /api/campaigns/:idOrKey`) adds
+`instructions`; a draft is only visible to its creator, under `/mine`:
+
+```json
+{
+  "id": "11111111-1111-4111-8111-111111111111",
+  "key": "11111111-1111-4111-8111-111111111111",
+  "title": "Follow Dave's company",
+  "description": "",
+  "status": "ACTIVE",
+  "isSystem": false,
+  "schemaVersion": 1,
+  "owner": { "name": "Dave", "walletAddress": "0x..." },
+  "taskType": "BOUNTY",
+  "category": "SOCIAL_MEDIA",
+  "verificationType": "MANUAL",
+  "reward": { "type": "POINTS", "completerPoints": 30, "referralPoolPoints": 10 },
+  "maxCompletions": 50,
+  "spotsLeft": 48,
+  "endsAt": "2026-11-01T00:00:00.000Z",
+  "publishedAt": "2026-10-17T12:00:00.000Z",
+  "createdAt": "2026-10-17T11:00:00.000Z"
+}
+```
+
+`category` is `SOCIAL_MEDIA` (proof is a link to the post or profile) or `COMMUNITY` (proof is
+a username or short text).
+
+<a id="user-campaign-submission"></a>
+**A submission**, as its participant sees it. `submission`, `decision` and `reward` are the chain
+events that confirmed each step, or `null`; block numbers are strings:
+
+```json
+{
+  "id": "22222222-2222-4222-8222-222222222222",
+  "campaignId": "11111111-1111-4111-8111-111111111111",
+  "status": "REWARDED",
+  "proof": "https://x.com/alice/status/1",
+  "rejectionReason": null,
+  "completerReward": 30,
+  "createdAt": "2026-10-17T12:00:00.000Z",
+  "submittedAt": "2026-10-17T12:00:05.000Z",
+  "reviewedAt": "2026-10-17T13:00:00.000Z",
+  "verifiedAt": "2026-10-17T13:00:05.000Z",
+  "rejectedAt": null,
+  "rewardedAt": "2026-10-17T13:00:05.000Z",
+  "chainId": 31337,
+  "submission": { "transactionHash": "0x...", "blockNumber": "41", "logIndex": 0 },
+  "decision": { "transactionHash": "0x...", "blockNumber": "42", "logIndex": 0 },
+  "reward": { "transactionHash": "0x...", "blockNumber": "42", "logIndex": 4 },
+  "chain": null
+}
+```
+
+### `POST /api/campaigns`
+
+Save a new campaign as a `DRAFT`. **Auth required:** Yes
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `title` | string | Yes | Up to 120 characters |
+| `instructions` | string | Yes | What to do, up to 2000 characters |
+| `description` | string | No | Up to 500 characters |
+| `category` | string | Yes | `SOCIAL_MEDIA` or `COMMUNITY` |
+| `completerPoints` | integer | Yes | Paid to whoever completes it; 0 or more |
+| `referralPoolPoints` | integer | Yes | Split 80/20 between the completer's referrer and grandparent; 0 or more |
+| `maxCompletions` | integer | Yes | 1 or more |
+| `endsAt` | ISO date | Yes | In the future |
+
+The campaign must pay at least one point. **Response (201):** `{ "campaign": ... }`, the campaign
+detail with the call that publishes it:
+
+```json
+"chain": {
+  "functionName": "createCampaign",
+  "args": ["0x1111111111114111811111111111111100000000000000000000000000000000", 1, 1, 0, 30, 10]
+}
+```
+
+The arguments are the campaign id as bytes32, `TaskType.Bounty`, `VerificationType.Manual`,
+`RewardType.Points`, the completer's reward and the pool. When the chain has it, the campaign is
+`ACTIVE` and `chain` is `null`; the chain's reward is the one paid, even if the draft changed after sending.
+
+### `PATCH /api/campaigns/:id`
+
+Edit a draft. Send any of the fields above; the rest keep their value. **Auth required:** Yes
+(creator). **Response (200):** `{ "campaign": ... }` with the updated `createCampaign` call.
+
+### `POST /api/campaigns/:id/status`
+
+Body: `{ "status": "PAUSED" }`, or `ACTIVE`, `ENDED` or `CANCELLED`. **Auth required:** Yes
+(creator). **Response (200):** `{ "campaign": ... }`
+
+### `GET /api/campaigns/mine`
+
+Campaigns the user created, in every state and with their submission counts, and the
+campaigns they submitted to. **Auth required:** Yes
+
+```json
+{
+  "created": [
+    {
+      "...": "the campaign, with chain while it is a draft",
+      "submissions": { "SUBMITTED": 0, "UNDER_REVIEW": 2, "APPROVED": 0, "REJECTED": 1, "REWARDED": 5 }
+    }
+  ],
+  "joined": [{ "campaign": { "...": "board summary" }, "fulfillment": { "...": "submission" } }]
+}
+```
+
+### `POST /api/campaigns/:id/fulfillments`
+
+Submit proof. Body: `{ "proof": "https://x.com/alice/status/1" }`, up to 500 characters.
+**Auth required:** Yes. **Response (201):** `{ "fulfillment": ... }`, `SUBMITTED`, with the call
+that puts it on chain: `{ "functionName": "submitCampaignFulfillment", "args": [campaignId, fulfillmentId] }`
+(both bytes32). The participant's `fulfillments/me` keeps returning this call until the chain has it.
+
+### `GET /api/campaigns/:id/fulfillments`
+
+The creator's review queue, oldest first; filter with `?status=UNDER_REVIEW`. **Auth required:**
+Yes (creator). Each submission adds `participant: { id, name, walletAddress }`, and `chain` holds
+the decision call while an `APPROVED` or `REJECTED` decision is not on chain yet.
+
+### `POST /api/campaigns/:id/fulfillments/:fulfillmentId/approve`
+
+Approve a submission that is `UNDER_REVIEW`. **Auth required:** Yes (creator). **Response (200):**
+`{ "fulfillment": ... }` with `{ "functionName": "verifyCampaignFulfillment", "args": [fulfillmentId] }`.
+Once mined, the contract pays the completer and the referral pool, and the submission becomes
+`REWARDED`. The payout appears in `GET /api/users/referral-rewards` with `"source": "campaign"`.
+
+### `POST /api/campaigns/:id/fulfillments/:fulfillmentId/reject`
+
+Body: `{ "reason": "The link is to someone else's profile" }`, up to 500 characters.
+**Auth required:** Yes (creator). **Response (200):** `{ "fulfillment": ... }` with
+`{ "functionName": "rejectCampaignFulfillment", "args": [fulfillmentId] }`. Nothing is paid, and
+the participant can't submit again; the spot is freed for someone else.
+
 ---
 
 ## User Milestone Progress
@@ -795,7 +993,7 @@ Get the current user's milestone progress, including their current tier and the 
 
 ### ReferralPointAllocation
 
-One row per `ReferralPointsAllocated` event, unique by `transactionHash` + `logIndex`, so a payout is stored once however many times the event is read.
+One row per `ReferralPointsAllocated` event (a sign-up) or `CampaignRewardPaid` event (a user campaign completion), unique by `transactionHash` + `logIndex`, so a payout is stored once however many times the event is read.
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -836,7 +1034,7 @@ One row per `ReferralPointsAllocated` event, unique by `transactionHash` + `logI
 
 ## Blockchain Integration
 
-The API includes a background blockchain listener service that watches the smart contract for three events:
+The API includes a background blockchain listener service that watches the smart contract for these events:
 
 ### PointsAdded Event
 When points are awarded on-chain, the listener:
@@ -858,4 +1056,20 @@ When someone joins through an invite and the pool is split, the listener:
 1. Stores the payout in `ReferralPointAllocation`
 2. Sets the `points` of the invite between the parent and the new user to the parent's share
 
+### User Campaign Events
+For the [user campaign](#user-campaigns) events, the listener updates the campaign or submission
+the event names, and skips an event for one the API didn't save or from the wrong wallet:
+
+| Event | Effect |
+|-------|--------|
+| `CampaignCreated` | The draft becomes `ACTIVE`, with the reward the chain stores |
+| `CampaignFulfillmentSubmitted` | The submission becomes `UNDER_REVIEW` |
+| `CampaignFulfillmentVerified` | The creator's approval is final (`APPROVED`) |
+| `CampaignFulfillmentRejected` | The creator's rejection is final (`REJECTED`) |
+| `CampaignRewardPaid` | The submission becomes `REWARDED`, and the pool's split is stored in `ReferralPointAllocation` with `source: "campaign"`; invite points are never touched |
+
+Each is safe to apply twice. The new balances themselves arrive as `PointsAdded` events, like any other.
+
 The listener tracks its sync position in the `ChainSyncState` table to avoid reprocessing events after restarts.
+User campaign events have their own position there; if one fails while catching up, the position
+stops before it, so the next start tries it again.

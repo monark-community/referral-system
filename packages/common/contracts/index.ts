@@ -12,6 +12,17 @@ const campaignComponents = [
     type: "uint8",
   },
   { internalType: "enum CampaignTypes.CampaignStatus", name: "status", type: "uint8" },
+  { internalType: "enum CampaignTypes.RewardType", name: "rewardType", type: "uint8" },
+  { internalType: "uint256", name: "completerReward", type: "uint256" },
+  { internalType: "uint256", name: "referralPool", type: "uint256" },
+] as const;
+
+const allocationComponents = [
+  { internalType: "address", name: "directRecipient", type: "address" },
+  { internalType: "address", name: "grandparentRecipient", type: "address" },
+  { internalType: "uint256", name: "directAmount", type: "uint256" },
+  { internalType: "uint256", name: "grandparentAmount", type: "uint256" },
+  { internalType: "uint256", name: "unallocatedAmount", type: "uint256" },
 ] as const;
 
 const fulfillmentComponents = [
@@ -120,6 +131,22 @@ export const RefferalABI = [
   { inputs: [], name: "ZeroOwner", type: "error" },
   { inputs: [], name: "ZeroParticipant", type: "error" },
   {
+    inputs: [
+      { internalType: "bytes32", name: "campaignId", type: "bytes32" },
+      { internalType: "address", name: "owner", type: "address" },
+    ],
+    name: "CampaignOwnerCannotParticipate",
+    type: "error",
+  },
+  {
+    inputs: [
+      { internalType: "uint256", name: "reward", type: "uint256" },
+      { internalType: "uint256", name: "maximum", type: "uint256" },
+    ],
+    name: "CampaignRewardAboveMaximum",
+    type: "error",
+  },
+  {
     anonymous: false,
     inputs: [
       { indexed: true, internalType: "bytes32", name: "campaignId", type: "bytes32" },
@@ -136,6 +163,14 @@ export const RefferalABI = [
         name: "verificationType",
         type: "uint8",
       },
+      {
+        indexed: false,
+        internalType: "enum CampaignTypes.RewardType",
+        name: "rewardType",
+        type: "uint8",
+      },
+      { indexed: false, internalType: "uint256", name: "completerReward", type: "uint256" },
+      { indexed: false, internalType: "uint256", name: "referralPool", type: "uint256" },
     ],
     name: "CampaignCreated",
     type: "event",
@@ -184,6 +219,52 @@ export const RefferalABI = [
     type: "event",
   },
   {
+    anonymous: false,
+    inputs: [
+      { indexed: true, internalType: "bytes32", name: "campaignId", type: "bytes32" },
+      {
+        indexed: true,
+        internalType: "bytes32",
+        name: "fulfillmentId",
+        type: "bytes32",
+      },
+      { indexed: true, internalType: "address", name: "verifier", type: "address" },
+      { indexed: false, internalType: "address", name: "participant", type: "address" },
+    ],
+    name: "CampaignFulfillmentRejected",
+    type: "event",
+  },
+  {
+    anonymous: false,
+    inputs: [
+      { indexed: true, internalType: "bytes32", name: "campaignId", type: "bytes32" },
+      {
+        indexed: true,
+        internalType: "bytes32",
+        name: "fulfillmentId",
+        type: "bytes32",
+      },
+      { indexed: true, internalType: "address", name: "participant", type: "address" },
+      {
+        indexed: false,
+        internalType: "enum CampaignTypes.RewardType",
+        name: "rewardType",
+        type: "uint8",
+      },
+      { indexed: false, internalType: "uint256", name: "completerReward", type: "uint256" },
+      { indexed: false, internalType: "uint256", name: "referralPool", type: "uint256" },
+      {
+        components: allocationComponents,
+        indexed: false,
+        internalType: "struct ReferralAllocation.Allocation",
+        name: "referralPayout",
+        type: "tuple",
+      },
+    ],
+    name: "CampaignRewardPaid",
+    type: "event",
+  },
+  {
     inputs: [
       { internalType: "bytes32", name: "campaignId", type: "bytes32" },
       { internalType: "enum CampaignTypes.TaskType", name: "taskType", type: "uint8" },
@@ -192,6 +273,9 @@ export const RefferalABI = [
         name: "verificationType",
         type: "uint8",
       },
+      { internalType: "enum CampaignTypes.RewardType", name: "rewardType", type: "uint8" },
+      { internalType: "uint256", name: "completerReward", type: "uint256" },
+      { internalType: "uint256", name: "referralPool", type: "uint256" },
     ],
     name: "createCampaign",
     outputs: [
@@ -278,6 +362,34 @@ export const RefferalABI = [
         type: "tuple",
       },
     ],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [{ internalType: "bytes32", name: "fulfillmentId", type: "bytes32" }],
+    name: "rejectCampaignFulfillment",
+    outputs: [
+      {
+        components: fulfillmentComponents,
+        internalType: "struct CampaignTypes.Fulfillment",
+        name: "fulfillment",
+        type: "tuple",
+      },
+    ],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "maxCampaignPointsPerCompletion",
+    outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [{ internalType: "uint256", name: "maximum", type: "uint256" }],
+    name: "setMaxCampaignPointsPerCompletion",
+    outputs: [],
     stateMutability: "nonpayable",
     type: "function",
   },

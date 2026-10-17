@@ -77,3 +77,47 @@ test("restores the database, contract, mailbox, and listener to a clean baseline
   });
   expect(secondTransaction).toMatch(/^0x[0-9a-f]{64}$/i);
 });
+
+// User campaigns link to their owners, so the reset deletes them with the users. The built-in
+// Referral campaign has no owner and must survive
+test("removes users' campaigns and keeps the built-in campaign", async ({
+  request,
+  walletFor,
+  resetState,
+  cleanBaseline: _cleanBaseline,
+}) => {
+  const apiBaseUrl = process.env.E2E_API_BASE_URL ?? "http://api:3001";
+  const wallet = walletFor("primary");
+  const message = `Reset check\nWallet: ${wallet.address}`;
+  const login = await request.post(`${apiBaseUrl}/api/auth/wallet`, {
+    data: { walletAddress: wallet.address, signature: await wallet.signMessage(message), message },
+  });
+  expect(login.ok(), await login.text()).toBeTruthy();
+  const { token } = await login.json();
+
+  const created = await request.post(`${apiBaseUrl}/api/campaigns`, {
+    headers: { authorization: `Bearer ${token}` },
+    data: {
+      title: "Follow us",
+      instructions: "Follow the account and paste the link",
+      category: "SOCIAL_MEDIA",
+      completerPoints: 30,
+      referralPoolPoints: 10,
+      maxCompletions: 5,
+      endsAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+    },
+  });
+  expect(created.status(), await created.text()).toBe(201);
+
+  const reset = await resetState();
+  expect(reset.counts).toEqual(expect.objectContaining({
+    users: 0,
+    campaigns: 1,
+    campaignTasks: 1,
+    campaignVerificationPolicies: 1,
+    campaignRewardPolicies: 1,
+    campaignFulfillments: 0,
+  }));
+  const builtin = await request.get(`${apiBaseUrl}/api/campaigns/builtin-referral`);
+  expect(builtin.ok(), await builtin.text()).toBeTruthy();
+});

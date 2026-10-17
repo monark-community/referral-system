@@ -5,6 +5,7 @@ pragma solidity ^0.8.28;
 // internal Campaigns module and the public ReferralProgram facade ABI.
 
 import {CampaignTypes} from "./CampaignTypes.sol";
+import {ReferralAllocation} from "./ReferralAllocation.sol";
 
 abstract contract CampaignSignals {
     error ZeroCampaignId();
@@ -37,12 +38,17 @@ abstract contract CampaignSignals {
         bytes32 campaignId,
         address verifier
     );
+    error CampaignOwnerCannotParticipate(bytes32 campaignId, address owner);
+    error CampaignRewardAboveMaximum(uint256 reward, uint256 maximum);
 
     event CampaignCreated(
         bytes32 indexed campaignId,
         address indexed owner,
         CampaignTypes.TaskType taskType,
-        CampaignTypes.VerificationType verificationType
+        CampaignTypes.VerificationType verificationType,
+        CampaignTypes.RewardType rewardType,
+        uint256 completerReward,
+        uint256 referralPool
     );
 
     event CampaignFulfillmentSubmitted(
@@ -58,5 +64,23 @@ abstract contract CampaignSignals {
         address indexed verifier,
         address participant,
         CampaignTypes.VerificationType verificationType
+    );
+
+    event CampaignFulfillmentRejected(
+        bytes32 indexed campaignId,
+        bytes32 indexed fulfillmentId,
+        address indexed verifier,
+        address participant
+    );
+
+    // Sent with every verified completion. Kept apart from ReferralPointsAllocated, which always means a sign-up
+    event CampaignRewardPaid(
+        bytes32 indexed campaignId,
+        bytes32 indexed fulfillmentId,
+        address indexed participant,
+        CampaignTypes.RewardType rewardType,
+        uint256 completerReward,
+        uint256 referralPool,
+        ReferralAllocation.Allocation referralPayout
     );
 }

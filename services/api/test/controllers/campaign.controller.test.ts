@@ -22,6 +22,13 @@ jest.mock("@/services/campaignFulfillment.service", () => ({
   getCurrentBuiltinReferralFulfillment: jest.fn(),
   refreshCurrentBuiltinReferralFulfillment: jest.fn(),
 }));
+// No user campaigns here; manualCampaign.controller.test.ts covers them
+jest.mock("@/services/manualCampaign.service", () => ({
+  findManualCampaign: jest.fn().mockResolvedValue(null),
+  listOpenManualCampaigns: jest.fn().mockResolvedValue([]),
+  countSpotsTaken: jest.fn().mockResolvedValue(new Map()),
+  getMyManualCampaignFulfillment: jest.fn(),
+}));
 jest.mock(
   "@reffinity/blockchain-connector/clients",
   () => ({ createClient: jest.fn(() => ({ publicClient: {} })) }),

@@ -20,13 +20,18 @@ export enum CampaignVerificationType {
 export enum CampaignStatus {
   None,
   Active,
-  Closed,
+  Archived,
+}
+
+export enum CampaignRewardType {
+  Points,
 }
 
 export enum CampaignFulfillmentStatus {
   None,
   Submitted,
   Verified,
+  Rejected,
 }
 
 export type Campaign = {
@@ -35,6 +40,9 @@ export type Campaign = {
   taskType: CampaignTaskType;
   verificationType: CampaignVerificationType;
   status: CampaignStatus;
+  rewardType: CampaignRewardType;
+  completerReward: bigint;
+  referralPool: bigint;
 };
 
 export type CampaignFulfillment = {
@@ -55,6 +63,9 @@ export type CampaignCreatedEvent = ChainEventPosition & {
   owner: Address;
   taskType: CampaignTaskType;
   verificationType: CampaignVerificationType;
+  rewardType: CampaignRewardType;
+  completerReward: bigint;
+  referralPool: bigint;
 };
 
 export type CampaignFulfillmentSubmittedEvent = ChainEventPosition & {
@@ -72,6 +83,32 @@ export type CampaignFulfillmentVerifiedEvent = ChainEventPosition & {
   verificationType: CampaignVerificationType;
 };
 
+export type CampaignFulfillmentRejectedEvent = ChainEventPosition & {
+  campaignId: Hex;
+  fulfillmentId: Hex;
+  verifier: Address;
+  participant: Address;
+};
+
+// The referral pool's split, as ReferralAllocation.allocate returns it
+export type ReferralPayout = {
+  directRecipient: Address;
+  grandparentRecipient: Address;
+  directAmount: bigint;
+  grandparentAmount: bigint;
+  unallocatedAmount: bigint;
+};
+
+export type CampaignRewardPaidEvent = ChainEventPosition & {
+  campaignId: Hex;
+  fulfillmentId: Hex;
+  participant: Address;
+  rewardType: CampaignRewardType;
+  completerReward: bigint;
+  referralPool: bigint;
+  referralPayout: ReferralPayout;
+};
+
 enum InviteStatus {
   Pending,
   Accepted,
@@ -85,6 +122,8 @@ export class ReadReferralContractService {
   private unwatchCampaignCreatedEvent: WatchContractEventReturnType | null = null;
   private unwatchCampaignFulfillmentSubmittedEvent: WatchContractEventReturnType | null = null;
   private unwatchCampaignFulfillmentVerifiedEvent: WatchContractEventReturnType | null = null;
+  private unwatchCampaignFulfillmentRejectedEvent: WatchContractEventReturnType | null = null;
+  private unwatchCampaignRewardPaidEvent: WatchContractEventReturnType | null = null;
 
   constructor(private clients: any) {}
 
@@ -178,6 +217,15 @@ export class ReadReferralContractService {
       functionName: "getCurrentUserMilestone",
       args: [userAddress],
     });
+  }
+
+  // The most points one campaign completion may pay, set by an admin
+  async getMaxCampaignPointsPerCompletion(): Promise<bigint> {
+    return (await this.clients.publicClient.readContract({
+      address: contracts.referral.address.local,
+      abi: contracts.referral.abi,
+      functionName: "maxCampaignPointsPerCompletion",
+    })) as bigint;
   }
 
   async getCampaign(campaignId: Hex): Promise<Campaign> {
@@ -354,6 +402,102 @@ export class ReadReferralContractService {
     if (this.unwatchCampaignFulfillmentVerifiedEvent) {
       this.unwatchCampaignFulfillmentVerifiedEvent();
       this.unwatchCampaignFulfillmentVerifiedEvent = null;
+    }
+  }
+
+  async listenToCampaignFulfillmentRejectedEvent(
+    callback: (
+      eventData: CampaignFulfillmentRejectedEvent,
+    ) => void | Promise<void>,
+    pollingInterval = 10000,
+  ) {
+    this.unwatchCampaignFulfillmentRejectedEvent =
+      this.clients.publicClient.watchContractEvent({
+        address: contracts.referral.address.local,
+        abi: contracts.referral.abi,
+        eventName: "CampaignFulfillmentRejected",
+        pollingInterval,
+        onLogs: async (logs: any) => {
+          for (const log of logs) {
+            if (!log.args) continue;
+            await callback({
+              ...log.args,
+              blockNumber: log.blockNumber!,
+              logIndex: log.logIndex!,
+              transactionHash: log.transactionHash!,
+            } as CampaignFulfillmentRejectedEvent);
+          }
+        },
+      });
+  }
+
+  async getCampaignFulfillmentRejectedEvents({
+    fromBlock,
+    toBlock,
+  }: {
+    fromBlock: bigint;
+    toBlock: bigint;
+  }) {
+    return this.clients.publicClient.getContractEvents({
+      address: contracts.referral.address.local,
+      abi: contracts.referral.abi,
+      eventName: "CampaignFulfillmentRejected",
+      fromBlock,
+      toBlock,
+    });
+  }
+
+  async stopListeningToCampaignFulfillmentRejectedEvent() {
+    if (this.unwatchCampaignFulfillmentRejectedEvent) {
+      this.unwatchCampaignFulfillmentRejectedEvent();
+      this.unwatchCampaignFulfillmentRejectedEvent = null;
+    }
+  }
+
+  async listenToCampaignRewardPaidEvent(
+    callback: (eventData: CampaignRewardPaidEvent) => void | Promise<void>,
+    pollingInterval = 10000,
+  ) {
+    this.unwatchCampaignRewardPaidEvent =
+      this.clients.publicClient.watchContractEvent({
+        address: contracts.referral.address.local,
+        abi: contracts.referral.abi,
+        eventName: "CampaignRewardPaid",
+        pollingInterval,
+        onLogs: async (logs: any) => {
+          for (const log of logs) {
+            if (!log.args) continue;
+            await callback({
+              ...log.args,
+              blockNumber: log.blockNumber!,
+              logIndex: log.logIndex!,
+              transactionHash: log.transactionHash!,
+            } as CampaignRewardPaidEvent);
+          }
+        },
+      });
+  }
+
+  async getCampaignRewardPaidEvents({
+    fromBlock,
+    toBlock,
+  }: {
+    fromBlock: bigint;
+    toBlock: bigint;
+  }) {
+    return this.clients.publicClient.getContractEvents({
+      address: contracts.referral.address.local,
+      abi: contracts.referral.abi,
+      eventName: "CampaignRewardPaid",
+      fromBlock,
+      toBlock,
+    });
+  }
+
+  async stopListeningToCampaignRewardPaidEvent() {
+    if (this.unwatchCampaignRewardPaidEvent) {
+      this.unwatchCampaignRewardPaidEvent();
+      this.unwatchCampaignRewardPaidEvent = null;
     }
   }
 
