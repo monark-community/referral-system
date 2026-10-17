@@ -14,14 +14,18 @@ import "./ReferralPoints.sol";
 import "./ReferralMilestone.sol";
 import "./ReferralInvites.sol";
 import "./ReferralAllocation.sol";
+import {CampaignTypes} from "./CampaignTypes.sol";
+import {CampaignSignals} from "./CampaignSignals.sol";
+import {Campaigns} from "./Campaigns.sol";
 
-contract ReferralProgram is AccessControl {
+contract ReferralProgram is AccessControl, CampaignSignals {
     using EnumerableSet for EnumerableSet.AddressSet;
 
     ReferralRelationships private relationships;
     ReferralPoints private points;
     ReferralMilestone private milestones;
     ReferralInvites private invites;
+    Campaigns private campaigns;
 
     uint16 public directReferralBps = 8_000;
     uint16 public grandparentReferralBps = 2_000;
@@ -52,6 +56,7 @@ contract ReferralProgram is AccessControl {
         points = new ReferralPoints(msg.sender, address(this));
         milestones = new ReferralMilestone(msg.sender, address(this));
         invites = new ReferralInvites(msg.sender, address(this));
+        campaigns = new Campaigns(msg.sender, address(this));
 
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
     }
@@ -161,6 +166,89 @@ contract ReferralProgram is AccessControl {
         uint256 milestoneToUpdate
     ) public onlyRole(DEFAULT_ADMIN_ROLE) {
         milestones.updateMilestone(value, milestoneToUpdate);
+    }
+
+    // -- Functions for generalized campaigns and fulfillments
+
+    function createCampaign(
+        bytes32 campaignId,
+        CampaignTypes.TaskType taskType,
+        CampaignTypes.VerificationType verificationType
+    ) public returns (CampaignTypes.Campaign memory campaign) {
+        campaign = campaigns.createCampaign(
+            campaignId,
+            msg.sender,
+            taskType,
+            verificationType
+        );
+        emit CampaignCreated(
+            campaign.id,
+            campaign.owner,
+            campaign.taskType,
+            campaign.verificationType
+        );
+    }
+
+    function submitCampaignFulfillment(
+        bytes32 campaignId,
+        bytes32 fulfillmentId
+    ) public returns (CampaignTypes.Fulfillment memory fulfillment) {
+        CampaignTypes.Campaign memory campaign = campaigns.getCampaign(
+            campaignId
+        );
+        fulfillment = campaigns.submitFulfillment(
+            campaignId,
+            fulfillmentId,
+            msg.sender
+        );
+        emit CampaignFulfillmentSubmitted(
+            fulfillment.campaignId,
+            fulfillment.id,
+            fulfillment.participant,
+            campaign.taskType
+        );
+    }
+
+    function verifyCampaignFulfillment(
+        bytes32 fulfillmentId
+    ) public returns (CampaignTypes.Fulfillment memory fulfillment) {
+        fulfillment = campaigns.verifyFulfillment(fulfillmentId, msg.sender);
+        CampaignTypes.Campaign memory campaign = campaigns.getCampaign(
+            fulfillment.campaignId
+        );
+        emit CampaignFulfillmentVerified(
+            fulfillment.campaignId,
+            fulfillment.id,
+            msg.sender,
+            fulfillment.participant,
+            campaign.verificationType
+        );
+    }
+
+    function getCampaign(
+        bytes32 campaignId
+    ) public view returns (CampaignTypes.Campaign memory) {
+        return campaigns.getCampaign(campaignId);
+    }
+
+    function getCampaignFulfillment(
+        bytes32 fulfillmentId
+    ) public view returns (CampaignTypes.Fulfillment memory) {
+        return campaigns.getFulfillment(fulfillmentId);
+    }
+
+    function getParticipantCampaignFulfillment(
+        bytes32 campaignId,
+        address participant
+    ) public view returns (CampaignTypes.Fulfillment memory) {
+        bytes32 fulfillmentId = campaigns.getParticipantFulfillmentId(
+            campaignId,
+            participant
+        );
+        if (fulfillmentId == bytes32(0)) {
+            revert FulfillmentNotFound(fulfillmentId);
+        }
+        return campaigns.getFulfillment(fulfillmentId);
     }
 
     // -- Functions for invites and statuses

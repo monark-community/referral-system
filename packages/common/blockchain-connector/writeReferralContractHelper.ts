@@ -53,4 +53,28 @@ export class WriteReferralContractHelper {
       functionName: "createInvite",
     } as const;
   }
+
+  static async createCampaignContext() {
+    return {
+      abi: contracts.referral.abi,
+      address: contracts.referral.address.local,
+      functionName: "createCampaign",
+    } as const;
+  }
+
+  static async submitCampaignFulfillmentContext() {
+    return {
+      abi: contracts.referral.abi,
+      address: contracts.referral.address.local,
+      functionName: "submitCampaignFulfillment",
+    } as const;
+  }
+
+  static async verifyCampaignFulfillmentContext() {
+    return {
+      abi: contracts.referral.abi,
+      address: contracts.referral.address.local,
+      functionName: "verifyCampaignFulfillment",
+    } as const;
+  }
 }

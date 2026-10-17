@@ -2,11 +2,284 @@
 
 import type { Abi } from "viem";
 
+const campaignComponents = [
+  { internalType: "bytes32", name: "id", type: "bytes32" },
+  { internalType: "address", name: "owner", type: "address" },
+  { internalType: "enum CampaignTypes.TaskType", name: "taskType", type: "uint8" },
+  {
+    internalType: "enum CampaignTypes.VerificationType",
+    name: "verificationType",
+    type: "uint8",
+  },
+  { internalType: "enum CampaignTypes.CampaignStatus", name: "status", type: "uint8" },
+] as const;
+
+const fulfillmentComponents = [
+  { internalType: "bytes32", name: "id", type: "bytes32" },
+  { internalType: "bytes32", name: "campaignId", type: "bytes32" },
+  { internalType: "address", name: "participant", type: "address" },
+  {
+    internalType: "enum CampaignTypes.FulfillmentStatus",
+    name: "status",
+    type: "uint8",
+  },
+] as const;
+
 export const RefferalABI = [
   {
     inputs: [],
     stateMutability: "nonpayable",
     type: "constructor",
+  },
+  {
+    inputs: [{ internalType: "bytes32", name: "campaignId", type: "bytes32" }],
+    name: "CampaignAlreadyExists",
+    type: "error",
+  },
+  {
+    inputs: [{ internalType: "bytes32", name: "campaignId", type: "bytes32" }],
+    name: "CampaignNotActive",
+    type: "error",
+  },
+  {
+    inputs: [{ internalType: "bytes32", name: "campaignId", type: "bytes32" }],
+    name: "CampaignNotFound",
+    type: "error",
+  },
+  {
+    inputs: [{ internalType: "bytes32", name: "fulfillmentId", type: "bytes32" }],
+    name: "FulfillmentAlreadyExists",
+    type: "error",
+  },
+  {
+    inputs: [{ internalType: "bytes32", name: "fulfillmentId", type: "bytes32" }],
+    name: "FulfillmentNotFound",
+    type: "error",
+  },
+  {
+    inputs: [
+      { internalType: "bytes32", name: "fulfillmentId", type: "bytes32" },
+      {
+        internalType: "enum CampaignTypes.FulfillmentStatus",
+        name: "currentStatus",
+        type: "uint8",
+      },
+    ],
+    name: "InvalidFulfillmentStatus",
+    type: "error",
+  },
+  {
+    inputs: [
+      { internalType: "bytes32", name: "campaignId", type: "bytes32" },
+      { internalType: "address", name: "participant", type: "address" },
+      { internalType: "bytes32", name: "fulfillmentId", type: "bytes32" },
+    ],
+    name: "ParticipantAlreadySubmitted",
+    type: "error",
+  },
+  {
+    inputs: [
+      { internalType: "bytes32", name: "campaignId", type: "bytes32" },
+      { internalType: "address", name: "verifier", type: "address" },
+    ],
+    name: "UnauthorizedManualVerifier",
+    type: "error",
+  },
+  {
+    inputs: [
+      { internalType: "enum CampaignTypes.TaskType", name: "taskType", type: "uint8" },
+      {
+        internalType: "enum CampaignTypes.VerificationType",
+        name: "verificationType",
+        type: "uint8",
+      },
+    ],
+    name: "UnsupportedCampaignCombination",
+    type: "error",
+  },
+  {
+    inputs: [
+      { internalType: "enum CampaignTypes.TaskType", name: "taskType", type: "uint8" },
+    ],
+    name: "UnsupportedTaskType",
+    type: "error",
+  },
+  {
+    inputs: [
+      {
+        internalType: "enum CampaignTypes.VerificationType",
+        name: "verificationType",
+        type: "uint8",
+      },
+    ],
+    name: "UnsupportedVerificationType",
+    type: "error",
+  },
+  { inputs: [], name: "ZeroCampaignId", type: "error" },
+  { inputs: [], name: "ZeroFulfillmentId", type: "error" },
+  { inputs: [], name: "ZeroOwner", type: "error" },
+  { inputs: [], name: "ZeroParticipant", type: "error" },
+  {
+    anonymous: false,
+    inputs: [
+      { indexed: true, internalType: "bytes32", name: "campaignId", type: "bytes32" },
+      { indexed: true, internalType: "address", name: "owner", type: "address" },
+      {
+        indexed: false,
+        internalType: "enum CampaignTypes.TaskType",
+        name: "taskType",
+        type: "uint8",
+      },
+      {
+        indexed: false,
+        internalType: "enum CampaignTypes.VerificationType",
+        name: "verificationType",
+        type: "uint8",
+      },
+    ],
+    name: "CampaignCreated",
+    type: "event",
+  },
+  {
+    anonymous: false,
+    inputs: [
+      { indexed: true, internalType: "bytes32", name: "campaignId", type: "bytes32" },
+      {
+        indexed: true,
+        internalType: "bytes32",
+        name: "fulfillmentId",
+        type: "bytes32",
+      },
+      { indexed: true, internalType: "address", name: "participant", type: "address" },
+      {
+        indexed: false,
+        internalType: "enum CampaignTypes.TaskType",
+        name: "taskType",
+        type: "uint8",
+      },
+    ],
+    name: "CampaignFulfillmentSubmitted",
+    type: "event",
+  },
+  {
+    anonymous: false,
+    inputs: [
+      { indexed: true, internalType: "bytes32", name: "campaignId", type: "bytes32" },
+      {
+        indexed: true,
+        internalType: "bytes32",
+        name: "fulfillmentId",
+        type: "bytes32",
+      },
+      { indexed: true, internalType: "address", name: "verifier", type: "address" },
+      { indexed: false, internalType: "address", name: "participant", type: "address" },
+      {
+        indexed: false,
+        internalType: "enum CampaignTypes.VerificationType",
+        name: "verificationType",
+        type: "uint8",
+      },
+    ],
+    name: "CampaignFulfillmentVerified",
+    type: "event",
+  },
+  {
+    inputs: [
+      { internalType: "bytes32", name: "campaignId", type: "bytes32" },
+      { internalType: "enum CampaignTypes.TaskType", name: "taskType", type: "uint8" },
+      {
+        internalType: "enum CampaignTypes.VerificationType",
+        name: "verificationType",
+        type: "uint8",
+      },
+    ],
+    name: "createCampaign",
+    outputs: [
+      {
+        components: campaignComponents,
+        internalType: "struct CampaignTypes.Campaign",
+        name: "campaign",
+        type: "tuple",
+      },
+    ],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [{ internalType: "bytes32", name: "campaignId", type: "bytes32" }],
+    name: "getCampaign",
+    outputs: [
+      {
+        components: campaignComponents,
+        internalType: "struct CampaignTypes.Campaign",
+        name: "",
+        type: "tuple",
+      },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [{ internalType: "bytes32", name: "fulfillmentId", type: "bytes32" }],
+    name: "getCampaignFulfillment",
+    outputs: [
+      {
+        components: fulfillmentComponents,
+        internalType: "struct CampaignTypes.Fulfillment",
+        name: "",
+        type: "tuple",
+      },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [
+      { internalType: "bytes32", name: "campaignId", type: "bytes32" },
+      { internalType: "address", name: "participant", type: "address" },
+    ],
+    name: "getParticipantCampaignFulfillment",
+    outputs: [
+      {
+        components: fulfillmentComponents,
+        internalType: "struct CampaignTypes.Fulfillment",
+        name: "",
+        type: "tuple",
+      },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [
+      { internalType: "bytes32", name: "campaignId", type: "bytes32" },
+      { internalType: "bytes32", name: "fulfillmentId", type: "bytes32" },
+    ],
+    name: "submitCampaignFulfillment",
+    outputs: [
+      {
+        components: fulfillmentComponents,
+        internalType: "struct CampaignTypes.Fulfillment",
+        name: "fulfillment",
+        type: "tuple",
+      },
+    ],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [{ internalType: "bytes32", name: "fulfillmentId", type: "bytes32" }],
+    name: "verifyCampaignFulfillment",
+    outputs: [
+      {
+        components: fulfillmentComponents,
+        internalType: "struct CampaignTypes.Fulfillment",
+        name: "fulfillment",
+        type: "tuple",
+      },
+    ],
+    stateMutability: "nonpayable",
+    type: "function",
   },
   {
     inputs: [],

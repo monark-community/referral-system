@@ -3,9 +3,74 @@
 // - Listeners are used to lighten the load of calling directly to the chain and have the DB as an intermediary, points and invites are the most common calls and have listeners
 
 import { contracts } from "./contracts.js";
-import { Address, Hash, WatchContractEventReturnType } from "viem";
+import { Address, Hash, Hex, WatchContractEventReturnType } from "viem";
 
 export type ReferralAncestors = readonly [parent: Address, grandparent: Address];
+
+export enum CampaignTaskType {
+  Referral,
+  Bounty,
+}
+
+export enum CampaignVerificationType {
+  AutomaticChain,
+  Manual,
+}
+
+export enum CampaignStatus {
+  None,
+  Active,
+  Closed,
+}
+
+export enum CampaignFulfillmentStatus {
+  None,
+  Submitted,
+  Verified,
+}
+
+export type Campaign = {
+  id: Hex;
+  owner: Address;
+  taskType: CampaignTaskType;
+  verificationType: CampaignVerificationType;
+  status: CampaignStatus;
+};
+
+export type CampaignFulfillment = {
+  id: Hex;
+  campaignId: Hex;
+  participant: Address;
+  status: CampaignFulfillmentStatus;
+};
+
+type ChainEventPosition = {
+  blockNumber: bigint;
+  logIndex: number;
+  transactionHash: Hash;
+};
+
+export type CampaignCreatedEvent = ChainEventPosition & {
+  campaignId: Hex;
+  owner: Address;
+  taskType: CampaignTaskType;
+  verificationType: CampaignVerificationType;
+};
+
+export type CampaignFulfillmentSubmittedEvent = ChainEventPosition & {
+  campaignId: Hex;
+  fulfillmentId: Hex;
+  participant: Address;
+  taskType: CampaignTaskType;
+};
+
+export type CampaignFulfillmentVerifiedEvent = ChainEventPosition & {
+  campaignId: Hex;
+  fulfillmentId: Hex;
+  verifier: Address;
+  participant: Address;
+  verificationType: CampaignVerificationType;
+};
 
 enum InviteStatus {
   Pending,
@@ -17,6 +82,9 @@ export class ReadReferralContractService {
   private unwatchPointsAddedEvent: WatchContractEventReturnType | null = null;
   private unwatchInviteChangedEvent: WatchContractEventReturnType | null = null;
   private unwatchReferralPointsAllocatedEvent: WatchContractEventReturnType | null = null;
+  private unwatchCampaignCreatedEvent: WatchContractEventReturnType | null = null;
+  private unwatchCampaignFulfillmentSubmittedEvent: WatchContractEventReturnType | null = null;
+  private unwatchCampaignFulfillmentVerifiedEvent: WatchContractEventReturnType | null = null;
 
   constructor(private clients: any) {}
 
@@ -110,6 +178,183 @@ export class ReadReferralContractService {
       functionName: "getCurrentUserMilestone",
       args: [userAddress],
     });
+  }
+
+  async getCampaign(campaignId: Hex): Promise<Campaign> {
+    return (await this.clients.publicClient.readContract({
+      address: contracts.referral.address.local,
+      abi: contracts.referral.abi,
+      functionName: "getCampaign",
+      args: [campaignId],
+    })) as Campaign;
+  }
+
+  async getCampaignFulfillment(
+    fulfillmentId: Hex,
+  ): Promise<CampaignFulfillment> {
+    return (await this.clients.publicClient.readContract({
+      address: contracts.referral.address.local,
+      abi: contracts.referral.abi,
+      functionName: "getCampaignFulfillment",
+      args: [fulfillmentId],
+    })) as CampaignFulfillment;
+  }
+
+  async getParticipantCampaignFulfillment(
+    campaignId: Hex,
+    participant: Address,
+  ): Promise<CampaignFulfillment> {
+    return (await this.clients.publicClient.readContract({
+      address: contracts.referral.address.local,
+      abi: contracts.referral.abi,
+      functionName: "getParticipantCampaignFulfillment",
+      args: [campaignId, participant],
+    })) as CampaignFulfillment;
+  }
+
+  async listenToCampaignCreatedEvent(
+    callback: (eventData: CampaignCreatedEvent) => void | Promise<void>,
+    pollingInterval = 10000,
+  ) {
+    this.unwatchCampaignCreatedEvent =
+      this.clients.publicClient.watchContractEvent({
+        address: contracts.referral.address.local,
+        abi: contracts.referral.abi,
+        eventName: "CampaignCreated",
+        pollingInterval,
+        onLogs: async (logs: any) => {
+          for (const log of logs) {
+            if (!log.args) continue;
+            await callback({
+              ...log.args,
+              blockNumber: log.blockNumber!,
+              logIndex: log.logIndex!,
+              transactionHash: log.transactionHash!,
+            } as CampaignCreatedEvent);
+          }
+        },
+      });
+  }
+
+  async getCampaignCreatedEvents({
+    fromBlock,
+    toBlock,
+  }: {
+    fromBlock: bigint;
+    toBlock: bigint;
+  }) {
+    return this.clients.publicClient.getContractEvents({
+      address: contracts.referral.address.local,
+      abi: contracts.referral.abi,
+      eventName: "CampaignCreated",
+      fromBlock,
+      toBlock,
+    });
+  }
+
+  async stopListeningToCampaignCreatedEvent() {
+    if (this.unwatchCampaignCreatedEvent) {
+      this.unwatchCampaignCreatedEvent();
+      this.unwatchCampaignCreatedEvent = null;
+    }
+  }
+
+  async listenToCampaignFulfillmentSubmittedEvent(
+    callback: (
+      eventData: CampaignFulfillmentSubmittedEvent,
+    ) => void | Promise<void>,
+    pollingInterval = 10000,
+  ) {
+    this.unwatchCampaignFulfillmentSubmittedEvent =
+      this.clients.publicClient.watchContractEvent({
+        address: contracts.referral.address.local,
+        abi: contracts.referral.abi,
+        eventName: "CampaignFulfillmentSubmitted",
+        pollingInterval,
+        onLogs: async (logs: any) => {
+          for (const log of logs) {
+            if (!log.args) continue;
+            await callback({
+              ...log.args,
+              blockNumber: log.blockNumber!,
+              logIndex: log.logIndex!,
+              transactionHash: log.transactionHash!,
+            } as CampaignFulfillmentSubmittedEvent);
+          }
+        },
+      });
+  }
+
+  async getCampaignFulfillmentSubmittedEvents({
+    fromBlock,
+    toBlock,
+  }: {
+    fromBlock: bigint;
+    toBlock: bigint;
+  }) {
+    return this.clients.publicClient.getContractEvents({
+      address: contracts.referral.address.local,
+      abi: contracts.referral.abi,
+      eventName: "CampaignFulfillmentSubmitted",
+      fromBlock,
+      toBlock,
+    });
+  }
+
+  async stopListeningToCampaignFulfillmentSubmittedEvent() {
+    if (this.unwatchCampaignFulfillmentSubmittedEvent) {
+      this.unwatchCampaignFulfillmentSubmittedEvent();
+      this.unwatchCampaignFulfillmentSubmittedEvent = null;
+    }
+  }
+
+  async listenToCampaignFulfillmentVerifiedEvent(
+    callback: (
+      eventData: CampaignFulfillmentVerifiedEvent,
+    ) => void | Promise<void>,
+    pollingInterval = 10000,
+  ) {
+    this.unwatchCampaignFulfillmentVerifiedEvent =
+      this.clients.publicClient.watchContractEvent({
+        address: contracts.referral.address.local,
+        abi: contracts.referral.abi,
+        eventName: "CampaignFulfillmentVerified",
+        pollingInterval,
+        onLogs: async (logs: any) => {
+          for (const log of logs) {
+            if (!log.args) continue;
+            await callback({
+              ...log.args,
+              blockNumber: log.blockNumber!,
+              logIndex: log.logIndex!,
+              transactionHash: log.transactionHash!,
+            } as CampaignFulfillmentVerifiedEvent);
+          }
+        },
+      });
+  }
+
+  async getCampaignFulfillmentVerifiedEvents({
+    fromBlock,
+    toBlock,
+  }: {
+    fromBlock: bigint;
+    toBlock: bigint;
+  }) {
+    return this.clients.publicClient.getContractEvents({
+      address: contracts.referral.address.local,
+      abi: contracts.referral.abi,
+      eventName: "CampaignFulfillmentVerified",
+      fromBlock,
+      toBlock,
+    });
+  }
+
+  async stopListeningToCampaignFulfillmentVerifiedEvent() {
+    if (this.unwatchCampaignFulfillmentVerifiedEvent) {
+      this.unwatchCampaignFulfillmentVerifiedEvent();
+      this.unwatchCampaignFulfillmentVerifiedEvent = null;
+    }
   }
 
   //adds a listener for the PointsAdded event and calls the provided callback with the event data whenever the event is emitted
