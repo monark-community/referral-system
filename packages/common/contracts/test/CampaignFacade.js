@@ -32,7 +32,9 @@ const campaignId = stringToHex("campaign-facade", { size: 32 });
 const fulfillmentId = stringToHex("fulfillment-facade", { size: 32 });
 
 before(async () => {
-    [admin, owner, participant, other] = [0, 1, 2, 3].map((addressIndex) =>
+    // Test files run at the same time against one Hardhat node, so each file signs with its own accounts;
+    // sharing one would make their transactions collide on the account's nonce
+    [admin, owner, participant, other] = [14, 15, 16, 17].map((addressIndex) =>
         mnemonicToAccount(hardhatMnemonic, { addressIndex }),
     );
     publicClient = createPublicClient({

@@ -30,7 +30,9 @@ const fulfillmentId = stringToHex("fulfillment-1", { size: 32 });
 const secondFulfillmentId = stringToHex("fulfillment-2", { size: 32 });
 
 before(async () => {
-    [admin, owner, participant, other] = [0, 1, 2, 3].map((addressIndex) =>
+    // Test files run at the same time against one Hardhat node, so each file signs with its own accounts;
+    // sharing one would make their transactions collide on the account's nonce
+    [admin, owner, participant, other] = [10, 11, 12, 13].map((addressIndex) =>
         mnemonicToAccount(hardhatMnemonic, { addressIndex }),
     );
     publicClient = createPublicClient({
