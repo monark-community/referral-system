@@ -29,6 +29,8 @@ contract ReferralProgram is AccessControl, CampaignSignals {
 
     uint16 public directReferralBps = 8_000;
     uint16 public grandparentReferralBps = 2_000;
+    // Most points one campaign completion may pay: the completer's reward plus the referral pool
+    uint256 public maxCampaignPointsPerCompletion;
 
     struct PendingPointAllocation {
         address directRecipient;
@@ -170,22 +172,45 @@ contract ReferralProgram is AccessControl, CampaignSignals {
 
     // -- Functions for generalized campaigns and fulfillments
 
+    // Any user can create a campaign, so an admin caps what one completion can pay out in total
+    function setMaxCampaignPointsPerCompletion(
+        uint256 maximum
+    ) public onlyRole(DEFAULT_ADMIN_ROLE) {
+        maxCampaignPointsPerCompletion = maximum;
+    }
+
     function createCampaign(
         bytes32 campaignId,
         CampaignTypes.TaskType taskType,
-        CampaignTypes.VerificationType verificationType
+        CampaignTypes.VerificationType verificationType,
+        CampaignTypes.RewardType rewardType,
+        uint256 completerReward,
+        uint256 referralPool
     ) public returns (CampaignTypes.Campaign memory campaign) {
+        uint256 totalReward = completerReward + referralPool;
+        if (totalReward > maxCampaignPointsPerCompletion) {
+            revert CampaignRewardAboveMaximum(
+                totalReward,
+                maxCampaignPointsPerCompletion
+            );
+        }
         campaign = campaigns.createCampaign(
             campaignId,
             msg.sender,
             taskType,
-            verificationType
+            verificationType,
+            rewardType,
+            completerReward,
+            referralPool
         );
         emit CampaignCreated(
             campaign.id,
             campaign.owner,
             campaign.taskType,
-            campaign.verificationType
+            campaign.verificationType,
+            campaign.rewardType,
+            campaign.completerReward,
+            campaign.referralPool
         );
     }
 
@@ -222,6 +247,20 @@ contract ReferralProgram is AccessControl, CampaignSignals {
             msg.sender,
             fulfillment.participant,
             campaign.verificationType
+        );
+        // Verifying is final, so this runs once per completion
+        _payCampaignReward(campaign, fulfillment);
+    }
+
+    function rejectCampaignFulfillment(
+        bytes32 fulfillmentId
+    ) public returns (CampaignTypes.Fulfillment memory fulfillment) {
+        fulfillment = campaigns.rejectFulfillment(fulfillmentId, msg.sender);
+        emit CampaignFulfillmentRejected(
+            fulfillment.campaignId,
+            fulfillment.id,
+            msg.sender,
+            fulfillment.participant
         );
     }
 
@@ -361,6 +400,22 @@ contract ReferralProgram is AccessControl, CampaignSignals {
         uint256 pointPool,
         ReferralAllocation.Allocation memory allocation
     ) private {
+        _payReferralAllocation(allocation);
+
+        emit ReferralPointsAllocated(
+            participant,
+            pointPool,
+            allocation.directRecipient,
+            allocation.directAmount,
+            allocation.grandparentRecipient,
+            allocation.grandparentAmount,
+            allocation.unallocatedAmount
+        );
+    }
+
+    function _payReferralAllocation(
+        ReferralAllocation.Allocation memory allocation
+    ) private {
         if (allocation.directAmount > 0) {
             _awardAndUpdateMilestone(
                 allocation.directRecipient,
@@ -373,15 +428,44 @@ contract ReferralProgram is AccessControl, CampaignSignals {
                 allocation.grandparentAmount
             );
         }
+    }
 
-        emit ReferralPointsAllocated(
-            participant,
-            pointPool,
-            allocation.directRecipient,
-            allocation.directAmount,
-            allocation.grandparentRecipient,
-            allocation.grandparentAmount,
-            allocation.unallocatedAmount
+    // Pays a verified completion: the completer's reward, then the referral pool split between the
+    // completer's referrer and grandparent the same way as a sign-up. A creator never earns referral
+    // points from their own campaign, so a share that would go to them stays unallocated
+    function _payCampaignReward(
+        CampaignTypes.Campaign memory campaign,
+        CampaignTypes.Fulfillment memory fulfillment
+    ) private {
+        if (campaign.completerReward > 0) {
+            _awardAndUpdateMilestone(
+                fulfillment.participant,
+                campaign.completerReward
+            );
+        }
+
+        ReferralAllocation.Allocation memory allocation = _allocateReferralPool(
+            fulfillment.participant,
+            campaign.referralPool
+        );
+        if (allocation.directRecipient == campaign.owner) {
+            allocation.unallocatedAmount += allocation.directAmount;
+            allocation.directAmount = 0;
+        }
+        if (allocation.grandparentRecipient == campaign.owner) {
+            allocation.unallocatedAmount += allocation.grandparentAmount;
+            allocation.grandparentAmount = 0;
+        }
+        _payReferralAllocation(allocation);
+
+        emit CampaignRewardPaid(
+            campaign.id,
+            fulfillment.id,
+            fulfillment.participant,
+            campaign.rewardType,
+            campaign.completerReward,
+            campaign.referralPool,
+            allocation
         );
     }
 

@@ -1,7 +1,9 @@
-// Purpose: Serves built-in campaign definitions and the authenticated user's fulfillment status
+// Purpose: Serves campaign definitions and the authenticated user's fulfillment status
 // Notes:
 // - Definition reads remain public; fulfillment reads require the existing JWT middleware
 // - VERIFIED reads may attempt one safe refresh but always return the latest durable status
+// - User campaigns are listed and looked up beside the built-in one; drafts stay hidden from these
+//   public reads (their creator sees them under /mine, see manualCampaign.controller.ts)
 
 import type { Request, Response } from "express";
 import { createClient } from "@reffinity/blockchain-connector/clients";
@@ -16,6 +18,23 @@ import {
   type CampaignFulfillmentReadClient,
   type CurrentCampaignFulfillment,
 } from "../services/campaignFulfillment.service.js";
+import {
+  countSpotsTaken,
+  findManualCampaign,
+  getMyManualCampaignFulfillment,
+  listOpenManualCampaigns,
+} from "../services/manualCampaign.service.js";
+import {
+  manualCampaignDetail,
+  manualCampaignSummary,
+  manualFulfillmentResponse,
+} from "./manualCampaign.controller.js";
+
+// A user campaign other people may see: anything past draft
+async function findPublicManualCampaign(idOrKey: string) {
+  const campaign = await findManualCampaign(idOrKey);
+  return campaign && campaign.status !== "DRAFT" ? campaign : null;
+}
 
 function campaignSummary(campaign: BuiltinReferralCampaignDefinition) {
   return {
@@ -99,7 +118,15 @@ function handleReadError(error: unknown, res: Response, fallback: string): void 
 export async function getCampaigns(_req: Request, res: Response): Promise<void> {
   try {
     const campaign = await getBuiltinReferralCampaign();
-    res.json({ campaigns: [campaignSummary(campaign)] });
+    // The board: user campaigns that are taking submissions, after the built-in one
+    const open = await listOpenManualCampaigns();
+    const spotsTaken = await countSpotsTaken(open.map((manual) => manual.taskId));
+    res.json({
+      campaigns: [
+        campaignSummary(campaign),
+        ...open.map((manual) => manualCampaignSummary(manual, spotsTaken.get(manual.taskId) ?? 0)),
+      ],
+    });
   } catch (error) {
     handleReadError(error, res, "Failed to get campaigns");
   }
@@ -107,6 +134,13 @@ export async function getCampaigns(_req: Request, res: Response): Promise<void> 
 
 export async function getCampaign(req: Request, res: Response): Promise<void> {
   try {
+    const manual = await findPublicManualCampaign(String(req.params.idOrKey));
+    if (manual) {
+      const spotsTaken = await countSpotsTaken([manual.taskId]);
+      res.json({ campaign: manualCampaignDetail(manual, spotsTaken.get(manual.taskId) ?? 0) });
+      return;
+    }
+
     const campaign = await getBuiltinReferralCampaign();
     const idOrKey = req.params.idOrKey;
     if (idOrKey !== campaign.id && idOrKey !== campaign.key) {
@@ -129,6 +163,13 @@ export async function getMyCampaignFulfillment(
   }
 
   try {
+    const manual = await findPublicManualCampaign(String(req.params.idOrKey));
+    if (manual) {
+      const mine = await getMyManualCampaignFulfillment(req.user.id, manual);
+      res.json({ fulfillment: mine ? manualFulfillmentResponse(manual, mine) : null });
+      return;
+    }
+
     const campaign = await getBuiltinReferralCampaign();
     const idOrKey = req.params.idOrKey;
     if (idOrKey !== campaign.id && idOrKey !== campaign.key) {

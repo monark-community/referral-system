@@ -2,6 +2,7 @@
 // Notes:
 // - Mocks Prisma and the blockchain connector, then feeds events to the handlers the listener registers
 // - Covers live events (PointsAdded, InviteChanged, ReferralPointsAllocated), catch-up, and stopping
+// - User campaign events are only routed here; manualCampaignProjection.service.test.ts covers what they do
 // - "per-invite points" replays whole two-level sign-ups against an in-memory database, to check
 //   which invite each share of the pool ends up on
 
@@ -12,6 +13,13 @@ import {
   projectBuiltinReferralFulfillment,
   reconcileBuiltinReferralFulfillments,
 } from "@/services/campaignFulfillment.service.js";
+import {
+  applyCampaignCreated,
+  applyCampaignFulfillmentRejected,
+  applyCampaignFulfillmentSubmitted,
+  applyCampaignFulfillmentVerified,
+  applyCampaignRewardPaid,
+} from "@/services/manualCampaignProjection.service.js";
 
 // Stand-ins for the viem client and the connector service the listener creates
 const mockPublicClient = {
@@ -25,6 +33,8 @@ const mockReadService = {
   listenToCampaignCreatedEvent: jest.fn(),
   listenToCampaignFulfillmentSubmittedEvent: jest.fn(),
   listenToCampaignFulfillmentVerifiedEvent: jest.fn(),
+  listenToCampaignFulfillmentRejectedEvent: jest.fn(),
+  listenToCampaignRewardPaidEvent: jest.fn(),
   getUserCurrentMilestone: jest.fn(),
   getReferralPointPool: jest.fn(),
   getGrandparentReferralBps: jest.fn(),
@@ -32,12 +42,19 @@ const mockReadService = {
   getPointsAddedEvents: jest.fn(),
   getInviteChangedEvents: jest.fn(),
   getReferralPointsAllocatedEvents: jest.fn(),
+  getCampaignCreatedEvents: jest.fn(),
+  getCampaignFulfillmentSubmittedEvents: jest.fn(),
+  getCampaignFulfillmentVerifiedEvents: jest.fn(),
+  getCampaignFulfillmentRejectedEvents: jest.fn(),
+  getCampaignRewardPaidEvents: jest.fn(),
   stopListeningToPointsAddedEvent: jest.fn(),
   stopListeningToInviteChangedEvent: jest.fn(),
   stopListeningToReferralPointsAllocatedEvent: jest.fn(),
   stopListeningToCampaignCreatedEvent: jest.fn(),
   stopListeningToCampaignFulfillmentSubmittedEvent: jest.fn(),
   stopListeningToCampaignFulfillmentVerifiedEvent: jest.fn(),
+  stopListeningToCampaignFulfillmentRejectedEvent: jest.fn(),
+  stopListeningToCampaignRewardPaidEvent: jest.fn(),
 };
 
 jest.mock("@/lib/prisma", () => ({
@@ -75,9 +92,23 @@ jest.mock("@/services/campaignFulfillment.service", () => ({
   projectBuiltinReferralFulfillment: jest.fn(),
   reconcileBuiltinReferralFulfillments: jest.fn(),
 }));
+jest.mock("@/services/manualCampaignProjection.service", () => ({
+  applyCampaignCreated: jest.fn(),
+  applyCampaignFulfillmentSubmitted: jest.fn(),
+  applyCampaignFulfillmentVerified: jest.fn(),
+  applyCampaignFulfillmentRejected: jest.fn(),
+  applyCampaignRewardPaid: jest.fn(),
+}));
 
 // The mocked Prisma client, untyped so tests can set return values freely
 const db = prisma as any;
+const campaignProjections = [
+  applyCampaignCreated,
+  applyCampaignFulfillmentSubmitted,
+  applyCampaignFulfillmentVerified,
+  applyCampaignFulfillmentRejected,
+  applyCampaignRewardPaid,
+] as jest.Mock[];
 const mockProjectBuiltinReferralFulfillment =
   projectBuiltinReferralFulfillment as jest.Mock;
 const mockReconcileBuiltinReferralFulfillments =
@@ -125,6 +156,9 @@ async function startListener() {
       mockReadService.listenToCampaignFulfillmentSubmittedEvent.mock.calls[0][0],
     onCampaignFulfillmentVerified:
       mockReadService.listenToCampaignFulfillmentVerifiedEvent.mock.calls[0][0],
+    onCampaignFulfillmentRejected:
+      mockReadService.listenToCampaignFulfillmentRejectedEvent.mock.calls[0][0],
+    onCampaignRewardPaid: mockReadService.listenToCampaignRewardPaidEvent.mock.calls[0][0],
   };
 }
 
@@ -143,6 +177,8 @@ describe("BlockchainListenerService", () => {
     mockReadService.listenToCampaignCreatedEvent.mockReset().mockResolvedValue(undefined);
     mockReadService.listenToCampaignFulfillmentSubmittedEvent.mockReset().mockResolvedValue(undefined);
     mockReadService.listenToCampaignFulfillmentVerifiedEvent.mockReset().mockResolvedValue(undefined);
+    mockReadService.listenToCampaignFulfillmentRejectedEvent.mockReset().mockResolvedValue(undefined);
+    mockReadService.listenToCampaignRewardPaidEvent.mockReset().mockResolvedValue(undefined);
     mockReadService.getUserCurrentMilestone.mockReset().mockResolvedValue(2n);
     // The deployed settings: a 100-point pool split 80/20, and no referrer above the inviter
     mockReadService.getReferralPointPool.mockReset().mockResolvedValue(100n);
@@ -151,12 +187,26 @@ describe("BlockchainListenerService", () => {
     mockReadService.getPointsAddedEvents.mockReset().mockResolvedValue([]);
     mockReadService.getInviteChangedEvents.mockReset().mockResolvedValue([]);
     mockReadService.getReferralPointsAllocatedEvents.mockReset().mockResolvedValue([]);
+    for (const read of [
+      mockReadService.getCampaignCreatedEvents,
+      mockReadService.getCampaignFulfillmentSubmittedEvents,
+      mockReadService.getCampaignFulfillmentVerifiedEvents,
+      mockReadService.getCampaignFulfillmentRejectedEvents,
+      mockReadService.getCampaignRewardPaidEvents,
+    ]) {
+      read.mockReset().mockResolvedValue([]);
+    }
+    for (const apply of campaignProjections) {
+      apply.mockReset().mockResolvedValue({ outcome: "APPLIED", id: "campaign-thing-1" });
+    }
     mockReadService.stopListeningToPointsAddedEvent.mockReset();
     mockReadService.stopListeningToInviteChangedEvent.mockReset();
     mockReadService.stopListeningToReferralPointsAllocatedEvent.mockReset();
     mockReadService.stopListeningToCampaignCreatedEvent.mockReset();
     mockReadService.stopListeningToCampaignFulfillmentSubmittedEvent.mockReset();
     mockReadService.stopListeningToCampaignFulfillmentVerifiedEvent.mockReset();
+    mockReadService.stopListeningToCampaignFulfillmentRejectedEvent.mockReset();
+    mockReadService.stopListeningToCampaignRewardPaidEvent.mockReset();
     mockProjectBuiltinReferralFulfillment.mockReset().mockResolvedValue({
       outcome: "REWARDED",
       fulfillmentId: "fulfillment-1",
@@ -190,6 +240,8 @@ describe("BlockchainListenerService", () => {
         lastProcessedLogIndex: 0,
         lastReferralAllocationBlock: 100n,
         lastReferralAllocationLogIndex: -1,
+        lastCampaignEventBlock: 100n,
+        lastCampaignEventLogIndex: -1,
       });
   });
 
@@ -225,6 +277,13 @@ describe("BlockchainListenerService", () => {
       expect(
         mockReadService.listenToCampaignFulfillmentVerifiedEvent,
       ).toHaveBeenCalledWith(expect.any(Function), 10000);
+      expect(
+        mockReadService.listenToCampaignFulfillmentRejectedEvent,
+      ).toHaveBeenCalledWith(expect.any(Function), 10000);
+      expect(mockReadService.listenToCampaignRewardPaidEvent).toHaveBeenCalledWith(
+        expect.any(Function),
+        10000,
+      );
       expect(mockReconcileBuiltinReferralFulfillments).toHaveBeenCalledWith(
         mockPublicClient,
         expect.objectContaining({ onIssue: expect.any(Function) }),
@@ -318,38 +377,151 @@ describe("BlockchainListenerService", () => {
     );
   });
 
-  describe("general campaign event boundaries", () => {
-    test("dispatches campaign events without adding backend persistence", async () => {
-      const {
-        onCampaignCreated,
-        onCampaignFulfillmentSubmitted,
-        onCampaignFulfillmentVerified,
-      } = await startListener();
-      jest.clearAllMocks();
+  describe("user campaign events", () => {
+    // Live events as the connector passes them, in the order the chain emitted them
+    const created = { campaignId: "0xcampaign", owner: "0xOWNER", blockNumber: 30n, logIndex: 1, transactionHash: "0xCREATED" };
+    const submitted = {
+      campaignId: "0xcampaign",
+      fulfillmentId: "0xfulfillment",
+      participant: "0xPARTICIPANT",
+      blockNumber: 31n,
+      logIndex: 0,
+      transactionHash: "0xSUBMITTED",
+    };
+    const verified = { ...submitted, verifier: "0xOWNER", blockNumber: 32n, logIndex: 0, transactionHash: "0xDECIDED" };
+    const rewardPaid = { ...submitted, completerReward: 30n, blockNumber: 32n, logIndex: 4, transactionHash: "0xDECIDED" };
+    const rejected = { ...submitted, verifier: "0xOWNER", blockNumber: 33n, logIndex: 0, transactionHash: "0xREJECTED" };
 
-      await onCampaignCreated({ eventName: "CampaignCreated" });
-      await onCampaignFulfillmentSubmitted({
-        eventName: "CampaignFulfillmentSubmitted",
-      });
-      await onCampaignFulfillmentVerified({
-        eventName: "CampaignFulfillmentVerified",
+    // The same events as getContractEvents returns them
+    const past = ({ blockNumber, logIndex, transactionHash, ...args }: Record<string, any>) => ({
+      blockNumber,
+      logIndex,
+      transactionHash,
+      args,
+    });
+
+    const [applyCreated, applySubmitted, applyVerified, applyRejected, applyRewardPaid] = campaignProjections;
+
+    test("hands each live event to its projection and logs the result", async () => {
+      const handlers = await startListener();
+
+      await handlers.onCampaignCreated(created);
+      await handlers.onCampaignFulfillmentSubmitted(submitted);
+      await handlers.onCampaignFulfillmentVerified(verified);
+      await handlers.onCampaignRewardPaid(rewardPaid);
+      await handlers.onCampaignFulfillmentRejected(rejected);
+
+      expect(applyCreated).toHaveBeenCalledWith(created);
+      expect(applySubmitted).toHaveBeenCalledWith(submitted);
+      expect(applyVerified).toHaveBeenCalledWith(verified);
+      expect(applyRewardPaid).toHaveBeenCalledWith(rewardPaid);
+      expect(applyRejected).toHaveBeenCalledWith(rejected);
+      expect(consoleLog).toHaveBeenCalledWith(
+        "CampaignCreated applied",
+        expect.objectContaining({ source: "live", transactionHash: "0xcreated", logIndex: 1 }),
+      );
+    });
+
+    test("logs an event the projection skipped as a warning, with its reason", async () => {
+      applySubmitted.mockResolvedValueOnce({ outcome: "SKIPPED", id: "x", reason: "not a submission the API saved" });
+      const handlers = await startListener();
+
+      await handlers.onCampaignFulfillmentSubmitted(submitted);
+
+      expect(consoleWarn).toHaveBeenCalledWith(
+        "CampaignFulfillmentSubmitted skipped",
+        expect.objectContaining({ reason: "not a submission the API saved" }),
+      );
+    });
+
+    test("a failing event is logged and does not stop the listener", async () => {
+      applyRewardPaid.mockRejectedValueOnce(new Error("db down"));
+      const handlers = await startListener();
+
+      await expect(handlers.onCampaignRewardPaid(rewardPaid)).resolves.toBeUndefined();
+
+      expect(consoleError).toHaveBeenCalledWith(
+        "CampaignRewardPaid could not be applied",
+        expect.objectContaining({ source: "live", message: "db down" }),
+      );
+      // The next event still goes through
+      await handlers.onCampaignFulfillmentRejected(rejected);
+      expect(applyRejected).toHaveBeenCalled();
+    });
+
+    describe("catching up", () => {
+      beforeEach(() => {
+        mockPublicClient.getBlockNumber.mockResolvedValue(40n);
+        db.chainSyncState.findUnique.mockResolvedValue({
+          id: 1,
+          lastProcessedBlock: 40n,
+          lastProcessedLogIndex: 0,
+          lastReferralAllocationBlock: 40n,
+          lastReferralAllocationLogIndex: -1,
+          lastCampaignEventBlock: 29n,
+          lastCampaignEventLogIndex: -1,
+        });
+        // Each kind of event is read separately, so they arrive out of chain order
+        mockReadService.getCampaignRewardPaidEvents.mockResolvedValue([past(rewardPaid)]);
+        mockReadService.getCampaignFulfillmentRejectedEvents.mockResolvedValue([past(rejected)]);
+        mockReadService.getCampaignFulfillmentVerifiedEvents.mockResolvedValue([past(verified)]);
+        mockReadService.getCampaignFulfillmentSubmittedEvents.mockResolvedValue([past(submitted)]);
+        mockReadService.getCampaignCreatedEvents.mockResolvedValue([past(created)]);
       });
 
-      expect(consoleLog).toHaveBeenCalledWith(
-        "CampaignCreated received; persistence deferred",
-        { eventName: "CampaignCreated" },
-      );
-      expect(consoleLog).toHaveBeenCalledWith(
-        "CampaignFulfillmentSubmitted received; persistence deferred",
-        { eventName: "CampaignFulfillmentSubmitted" },
-      );
-      expect(consoleLog).toHaveBeenCalledWith(
-        "CampaignFulfillmentVerified received; persistence deferred",
-        { eventName: "CampaignFulfillmentVerified" },
-      );
-      expect(db.user.update).not.toHaveBeenCalled();
-      expect(db.referral.updateMany).not.toHaveBeenCalled();
-      expect(db.chainSyncState.upsert).not.toHaveBeenCalled();
+      const firstCall = (apply: jest.Mock) => apply.mock.invocationCallOrder[0];
+
+      test("applies the missed events in chain order and saves how far it got", async () => {
+        await startListener();
+
+        expect(mockReadService.getCampaignCreatedEvents).toHaveBeenCalledWith({ fromBlock: 29n, toBlock: 40n });
+        expect(applyCreated).toHaveBeenCalledWith(created);
+        expect(applyRewardPaid).toHaveBeenCalledWith(rewardPaid);
+        const order = [applyCreated, applySubmitted, applyVerified, applyRewardPaid, applyRejected].map(firstCall);
+        expect(order).toEqual([...order].sort((a, b) => a - b));
+        expect(db.chainSyncState.upsert).toHaveBeenCalledWith(
+          expect.objectContaining({ update: { lastCampaignEventBlock: 40n, lastCampaignEventLogIndex: -1 } }),
+        );
+        // Catch-up runs before the live listeners start
+        expect(firstCall(applyCreated)).toBeLessThan(
+          mockReadService.listenToCampaignCreatedEvent.mock.invocationCallOrder[0],
+        );
+      });
+
+      test("skips events at or before the saved position", async () => {
+        db.chainSyncState.findUnique.mockResolvedValue({
+          id: 1,
+          lastProcessedBlock: 40n,
+          lastProcessedLogIndex: 0,
+          lastReferralAllocationBlock: 40n,
+          lastReferralAllocationLogIndex: -1,
+          lastCampaignEventBlock: 31n,
+          lastCampaignEventLogIndex: 0,
+        });
+
+        await startListener();
+
+        expect(applyCreated).not.toHaveBeenCalled();
+        expect(applySubmitted).not.toHaveBeenCalled();
+        expect(applyVerified).toHaveBeenCalledWith(verified);
+      });
+
+      test("saves the position just before an event that failed, so the next start retries it", async () => {
+        applyVerified.mockRejectedValueOnce(new Error("db down"));
+
+        await startListener();
+
+        // Later events are still applied; repeating them on the next start is harmless
+        expect(applyRewardPaid).toHaveBeenCalled();
+        expect(applyRejected).toHaveBeenCalled();
+        expect(db.chainSyncState.upsert).toHaveBeenCalledWith(
+          expect.objectContaining({ update: { lastCampaignEventBlock: 32n, lastCampaignEventLogIndex: -1 } }),
+        );
+        expect(consoleError).toHaveBeenCalledWith(
+          "CampaignFulfillmentVerified could not be applied",
+          expect.objectContaining({ source: "catch-up" }),
+        );
+      });
     });
   });
 
@@ -683,12 +855,15 @@ describe("BlockchainListenerService", () => {
         lastProcessedLogIndex: 0,
         lastReferralAllocationBlock: 20n,
         lastReferralAllocationLogIndex: -1,
+        lastCampaignEventBlock: 20n,
+        lastCampaignEventLogIndex: -1,
       });
 
       await startListener();
 
       expect(mockReadService.getPointsAddedEvents).not.toHaveBeenCalled();
       expect(mockReadService.getReferralPointsAllocatedEvents).not.toHaveBeenCalled();
+      expect(mockReadService.getCampaignCreatedEvents).not.toHaveBeenCalled();
       expect(db.chainSyncState.upsert).not.toHaveBeenCalled();
     });
 
@@ -1006,6 +1181,10 @@ describe("BlockchainListenerService", () => {
       expect(
         mockReadService.stopListeningToCampaignFulfillmentVerifiedEvent,
       ).toHaveBeenCalledTimes(1);
+      expect(
+        mockReadService.stopListeningToCampaignFulfillmentRejectedEvent,
+      ).toHaveBeenCalledTimes(1);
+      expect(mockReadService.stopListeningToCampaignRewardPaidEvent).toHaveBeenCalledTimes(1);
     });
 
     test("can start listening again after stopping", async () => {

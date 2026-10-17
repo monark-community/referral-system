@@ -15,13 +15,18 @@ jest.mock("@/lib/prisma", () => ({
     referral: { findFirst: jest.fn(), findMany: jest.fn() },
     referralPointAllocation: { findMany: jest.fn() },
     milestoneTier: { findMany: jest.fn() },
-    campaign: { findMany: jest.fn() },
-    campaignFulfillment: { findFirst: jest.fn(), findUnique: jest.fn() },
+    campaign: { findMany: jest.fn(), findFirst: jest.fn() },
+    campaignFulfillment: { findFirst: jest.fn(), findUnique: jest.fn(), findMany: jest.fn(), groupBy: jest.fn() },
   },
 }));
 jest.mock(
   "@reffinity/blockchain-connector/uuidBytesConverter",
   () => ({ uuidToBytes32: jest.fn() }),
+  { virtual: true },
+);
+jest.mock(
+  "@reffinity/blockchain-connector/readReferralContract",
+  () => ({ ReadReferralContractService: jest.fn() }),
   { virtual: true },
 );
 jest.mock(
@@ -95,7 +100,15 @@ describe("API routes", () => {
     db.referral.findMany.mockReset();
     db.referralPointAllocation.findMany.mockReset().mockResolvedValue([]);
     db.milestoneTier.findMany.mockReset();
-    db.campaign.findMany.mockReset().mockResolvedValue([storedCampaign]);
+    // Only the built-in campaign exists, so a query for user campaigns finds nothing
+    db.campaign.findMany
+      .mockReset()
+      .mockImplementation(({ where }: any) =>
+        Promise.resolve(where?.key === "builtin-referral" ? [storedCampaign] : []),
+      );
+    db.campaign.findFirst.mockReset().mockResolvedValue(null);
+    db.campaignFulfillment.groupBy.mockReset().mockResolvedValue([]);
+    db.campaignFulfillment.findMany.mockReset().mockResolvedValue([]);
     db.campaignFulfillment.findFirst.mockReset().mockResolvedValue(null);
     db.campaignFulfillment.findUnique.mockReset();
   });
@@ -182,6 +195,14 @@ describe("API routes", () => {
       ["post", "/api/users/enable"],
       ["post", "/api/users/referrals/private"],
       ["get", "/api/milestones/user"],
+      ["post", "/api/campaigns"],
+      ["get", "/api/campaigns/mine"],
+      ["patch", "/api/campaigns/some-campaign"],
+      ["post", "/api/campaigns/some-campaign/status"],
+      ["get", "/api/campaigns/some-campaign/fulfillments"],
+      ["post", "/api/campaigns/some-campaign/fulfillments"],
+      ["post", "/api/campaigns/some-campaign/fulfillments/some-submission/approve"],
+      ["post", "/api/campaigns/some-campaign/fulfillments/some-submission/reject"],
     ] as const)("%s %s requires a login", async (method, path) => {
       const res = await request(app)[method](path);
 
@@ -208,6 +229,13 @@ describe("API routes", () => {
         referrals: [],
         totals: { level1Count: 0, level2Count: 0, level1Points: 0, level2Points: 0 },
       });
+    });
+
+    test("a logged-in user gets their campaigns through the full chain, not a campaign named mine", async () => {
+      const res = await request(app).get("/api/campaigns/mine").set(loggedIn());
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ created: [], joined: [] });
     });
 
     test("a disabled account can read but not change data", async () => {

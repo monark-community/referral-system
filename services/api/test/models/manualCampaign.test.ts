@@ -1,0 +1,200 @@
+// Purpose: Tests the user campaign rules for what a creator may send, what proof looks like, and stored rows
+// Notes:
+// - Pure validation, so nothing is mocked
+
+import {
+  ManualCampaignDataError,
+  ManualCampaignValidationError,
+  parseManualCampaignInput,
+  parseProof,
+  parseRejectionReason,
+  parseStoredManualCampaign,
+  type StoredManualCampaign,
+} from "@/models/manualCampaign.js";
+
+const now = new Date("2026-10-17T12:00:00.000Z");
+
+function body(overrides: Record<string, unknown> = {}) {
+  return {
+    title: "Follow Dave's company",
+    description: "Help us grow",
+    instructions: "Follow @dave and paste the link to your profile",
+    category: "SOCIAL_MEDIA",
+    completerPoints: 30,
+    referralPoolPoints: 10,
+    maxCompletions: 50,
+    endsAt: "2026-11-01T00:00:00.000Z",
+    ...overrides,
+  };
+}
+
+function fieldOf(run: () => unknown): string {
+  try {
+    run();
+  } catch (error) {
+    if (error instanceof ManualCampaignValidationError) return error.field;
+    throw error;
+  }
+  throw new Error("expected a validation error");
+}
+
+describe("parseManualCampaignInput", () => {
+  test("accepts a complete campaign, trimming text and reading the end date", () => {
+    expect(parseManualCampaignInput(body({ title: "  Follow Dave  " }), { now })).toEqual({
+      title: "Follow Dave",
+      description: "Help us grow",
+      instructions: "Follow @dave and paste the link to your profile",
+      category: "SOCIAL_MEDIA",
+      completerPoints: 30,
+      referralPoolPoints: 10,
+      maxCompletions: 50,
+      endsAt: new Date("2026-11-01T00:00:00.000Z"),
+    });
+  });
+
+  test("the description is optional", () => {
+    expect(parseManualCampaignInput(body({ description: undefined }), { now }).description).toBe("");
+  });
+
+  test.each([
+    ["title", { title: "   " }],
+    ["title", { title: "x".repeat(121) }],
+    ["instructions", { instructions: undefined }],
+    ["description", { description: "x".repeat(501) }],
+    ["category", { category: "SUBSCRIPTION" }],
+    ["completerPoints", { completerPoints: -1 }],
+    ["completerPoints", { completerPoints: 2.5 }],
+    ["referralPoolPoints", { referralPoolPoints: "10" }],
+    ["maxCompletions", { maxCompletions: 0 }],
+    ["endsAt", { endsAt: "next week" }],
+    ["endsAt", { endsAt: 1767225600000 }],
+    ["endsAt", { endsAt: "2026-10-17T11:59:59.000Z" }],
+  ])("rejects a bad %s", (field, overrides) => {
+    expect(fieldOf(() => parseManualCampaignInput(body(overrides), { now }))).toBe(field);
+  });
+
+  test("a campaign must pay at least one point", () => {
+    expect(fieldOf(() => parseManualCampaignInput(body({ completerPoints: 0, referralPoolPoints: 0 }), { now }))).toBe(
+      "completerPoints",
+    );
+    // Either part alone is enough
+    expect(parseManualCampaignInput(body({ completerPoints: 0 }), { now }).referralPoolPoints).toBe(10);
+  });
+
+  test("an edit keeps the stored value of every field it leaves out, then checks the whole", () => {
+    const current = parseManualCampaignInput(body(), { now });
+
+    expect(parseManualCampaignInput({ title: "New title" }, { now, current })).toEqual({ ...current, title: "New title" });
+    // The merged campaign must still be valid
+    expect(fieldOf(() => parseManualCampaignInput({ completerPoints: 0, referralPoolPoints: 0 }, { now, current }))).toBe(
+      "completerPoints",
+    );
+  });
+
+  test("rejects a body that is not an object", () => {
+    expect(fieldOf(() => parseManualCampaignInput(null, { now }))).toBe("body");
+    expect(fieldOf(() => parseManualCampaignInput([body()], { now }))).toBe("body");
+  });
+});
+
+describe("parseProof", () => {
+  test("social media proof is a link to the post or profile", () => {
+    expect(parseProof("SOCIAL_MEDIA", " https://x.com/alice/status/1 ")).toBe("https://x.com/alice/status/1");
+    expect(fieldOf(() => parseProof("SOCIAL_MEDIA", "@alice"))).toBe("proof");
+    expect(fieldOf(() => parseProof("SOCIAL_MEDIA", "ftp://example.com/post"))).toBe("proof");
+  });
+
+  test("community proof is a username or short text", () => {
+    expect(parseProof("COMMUNITY", "alice#1234")).toBe("alice#1234");
+  });
+
+  test.each([["empty", ""], ["missing", undefined], ["too long", "x".repeat(501)]])(
+    "rejects %s proof",
+    (_case, proof) => {
+      expect(fieldOf(() => parseProof("COMMUNITY", proof))).toBe("proof");
+    },
+  );
+});
+
+test("a rejection needs a short reason", () => {
+  expect(parseRejectionReason(" The link is to someone else's profile ")).toBe("The link is to someone else's profile");
+  expect(fieldOf(() => parseRejectionReason(""))).toBe("reason");
+  expect(fieldOf(() => parseRejectionReason("x".repeat(501)))).toBe("reason");
+});
+
+describe("parseStoredManualCampaign", () => {
+  function row(overrides: Partial<StoredManualCampaign> = {}): StoredManualCampaign {
+    return {
+      id: "campaign-1",
+      key: "campaign-1",
+      title: "Follow Dave",
+      description: "",
+      instructions: "Follow @dave",
+      isSystem: false,
+      status: "ACTIVE",
+      ownerId: "dave",
+      owner: { name: "Dave", walletAddress: "0xdave" },
+      maxCompletions: 50,
+      endsAt: new Date("2026-11-01T00:00:00.000Z"),
+      publishedAt: new Date("2026-10-17T12:00:00.000Z"),
+      createdAt: new Date("2026-10-16T12:00:00.000Z"),
+      task: {
+        id: "task-1",
+        type: "BOUNTY",
+        strategyKey: "BOUNTY_V1",
+        configuration: { category: "COMMUNITY" },
+        verificationPolicy: { type: "MANUAL", strategyKey: "OWNER_APPROVAL_V1" },
+        rewardPolicy: {
+          id: "reward-1",
+          type: "POINTS",
+          strategyKey: "CAMPAIGN_POINTS_V1",
+          configuration: { completerPoints: 30, referralPoolPoints: 10 },
+        },
+      },
+      ...overrides,
+    };
+  }
+
+  test("reads a stored campaign with its task and reward", () => {
+    expect(parseStoredManualCampaign(row())).toEqual(
+      expect.objectContaining({
+        id: "campaign-1",
+        ownerId: "dave",
+        owner: { name: "Dave", walletAddress: "0xdave" },
+        status: "ACTIVE",
+        category: "COMMUNITY",
+        completerPoints: 30,
+        referralPoolPoints: 10,
+        taskId: "task-1",
+        rewardPolicyId: "reward-1",
+      }),
+    );
+  });
+
+  test.each([
+    ["the built-in campaign", { isSystem: true }],
+    ["a campaign without an owner", { ownerId: null, owner: null }],
+    ["an unknown status", { status: "ARCHIVED" }],
+    ["a missing end date", { endsAt: null }],
+    ["a missing task", { task: null }],
+  ])("refuses %s", (_case, overrides) => {
+    expect(() => parseStoredManualCampaign(row(overrides as Partial<StoredManualCampaign>))).toThrow(
+      ManualCampaignDataError,
+    );
+  });
+
+  test.each([
+    ["a referral task", { type: "REFERRAL" }],
+    ["automatic verification", { verificationPolicy: { type: "AUTOMATIC_CHAIN", strategyKey: "REFERRAL_ACCEPTED_V1" } }],
+    ["a task without a category", { configuration: {} }],
+    [
+      "a reward without amounts",
+      { rewardPolicy: { id: "reward-1", type: "POINTS", strategyKey: "CAMPAIGN_POINTS_V1", configuration: {} } },
+    ],
+  ])("refuses %s", (_case, taskOverrides) => {
+    const stored = row();
+    expect(() =>
+      parseStoredManualCampaign({ ...stored, task: { ...stored.task!, ...(taskOverrides as object) } }),
+    ).toThrow(ManualCampaignDataError);
+  });
+});

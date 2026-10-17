@@ -28,6 +28,8 @@ const campaignId = stringToHex("campaign-1", { size: 32 });
 const secondCampaignId = stringToHex("campaign-2", { size: 32 });
 const fulfillmentId = stringToHex("fulfillment-1", { size: 32 });
 const secondFulfillmentId = stringToHex("fulfillment-2", { size: 32 });
+// RewardType.Points, then 30 points for the completer and a 10-point referral pool
+const pointsReward = [0, 30, 10];
 
 before(async () => {
     // Test files run at the same time against one Hardhat node, so each file signs with its own accounts;
@@ -70,7 +72,27 @@ async function write(functionName, args) {
 
 async function createCampaign(id = campaignId) {
     // TaskType.Bounty = 1 and VerificationType.Manual = 1.
-    await write("createCampaign", [id, owner.address, 1, 1]);
+    await write("createCampaign", [id, owner.address, 1, 1, ...pointsReward]);
+}
+
+async function getFulfillmentStatus(id = fulfillmentId) {
+    const fulfillment = await publicClient.readContract({
+        address: contractAddress,
+        abi,
+        functionName: "getFulfillment",
+        args: [id],
+    });
+    return fulfillment.status;
+}
+
+function simulate(functionName, args) {
+    return publicClient.simulateContract({
+        account: admin,
+        address: contractAddress,
+        abi,
+        functionName,
+        args,
+    });
 }
 
 async function submitFulfillment(id = fulfillmentId) {
@@ -92,6 +114,9 @@ test("stores Bounty and Manual as independent campaign types", async () => {
     assert.equal(campaign.taskType, 1);
     assert.equal(campaign.verificationType, 1);
     assert.equal(campaign.status, 1);
+    assert.equal(campaign.rewardType, 0);
+    assert.equal(campaign.completerReward, 30n);
+    assert.equal(campaign.referralPool, 10n);
 });
 
 test("admits only the implemented Bounty and Manual combination", async () => {
@@ -127,7 +152,7 @@ test("admits only the implemented Bounty and Manual combination", async () => {
             address: contractAddress,
             abi,
             functionName: "createCampaign",
-            args: [campaignId, owner.address, 0, 1],
+            args: [campaignId, owner.address, 0, 1, ...pointsReward],
         }),
     );
 });
@@ -139,7 +164,7 @@ test("rejects zero and duplicate campaign identities", async () => {
             address: contractAddress,
             abi,
             functionName: "createCampaign",
-            args: [stringToHex("", { size: 32 }), owner.address, 1, 1],
+            args: [stringToHex("", { size: 32 }), owner.address, 1, 1, ...pointsReward],
         }),
     );
     await assert.rejects(
@@ -148,7 +173,7 @@ test("rejects zero and duplicate campaign identities", async () => {
             address: contractAddress,
             abi,
             functionName: "createCampaign",
-            args: [secondCampaignId, zeroAddress, 1, 1],
+            args: [secondCampaignId, zeroAddress, 1, 1, ...pointsReward],
         }),
     );
 
@@ -159,7 +184,7 @@ test("rejects zero and duplicate campaign identities", async () => {
             address: contractAddress,
             abi,
             functionName: "createCampaign",
-            args: [campaignId, other.address, 1, 1],
+            args: [campaignId, other.address, 1, 1, ...pointsReward],
         }),
     );
 });
@@ -277,6 +302,58 @@ test("allows only the campaign owner to perform manual verification", async () =
             args: [fulfillmentId, owner.address],
         }),
     );
+});
+
+// The local node reports every revert as "Internal error" without the error's data, so each refusal
+// below is paired with the same call succeeding once only the condition under test changes
+
+test("stops the campaign owner from completing their own campaign", async () => {
+    await createCampaign();
+
+    await assert.rejects(
+        simulate("submitFulfillment", [campaignId, fulfillmentId, owner.address]),
+    );
+    // The same submission from anyone else goes through
+    await submitFulfillment();
+    assert.equal(await getFulfillmentStatus(), 1);
+});
+
+test("allows only the campaign owner to reject, and a rejection is final", async () => {
+    await createCampaign();
+    await submitFulfillment();
+
+    await assert.rejects(
+        simulate("rejectFulfillment", [fulfillmentId, other.address]),
+    );
+
+    await write("rejectFulfillment", [fulfillmentId, owner.address]);
+    assert.equal(await getFulfillmentStatus(), 3); // Rejected
+
+    // Neither decision can follow a rejection
+    await assert.rejects(
+        simulate("rejectFulfillment", [fulfillmentId, owner.address]),
+    );
+    await assert.rejects(
+        simulate("verifyFulfillment", [fulfillmentId, owner.address]),
+    );
+    // The rejected participant keeps their one submission, so they cannot submit again
+    await assert.rejects(
+        simulate("submitFulfillment", [campaignId, secondFulfillmentId, participant.address]),
+    );
+    // while someone who has not submitted still can
+    await write("submitFulfillment", [campaignId, secondFulfillmentId, other.address]);
+    assert.equal(await getFulfillmentStatus(secondFulfillmentId), 1);
+});
+
+test("a verified submission cannot be rejected", async () => {
+    await createCampaign();
+    await submitFulfillment();
+    await write("verifyFulfillment", [fulfillmentId, owner.address]);
+
+    await assert.rejects(
+        simulate("rejectFulfillment", [fulfillmentId, owner.address]),
+    );
+    assert.equal(await getFulfillmentStatus(), 2); // still Verified
 });
 
 test("keeps off-chain evidence out of the submission ABI", () => {

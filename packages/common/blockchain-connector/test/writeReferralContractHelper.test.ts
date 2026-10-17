@@ -14,6 +14,7 @@ describe("WriteReferralContractHelper", () => {
     ["createCampaignContext", "createCampaign"],
     ["submitCampaignFulfillmentContext", "submitCampaignFulfillment"],
     ["verifyCampaignFulfillmentContext", "verifyCampaignFulfillment"],
+    ["rejectCampaignFulfillmentContext", "rejectCampaignFulfillment"],
   ] as const)("%s targets %s on the local referral contract", async (method, functionName) => {
     const context = await WriteReferralContractHelper[method]();
 

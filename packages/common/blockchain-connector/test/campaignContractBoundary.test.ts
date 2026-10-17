@@ -2,6 +2,7 @@
 
 import { contracts } from "../contracts.js";
 import {
+  CampaignRewardType,
   CampaignTaskType,
   CampaignVerificationType,
   ReadReferralContractService,
@@ -31,11 +32,17 @@ describe("campaign contract boundary", () => {
       ["function", "createCampaign"],
       ["function", "submitCampaignFulfillment"],
       ["function", "verifyCampaignFulfillment"],
+      ["function", "rejectCampaignFulfillment"],
+      ["function", "setMaxCampaignPointsPerCompletion"],
       ["event", "CampaignCreated"],
       ["event", "CampaignFulfillmentSubmitted"],
       ["event", "CampaignFulfillmentVerified"],
+      ["event", "CampaignFulfillmentRejected"],
+      ["event", "CampaignRewardPaid"],
       ["error", "UnsupportedCampaignCombination"],
       ["error", "UnauthorizedManualVerifier"],
+      ["error", "CampaignOwnerCannotParticipate"],
+      ["error", "CampaignRewardAboveMaximum"],
     ]) {
       expect(
         contracts.referral.abi.some(
@@ -43,6 +50,15 @@ describe("campaign contract boundary", () => {
         ),
       ).toBe(true);
     }
+  });
+
+  test("getMaxCampaignPointsPerCompletion reads the admin-set cap", async () => {
+    publicClient.readContract.mockResolvedValueOnce(1000n);
+
+    await expect(service.getMaxCampaignPointsPerCompletion()).resolves.toBe(1000n);
+    expect(publicClient.readContract).toHaveBeenCalledWith(
+      expect.objectContaining({ functionName: "maxCampaignPointsPerCompletion" }),
+    );
   });
 
   test.each([
@@ -76,6 +92,9 @@ describe("campaign contract boundary", () => {
         owner: "0xowner",
         taskType: CampaignTaskType.Bounty,
         verificationType: CampaignVerificationType.Manual,
+        rewardType: CampaignRewardType.Points,
+        completerReward: 30n,
+        referralPool: 10n,
       },
     ],
     [
@@ -97,6 +116,35 @@ describe("campaign contract boundary", () => {
         verifier: "0xowner",
         participant: "0xparticipant",
         verificationType: CampaignVerificationType.Manual,
+      },
+    ],
+    [
+      "listenToCampaignFulfillmentRejectedEvent",
+      "CampaignFulfillmentRejected",
+      {
+        campaignId: "0xcampaign",
+        fulfillmentId: "0xfulfillment",
+        verifier: "0xowner",
+        participant: "0xparticipant",
+      },
+    ],
+    [
+      "listenToCampaignRewardPaidEvent",
+      "CampaignRewardPaid",
+      {
+        campaignId: "0xcampaign",
+        fulfillmentId: "0xfulfillment",
+        participant: "0xparticipant",
+        rewardType: CampaignRewardType.Points,
+        completerReward: 30n,
+        referralPool: 10n,
+        referralPayout: {
+          directRecipient: "0xparent",
+          grandparentRecipient: "0xgrandparent",
+          directAmount: 8n,
+          grandparentAmount: 2n,
+          unallocatedAmount: 0n,
+        },
       },
     ],
   ] as const)(
@@ -137,6 +185,8 @@ describe("campaign contract boundary", () => {
       "CampaignFulfillmentSubmitted",
     ],
     ["getCampaignFulfillmentVerifiedEvents", "CampaignFulfillmentVerified"],
+    ["getCampaignFulfillmentRejectedEvents", "CampaignFulfillmentRejected"],
+    ["getCampaignRewardPaidEvents", "CampaignRewardPaid"],
   ] as const)("%s reads %s over a block range", async (method, eventName) => {
     const expected = [{ blockNumber: 2n }];
     publicClient.getContractEvents.mockResolvedValueOnce(expected);
@@ -159,6 +209,11 @@ describe("campaign contract boundary", () => {
       "listenToCampaignFulfillmentVerifiedEvent",
       "stopListeningToCampaignFulfillmentVerifiedEvent",
     ],
+    [
+      "listenToCampaignFulfillmentRejectedEvent",
+      "stopListeningToCampaignFulfillmentRejectedEvent",
+    ],
+    ["listenToCampaignRewardPaidEvent", "stopListeningToCampaignRewardPaidEvent"],
   ] as const)("%s is stopped only once", async (listenMethod, stopMethod) => {
     await (service[listenMethod] as any)(jest.fn());
     await service[stopMethod]();

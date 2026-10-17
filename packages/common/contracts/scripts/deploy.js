@@ -114,6 +114,19 @@ async function main() {
     }
     console.log("Milestones set:", milestoneThresholds);
 
+    // Any user can create a campaign, so cap what one completion can pay: the completer's reward plus the referral pool
+    const maxCampaignPointsPerCompletion = 1000;
+    ({ request } = await publicClient.simulateContract({
+        account: account,
+        address: receipt.contractAddress,
+        abi: artifact.abi,
+        functionName: "setMaxCampaignPointsPerCompletion",
+        args: [maxCampaignPointsPerCompletion],
+    }));
+    hash = await walletClient.writeContract(request);
+    await publicClient.waitForTransactionReceipt({ hash });
+    console.log("Max campaign points per completion set:", maxCampaignPointsPerCompletion);
+
     await writeDeploymentArtifact({
       chainId: await publicClient.getChainId(),
       contractName: "ReferralProgram",

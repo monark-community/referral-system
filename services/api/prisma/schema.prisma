@@ -10,21 +10,31 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// A user campaign starts as DRAFT, the only state that can be edited, and becomes ACTIVE once
+// its CampaignCreated event is seen. PAUSED, ENDED and CANCELLED stop new submissions
 enum CampaignStatus {
   ACTIVE
   ARCHIVED
+  DRAFT
+  PAUSED
+  ENDED
+  CANCELLED
 
   @@map("campaign_status")
 }
 
 enum CampaignTaskType {
   REFERRAL
+  // An off-chain task the creator checks by hand, like a social media post
+  BOUNTY
 
   @@map("campaign_task_type")
 }
 
 enum CampaignVerificationType {
   AUTOMATIC_CHAIN
+  // The campaign's creator approves or rejects each submission
+  MANUAL
 
   @@map("campaign_verification_type")
 }
@@ -35,10 +45,17 @@ enum CampaignRewardType {
   @@map("campaign_reward_type")
 }
 
+// The built-in referral campaign uses PENDING, VERIFIED and REWARDED. A manual submission is SUBMITTED
+// when its proof is saved, UNDER_REVIEW once the chain has it, then APPROVED or REJECTED by the creator,
+// and REWARDED when the chain pays it
 enum CampaignFulfillmentStatus {
   PENDING
   VERIFIED
   REWARDED
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
 
   @@map("campaign_fulfillment_status")
 }
@@ -86,6 +103,7 @@ model User {
   receivedReferrals Referral[] @relation("ReceivedReferral")
 
   campaignFulfillments CampaignFulfillment[] @relation("CampaignParticipant")
+  ownedCampaigns       Campaign[]            @relation("CampaignOwner")
 
   @@map("users")
 }
@@ -134,6 +152,9 @@ model ChainSyncState {
   lastProcessedLogIndex          Int
   lastReferralAllocationBlock    BigInt @default(0)
   lastReferralAllocationLogIndex Int    @default(-1)
+  // How far catch-up has read the user campaign events
+  lastCampaignEventBlock         BigInt @default(0)
+  lastCampaignEventLogIndex      Int    @default(-1)
 }
 
 // Immutable projection of ReferralPointsAllocated events. Addresses are kept as
@@ -182,9 +203,20 @@ model Campaign {
   createdAt     DateTime       @default(now()) @map("created_at")
   updatedAt     DateTime       @updatedAt @map("updated_at")
 
-  task CampaignTask?
+  // User campaigns only; system campaigns like the built-in referral one have no owner
+  ownerId                String?   @map("owner_id")
+  instructions           String    @default("")
+  maxCompletions         Int?      @map("max_completions")
+  endsAt                 DateTime? @map("ends_at")
+  // When its CampaignCreated event was seen
+  publishedAt            DateTime? @map("published_at")
+  publishTransactionHash String?   @map("publish_transaction_hash")
+
+  owner User?         @relation("CampaignOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  task  CampaignTask?
 
   @@index([status, isSystem])
+  @@index([ownerId])
   @@map("campaigns")
 }
 
@@ -256,6 +288,21 @@ model CampaignFulfillment {
   createdAt                   DateTime                  @default(now()) @map("created_at")
   updatedAt                   DateTime                  @updatedAt @map("updated_at")
 
+  // Manual submissions only. The proof is a link or short text and never goes on chain
+  proof                     String?
+  rejectionReason           String?   @map("rejection_reason")
+  // When the creator approved or rejected it here; the chain confirms the decision afterwards
+  reviewedAt                DateTime? @map("reviewed_at")
+  // The participant's CampaignFulfillmentSubmitted event
+  submissionTransactionHash String?   @map("submission_transaction_hash")
+  submissionBlockNumber     BigInt?   @map("submission_block_number")
+  submissionLogIndex        Int?      @map("submission_log_index")
+  submittedAt               DateTime? @map("submitted_at")
+  // The verification columns hold the creator's decision event, verified or rejected
+  rejectedAt                DateTime? @map("rejected_at")
+  // What the completer was paid, from the CampaignRewardPaid event
+  completerReward           Int?      @map("completer_reward")
+
   task        CampaignTask @relation(fields: [taskId], references: [id], onDelete: Restrict)
   participant User         @relation("CampaignParticipant", fields: [participantId], references: [id], onDelete: Restrict)
   referral    Referral?    @relation(fields: [referralId], references: [id], onDelete: Restrict)
@@ -263,6 +310,7 @@ model CampaignFulfillment {
   @@unique([taskId, participantId, attempt], map: "campaign_fulfillments_task_participant_attempt_key")
   @@unique([chainId, verificationTransactionHash, verificationLogIndex], map: "campaign_fulfillments_verification_event_key")
   @@unique([chainId, rewardTransactionHash, rewardLogIndex], map: "campaign_fulfillments_reward_event_key")
+  @@unique([chainId, submissionTransactionHash, submissionLogIndex], map: "campaign_fulfillments_submission_event_key")
   @@index([participantId, status])
   @@index([taskId, status])
   @@map("campaign_fulfillments")
