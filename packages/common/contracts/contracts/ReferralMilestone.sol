@@ -55,7 +55,7 @@ contract ReferralMilestone is AccessControl {
                 j <= currentMilestone;
                 j++
             ) {
-                rewards.awardReward(j);
+                rewards.awardReward(user, j);
             }
         }
     }
