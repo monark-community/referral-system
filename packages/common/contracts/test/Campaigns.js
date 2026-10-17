@@ -1,0 +1,292 @@
+// Purpose: Tests generalized campaign storage and fulfillment rules independently of the facade.
+
+import test, { before, beforeEach } from "node:test";
+import assert from "node:assert/strict";
+import hre from "hardhat";
+import {
+    createPublicClient,
+    createWalletClient,
+    http,
+    stringToHex,
+    zeroAddress,
+} from "viem";
+import { mnemonicToAccount } from "viem/accounts";
+
+const hardhatMnemonic =
+    "test test test test test test test test test test test junk";
+
+let publicClient;
+let admin;
+let owner;
+let participant;
+let other;
+let adminWallet;
+let contractAddress;
+let abi;
+
+const campaignId = stringToHex("campaign-1", { size: 32 });
+const secondCampaignId = stringToHex("campaign-2", { size: 32 });
+const fulfillmentId = stringToHex("fulfillment-1", { size: 32 });
+const secondFulfillmentId = stringToHex("fulfillment-2", { size: 32 });
+
+before(async () => {
+    [admin, owner, participant, other] = [0, 1, 2, 3].map((addressIndex) =>
+        mnemonicToAccount(hardhatMnemonic, { addressIndex }),
+    );
+    publicClient = createPublicClient({
+        transport: http("http://127.0.0.1:8545"),
+    });
+    adminWallet = createWalletClient({
+        account: admin,
+        transport: http("http://127.0.0.1:8545"),
+    });
+    abi = (await hre.artifacts.readArtifact("Campaigns")).abi;
+});
+
+beforeEach(async () => {
+    const artifact = await hre.artifacts.readArtifact("Campaigns");
+    const hash = await adminWallet.deployContract({
+        abi,
+        bytecode: artifact.bytecode,
+        args: [admin.address, admin.address],
+    });
+    const receipt = await publicClient.waitForTransactionReceipt({ hash });
+    contractAddress = receipt.contractAddress;
+});
+
+async function write(functionName, args) {
+    const { request } = await publicClient.simulateContract({
+        account: admin,
+        address: contractAddress,
+        abi,
+        functionName,
+        args,
+    });
+    const hash = await adminWallet.writeContract(request);
+    await publicClient.waitForTransactionReceipt({ hash });
+}
+
+async function createCampaign(id = campaignId) {
+    // TaskType.Bounty = 1 and VerificationType.Manual = 1.
+    await write("createCampaign", [id, owner.address, 1, 1]);
+}
+
+async function submitFulfillment(id = fulfillmentId) {
+    await write("submitFulfillment", [campaignId, id, participant.address]);
+}
+
+test("stores Bounty and Manual as independent campaign types", async () => {
+    await createCampaign();
+
+    const campaign = await publicClient.readContract({
+        address: contractAddress,
+        abi,
+        functionName: "getCampaign",
+        args: [campaignId],
+    });
+
+    assert.equal(campaign.id, campaignId);
+    assert.equal(campaign.owner.toLowerCase(), owner.address.toLowerCase());
+    assert.equal(campaign.taskType, 1);
+    assert.equal(campaign.verificationType, 1);
+    assert.equal(campaign.status, 1);
+});
+
+test("admits only the implemented Bounty and Manual combination", async () => {
+    assert.equal(
+        await publicClient.readContract({
+            address: contractAddress,
+            abi,
+            functionName: "isSupportedCombination",
+            args: [1, 1],
+        }),
+        true,
+    );
+
+    for (const [taskType, verificationType] of [
+        [0, 0],
+        [0, 1],
+        [1, 0],
+    ]) {
+        assert.equal(
+            await publicClient.readContract({
+                address: contractAddress,
+                abi,
+                functionName: "isSupportedCombination",
+                args: [taskType, verificationType],
+            }),
+            false,
+        );
+    }
+
+    await assert.rejects(
+        publicClient.simulateContract({
+            account: admin,
+            address: contractAddress,
+            abi,
+            functionName: "createCampaign",
+            args: [campaignId, owner.address, 0, 1],
+        }),
+    );
+});
+
+test("rejects zero and duplicate campaign identities", async () => {
+    await assert.rejects(
+        publicClient.simulateContract({
+            account: admin,
+            address: contractAddress,
+            abi,
+            functionName: "createCampaign",
+            args: [stringToHex("", { size: 32 }), owner.address, 1, 1],
+        }),
+    );
+    await assert.rejects(
+        publicClient.simulateContract({
+            account: admin,
+            address: contractAddress,
+            abi,
+            functionName: "createCampaign",
+            args: [secondCampaignId, zeroAddress, 1, 1],
+        }),
+    );
+
+    await createCampaign();
+    await assert.rejects(
+        publicClient.simulateContract({
+            account: admin,
+            address: contractAddress,
+            abi,
+            functionName: "createCampaign",
+            args: [campaignId, other.address, 1, 1],
+        }),
+    );
+});
+
+test("records one participant-submitted fulfillment per campaign", async () => {
+    await createCampaign();
+    await submitFulfillment();
+
+    const fulfillment = await publicClient.readContract({
+        address: contractAddress,
+        abi,
+        functionName: "getFulfillment",
+        args: [fulfillmentId],
+    });
+    assert.equal(fulfillment.id, fulfillmentId);
+    assert.equal(fulfillment.campaignId, campaignId);
+    assert.equal(
+        fulfillment.participant.toLowerCase(),
+        participant.address.toLowerCase(),
+    );
+    assert.equal(fulfillment.status, 1);
+    assert.equal(
+        await publicClient.readContract({
+            address: contractAddress,
+            abi,
+            functionName: "getParticipantFulfillmentId",
+            args: [campaignId, participant.address],
+        }),
+        fulfillmentId,
+    );
+
+    await assert.rejects(
+        publicClient.simulateContract({
+            account: admin,
+            address: contractAddress,
+            abi,
+            functionName: "submitFulfillment",
+            args: [campaignId, secondFulfillmentId, participant.address],
+        }),
+    );
+});
+
+test("rejects invalid fulfillment identities and missing campaigns", async () => {
+    await assert.rejects(
+        publicClient.simulateContract({
+            account: admin,
+            address: contractAddress,
+            abi,
+            functionName: "submitFulfillment",
+            args: [campaignId, fulfillmentId, participant.address],
+        }),
+    );
+
+    await createCampaign();
+    await assert.rejects(
+        publicClient.simulateContract({
+            account: admin,
+            address: contractAddress,
+            abi,
+            functionName: "submitFulfillment",
+            args: [campaignId, stringToHex("", { size: 32 }), participant.address],
+        }),
+    );
+    await assert.rejects(
+        publicClient.simulateContract({
+            account: admin,
+            address: contractAddress,
+            abi,
+            functionName: "submitFulfillment",
+            args: [campaignId, fulfillmentId, zeroAddress],
+        }),
+    );
+
+    await submitFulfillment();
+    await assert.rejects(
+        publicClient.simulateContract({
+            account: admin,
+            address: contractAddress,
+            abi,
+            functionName: "submitFulfillment",
+            args: [campaignId, fulfillmentId, other.address],
+        }),
+    );
+});
+
+test("allows only the campaign owner to perform manual verification", async () => {
+    await createCampaign();
+    await submitFulfillment();
+
+    await assert.rejects(
+        publicClient.simulateContract({
+            account: admin,
+            address: contractAddress,
+            abi,
+            functionName: "verifyFulfillment",
+            args: [fulfillmentId, other.address],
+        }),
+    );
+
+    await write("verifyFulfillment", [fulfillmentId, owner.address]);
+    const fulfillment = await publicClient.readContract({
+        address: contractAddress,
+        abi,
+        functionName: "getFulfillment",
+        args: [fulfillmentId],
+    });
+    assert.equal(fulfillment.status, 2);
+
+    await assert.rejects(
+        publicClient.simulateContract({
+            account: admin,
+            address: contractAddress,
+            abi,
+            functionName: "verifyFulfillment",
+            args: [fulfillmentId, owner.address],
+        }),
+    );
+});
+
+test("keeps off-chain evidence out of the submission ABI", () => {
+    const submit = abi.find(
+        (item) => item.type === "function" && item.name === "submitFulfillment",
+    );
+    assert.deepEqual(
+        submit.inputs.map(({ name, type }) => ({ name, type })),
+        [
+            { name: "campaignId", type: "bytes32" },
+            { name: "fulfillmentId", type: "bytes32" },
+            { name: "participant", type: "address" },
+        ],
+    );
+});

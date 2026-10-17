@@ -8,7 +8,12 @@
 
 import { prisma } from "../lib/prisma.js";
 import { type Hash } from "viem";
-import { ReadReferralContractService } from "@reffinity/blockchain-connector/readReferralContract";
+import {
+  ReadReferralContractService,
+  type CampaignCreatedEvent,
+  type CampaignFulfillmentSubmittedEvent,
+  type CampaignFulfillmentVerifiedEvent,
+} from "@reffinity/blockchain-connector/readReferralContract";
 import {
   createWebSocketClient,
   createClient,
@@ -29,6 +34,9 @@ export class BlockchainListenerService {
   private isListeningToPointsAdded: boolean = false;
   private isListeningToInviteChanged: boolean = false;
   private isListeningToReferralPointsAllocated: boolean = false;
+  private isListeningToCampaignCreated: boolean = false;
+  private isListeningToCampaignFulfillmentSubmitted: boolean = false;
+  private isListeningToCampaignFulfillmentVerified: boolean = false;
   private publicClient: any = createClient(
     process.env.CHAIN_TYPE as "localhost" | "sepolia",
   ).publicClient;
@@ -46,6 +54,9 @@ export class BlockchainListenerService {
       await this.startPointsAddedListener();
       await this.startInviteChangedListener();
       await this.startReferralPointsAllocatedListener();
+      await this.startCampaignCreatedListener();
+      await this.startCampaignFulfillmentSubmittedListener();
+      await this.startCampaignFulfillmentVerifiedListener();
 
       console.log("Blockchain listener initialized successfully.");
     } catch (error) {
@@ -371,6 +382,77 @@ export class BlockchainListenerService {
     }
   }
 
+  // These handlers are the intentional Phase 7 boundary. Persistence and replay
+  // semantics for generalized campaigns are deferred to the backend projection slice.
+  private async handleCampaignCreated(
+    event: CampaignCreatedEvent,
+  ): Promise<void> {
+    console.log("CampaignCreated received; persistence deferred", event);
+  }
+
+  private async handleCampaignFulfillmentSubmitted(
+    event: CampaignFulfillmentSubmittedEvent,
+  ): Promise<void> {
+    console.log(
+      "CampaignFulfillmentSubmitted received; persistence deferred",
+      event,
+    );
+  }
+
+  private async handleCampaignFulfillmentVerified(
+    event: CampaignFulfillmentVerifiedEvent,
+  ): Promise<void> {
+    console.log(
+      "CampaignFulfillmentVerified received; persistence deferred",
+      event,
+    );
+  }
+
+  private async startCampaignCreatedListener(): Promise<void> {
+    if (this.isListeningToCampaignCreated) return;
+    try {
+      await this.readReferralContractService.listenToCampaignCreatedEvent(
+        (event) => this.handleCampaignCreated(event),
+        10000,
+      );
+      this.isListeningToCampaignCreated = true;
+    } catch (error) {
+      throw new Error(
+        `Could not start blockchain listener: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  private async startCampaignFulfillmentSubmittedListener(): Promise<void> {
+    if (this.isListeningToCampaignFulfillmentSubmitted) return;
+    try {
+      await this.readReferralContractService.listenToCampaignFulfillmentSubmittedEvent(
+        (event) => this.handleCampaignFulfillmentSubmitted(event),
+        10000,
+      );
+      this.isListeningToCampaignFulfillmentSubmitted = true;
+    } catch (error) {
+      throw new Error(
+        `Could not start blockchain listener: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  private async startCampaignFulfillmentVerifiedListener(): Promise<void> {
+    if (this.isListeningToCampaignFulfillmentVerified) return;
+    try {
+      await this.readReferralContractService.listenToCampaignFulfillmentVerifiedEvent(
+        (event) => this.handleCampaignFulfillmentVerified(event),
+        10000,
+      );
+      this.isListeningToCampaignFulfillmentVerified = true;
+    } catch (error) {
+      throw new Error(
+        `Could not start blockchain listener: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
   private async syncToChain(): Promise<void> {
     console.log("Synchronising the DB to the chain state...");
 
@@ -586,6 +668,24 @@ export class BlockchainListenerService {
         this.readReferralContractService.stopListeningToReferralPointsAllocatedEvent(),
       );
       this.isListeningToReferralPointsAllocated = false;
+    }
+    if (this.isListeningToCampaignCreated) {
+      stops.push(
+        this.readReferralContractService.stopListeningToCampaignCreatedEvent(),
+      );
+      this.isListeningToCampaignCreated = false;
+    }
+    if (this.isListeningToCampaignFulfillmentSubmitted) {
+      stops.push(
+        this.readReferralContractService.stopListeningToCampaignFulfillmentSubmittedEvent(),
+      );
+      this.isListeningToCampaignFulfillmentSubmitted = false;
+    }
+    if (this.isListeningToCampaignFulfillmentVerified) {
+      stops.push(
+        this.readReferralContractService.stopListeningToCampaignFulfillmentVerifiedEvent(),
+      );
+      this.isListeningToCampaignFulfillmentVerified = false;
     }
     await Promise.all(stops);
   }

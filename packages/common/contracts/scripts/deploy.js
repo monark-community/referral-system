@@ -43,14 +43,14 @@ async function main() {
     transport: http(rpcUrl),
   });
 
-  // Get compiled artifact
+  // Get compiled facade artifact. ReferralProgram creates and owns its modules.
   const artifact = await hre.artifacts.readArtifact("ReferralProgram");
 
   // Deploy contract
-  var hash = await walletClient.deployContract({
+  let hash = await walletClient.deployContract({
     abi: artifact.abi,
     bytecode: artifact.bytecode,
-    args: [], // constructor args here
+    args: [],
   });
 
   console.log("Deploy tx hash:", hash);
@@ -69,7 +69,7 @@ async function main() {
         functionName: "setPointsForAction",
         args: [0, 100], // args mean for action 0 (referring) you get 100 points
     }))
-    var hash = await walletClient.writeContract(request)
+    hash = await walletClient.writeContract(request)
     await publicClient.waitForTransactionReceipt({ hash });
 
     // set points for accepting invite
@@ -80,7 +80,7 @@ async function main() {
         functionName: "setPointsForAction",
         args: [1, 50], // args mean for action 1 (accepting invite) you get 50 points
     }))
-    var hash = await walletClient.writeContract(request)
+    hash = await walletClient.writeContract(request)
     await publicClient.waitForTransactionReceipt({ hash });
 
     // Set the global two-level referral pool split.
@@ -109,7 +109,7 @@ async function main() {
             functionName: "addNewMilestone",
             args: [threshold],
         }));
-        var hash = await walletClient.writeContract(request);
+        hash = await walletClient.writeContract(request);
         await publicClient.waitForTransactionReceipt({ hash });
     }
     console.log("Milestones set:", milestoneThresholds);

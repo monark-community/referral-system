@@ -22,6 +22,9 @@ const mockReadService = {
   listenToPointsAddedEvent: jest.fn(),
   listenToInviteChangedEvent: jest.fn(),
   listenToReferralPointsAllocatedEvent: jest.fn(),
+  listenToCampaignCreatedEvent: jest.fn(),
+  listenToCampaignFulfillmentSubmittedEvent: jest.fn(),
+  listenToCampaignFulfillmentVerifiedEvent: jest.fn(),
   getUserCurrentMilestone: jest.fn(),
   getReferralPointPool: jest.fn(),
   getGrandparentReferralBps: jest.fn(),
@@ -32,6 +35,9 @@ const mockReadService = {
   stopListeningToPointsAddedEvent: jest.fn(),
   stopListeningToInviteChangedEvent: jest.fn(),
   stopListeningToReferralPointsAllocatedEvent: jest.fn(),
+  stopListeningToCampaignCreatedEvent: jest.fn(),
+  stopListeningToCampaignFulfillmentSubmittedEvent: jest.fn(),
+  stopListeningToCampaignFulfillmentVerifiedEvent: jest.fn(),
 };
 
 jest.mock("@/lib/prisma", () => ({
@@ -113,6 +119,12 @@ async function startListener() {
     onInviteChanged: mockReadService.listenToInviteChangedEvent.mock.calls[0][0],
     onReferralPointsAllocated:
       mockReadService.listenToReferralPointsAllocatedEvent.mock.calls[0][0],
+    onCampaignCreated:
+      mockReadService.listenToCampaignCreatedEvent.mock.calls[0][0],
+    onCampaignFulfillmentSubmitted:
+      mockReadService.listenToCampaignFulfillmentSubmittedEvent.mock.calls[0][0],
+    onCampaignFulfillmentVerified:
+      mockReadService.listenToCampaignFulfillmentVerifiedEvent.mock.calls[0][0],
   };
 }
 
@@ -128,6 +140,9 @@ describe("BlockchainListenerService", () => {
     mockReadService.listenToPointsAddedEvent.mockReset().mockResolvedValue(undefined);
     mockReadService.listenToInviteChangedEvent.mockReset().mockResolvedValue(undefined);
     mockReadService.listenToReferralPointsAllocatedEvent.mockReset().mockResolvedValue(undefined);
+    mockReadService.listenToCampaignCreatedEvent.mockReset().mockResolvedValue(undefined);
+    mockReadService.listenToCampaignFulfillmentSubmittedEvent.mockReset().mockResolvedValue(undefined);
+    mockReadService.listenToCampaignFulfillmentVerifiedEvent.mockReset().mockResolvedValue(undefined);
     mockReadService.getUserCurrentMilestone.mockReset().mockResolvedValue(2n);
     // The deployed settings: a 100-point pool split 80/20, and no referrer above the inviter
     mockReadService.getReferralPointPool.mockReset().mockResolvedValue(100n);
@@ -139,6 +154,9 @@ describe("BlockchainListenerService", () => {
     mockReadService.stopListeningToPointsAddedEvent.mockReset();
     mockReadService.stopListeningToInviteChangedEvent.mockReset();
     mockReadService.stopListeningToReferralPointsAllocatedEvent.mockReset();
+    mockReadService.stopListeningToCampaignCreatedEvent.mockReset();
+    mockReadService.stopListeningToCampaignFulfillmentSubmittedEvent.mockReset();
+    mockReadService.stopListeningToCampaignFulfillmentVerifiedEvent.mockReset();
     mockProjectBuiltinReferralFulfillment.mockReset().mockResolvedValue({
       outcome: "REWARDED",
       fulfillmentId: "fulfillment-1",
@@ -197,6 +215,16 @@ describe("BlockchainListenerService", () => {
       expect(
         mockReadService.listenToReferralPointsAllocatedEvent,
       ).toHaveBeenCalledWith(expect.any(Function), 10000);
+      expect(mockReadService.listenToCampaignCreatedEvent).toHaveBeenCalledWith(
+        expect.any(Function),
+        10000,
+      );
+      expect(
+        mockReadService.listenToCampaignFulfillmentSubmittedEvent,
+      ).toHaveBeenCalledWith(expect.any(Function), 10000);
+      expect(
+        mockReadService.listenToCampaignFulfillmentVerifiedEvent,
+      ).toHaveBeenCalledWith(expect.any(Function), 10000);
       expect(mockReconcileBuiltinReferralFulfillments).toHaveBeenCalledWith(
         mockPublicClient,
         expect.objectContaining({ onIssue: expect.any(Function) }),
@@ -241,6 +269,13 @@ describe("BlockchainListenerService", () => {
       expect(
         mockReadService.listenToReferralPointsAllocatedEvent,
       ).toHaveBeenCalledTimes(1);
+      expect(mockReadService.listenToCampaignCreatedEvent).toHaveBeenCalledTimes(1);
+      expect(
+        mockReadService.listenToCampaignFulfillmentSubmittedEvent,
+      ).toHaveBeenCalledTimes(1);
+      expect(
+        mockReadService.listenToCampaignFulfillmentVerifiedEvent,
+      ).toHaveBeenCalledTimes(1);
     });
 
     test("reports startup errors so the API cannot become ready", async () => {
@@ -261,6 +296,9 @@ describe("BlockchainListenerService", () => {
       "listenToPointsAddedEvent",
       "listenToInviteChangedEvent",
       "listenToReferralPointsAllocatedEvent",
+      "listenToCampaignCreatedEvent",
+      "listenToCampaignFulfillmentSubmittedEvent",
+      "listenToCampaignFulfillmentVerifiedEvent",
     ] as const)(
       "reports a clear error when %s cannot start",
       async (method) => {
@@ -278,6 +316,41 @@ describe("BlockchainListenerService", () => {
         );
       },
     );
+  });
+
+  describe("general campaign event boundaries", () => {
+    test("dispatches campaign events without adding backend persistence", async () => {
+      const {
+        onCampaignCreated,
+        onCampaignFulfillmentSubmitted,
+        onCampaignFulfillmentVerified,
+      } = await startListener();
+      jest.clearAllMocks();
+
+      await onCampaignCreated({ eventName: "CampaignCreated" });
+      await onCampaignFulfillmentSubmitted({
+        eventName: "CampaignFulfillmentSubmitted",
+      });
+      await onCampaignFulfillmentVerified({
+        eventName: "CampaignFulfillmentVerified",
+      });
+
+      expect(consoleLog).toHaveBeenCalledWith(
+        "CampaignCreated received; persistence deferred",
+        { eventName: "CampaignCreated" },
+      );
+      expect(consoleLog).toHaveBeenCalledWith(
+        "CampaignFulfillmentSubmitted received; persistence deferred",
+        { eventName: "CampaignFulfillmentSubmitted" },
+      );
+      expect(consoleLog).toHaveBeenCalledWith(
+        "CampaignFulfillmentVerified received; persistence deferred",
+        { eventName: "CampaignFulfillmentVerified" },
+      );
+      expect(db.user.update).not.toHaveBeenCalled();
+      expect(db.referral.updateMany).not.toHaveBeenCalled();
+      expect(db.chainSyncState.upsert).not.toHaveBeenCalled();
+    });
   });
 
   describe("ReferralPointsAllocated events", () => {
@@ -926,6 +999,13 @@ describe("BlockchainListenerService", () => {
       expect(
         mockReadService.stopListeningToReferralPointsAllocatedEvent,
       ).toHaveBeenCalledTimes(1);
+      expect(mockReadService.stopListeningToCampaignCreatedEvent).toHaveBeenCalledTimes(1);
+      expect(
+        mockReadService.stopListeningToCampaignFulfillmentSubmittedEvent,
+      ).toHaveBeenCalledTimes(1);
+      expect(
+        mockReadService.stopListeningToCampaignFulfillmentVerifiedEvent,
+      ).toHaveBeenCalledTimes(1);
     });
 
     test("can start listening again after stopping", async () => {
@@ -939,6 +1019,13 @@ describe("BlockchainListenerService", () => {
       expect(
         mockReadService.listenToReferralPointsAllocatedEvent,
       ).toHaveBeenCalledTimes(2);
+      expect(mockReadService.listenToCampaignCreatedEvent).toHaveBeenCalledTimes(2);
+      expect(
+        mockReadService.listenToCampaignFulfillmentSubmittedEvent,
+      ).toHaveBeenCalledTimes(2);
+      expect(
+        mockReadService.listenToCampaignFulfillmentVerifiedEvent,
+      ).toHaveBeenCalledTimes(2);
     });
 
     test("does nothing if the listener never started", async () => {
@@ -948,6 +1035,13 @@ describe("BlockchainListenerService", () => {
       expect(mockReadService.stopListeningToInviteChangedEvent).not.toHaveBeenCalled();
       expect(
         mockReadService.stopListeningToReferralPointsAllocatedEvent,
+      ).not.toHaveBeenCalled();
+      expect(mockReadService.stopListeningToCampaignCreatedEvent).not.toHaveBeenCalled();
+      expect(
+        mockReadService.stopListeningToCampaignFulfillmentSubmittedEvent,
+      ).not.toHaveBeenCalled();
+      expect(
+        mockReadService.stopListeningToCampaignFulfillmentVerifiedEvent,
       ).not.toHaveBeenCalled();
     });
   });
