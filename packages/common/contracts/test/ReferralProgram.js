@@ -26,6 +26,7 @@ let referrerAccount;
 let referreeAccount;
 let contractAddress;
 let abi;
+let milestoneRewardsAbi;
 let hardhatProcess;
 let testAccounts;
 let testWalletClients;
@@ -76,6 +77,7 @@ beforeEach(async () => {
     // Compile + load ABI
     const artifact = await hre.artifacts.readArtifact("ReferralProgram");
     abi = artifact.abi;
+    milestoneRewardsAbi = (await hre.artifacts.readArtifact("MilestoneRewards")).abi;
     // Deploy
     const hash = await referrerWalletClient.deployContract({
         abi,
@@ -489,7 +491,41 @@ test("user achieves a milestone", async () => {
         args: [referreeAccount.address],
     });
 
-    assert.equal(referreeMilestone, 1n); // referree has crossed the first milestone (25 points) after referring 
+    assert.equal(referreeMilestone, 1n); // referree has crossed the first milestone (25 points) after referring
+});
+
+test("reaching milestones announces each level reached, with the user who reached it", async () => {
+    await addPointsForActions();
+
+    await setMilestones();
+
+    // The referrer's 100 referral points pass both milestones (25 and 100) at once,
+    // and the referee's 50 sign-up points pass the first
+    const receipt = await addReferrerAndReferree();
+
+    assert.deepEqual(milestoneRewardEvents(receipt), [
+        { user: referrerAccount.address, milestoneLevel: 1n },
+        { user: referrerAccount.address, milestoneLevel: 2n },
+        { user: referreeAccount.address, milestoneLevel: 1n },
+    ]);
+});
+
+test("no milestone is announced for points that do not reach a new level", async () => {
+    await addPointsForActions();
+
+    await setMilestones();
+
+    await addReferrerAndReferree();
+
+    // The referrer is already at the top milestone, so another referral only announces the new referee's first level
+    const receipt = await writeProgramContract(testAccounts[2], testWalletClients[2], "acceptInvite", [
+        referrerAccount.address,
+        stringToHex("invite-second", { size: 32 }),
+    ]);
+
+    assert.deepEqual(milestoneRewardEvents(receipt), [
+        { user: testAccounts[2].address, milestoneLevel: 1n },
+    ]);
 });
 
 test("user can have have a invite created", async () => {
@@ -644,6 +680,22 @@ function decodeReceiptEvents(receipt, eventName) {
                 topics: log.topics,
             });
             return decoded.eventName === eventName ? [decoded] : [];
+        } catch {
+            return [];
+        }
+    });
+}
+
+// RewardAwarded comes from the MilestoneRewards contract that ReferralMilestone deploys, so it needs that ABI
+function milestoneRewardEvents(receipt) {
+    return receipt.logs.flatMap((log) => {
+        try {
+            const decoded = decodeEventLog({
+                abi: milestoneRewardsAbi,
+                data: log.data,
+                topics: log.topics,
+            });
+            return decoded.eventName === "RewardAwarded" ? [decoded.args] : [];
         } catch {
             return [];
         }

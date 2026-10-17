@@ -17,15 +17,16 @@ contract MilestoneRewards is AccessControl {
         _grantRole(ACCESS_ROLE, access_role);
     }
 
-    event RewardAwarded(uint256 indexed milestoneLevel);
+    // Announces who reached which milestone level, so off-chain services can reward them
+    event RewardAwarded(address indexed user, uint256 indexed milestoneLevel);
 
     //Hook for adding on chain rewards for a user - ie tranfer a token
-    function awardReward(uint256 milestoneLevel) public {
+    function awardReward(address user, uint256 milestoneLevel) public {
         require(
             hasRole(ACCESS_ROLE, msg.sender),
             "awardReward: caller lacks ACCESS_ROLE"
         );
-        emit RewardAwarded(milestoneLevel);
+        emit RewardAwarded(user, milestoneLevel);
         // Edit to add
     }
 }
