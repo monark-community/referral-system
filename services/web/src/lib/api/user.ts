@@ -56,17 +56,29 @@ export interface ReferralRewardHistoryResponse {
   rewardHistory: ReferralReward[];
 }
 
-export interface TreeUser {
-  id: string;
-  name: string | null;
+export interface NetworkPerson {
   walletAddress: string;
+  name: string | null;
 }
 
-export interface ReferralTreeResponse {
-  me: TreeUser;
-  parent: TreeUser | null;
-  grandparent: TreeUser | null;
-  children: (TreeUser & { referrals: TreeUser[] })[];
+export interface NetworkMember extends NetworkPerson {
+  level: 1 | 2;
+  joinedAt: string;
+  pointsEarned: number;
+}
+
+export interface ReferralNetworkResponse {
+  ancestors: {
+    parent: NetworkPerson | null;
+    grandparent: NetworkPerson | null;
+  };
+  referrals: (NetworkMember & { referrals: NetworkMember[] })[];
+  totals: {
+    level1Count: number;
+    level2Count: number;
+    level1Points: number;
+    level2Points: number;
+  };
 }
 
 export interface PrivateInviteRequest {
@@ -126,10 +138,10 @@ export async function getReferralRewardHistory(): Promise<ReferralRewardHistoryR
 }
 
 /**
- * Get the user's referral tree (grandparent, parent, children, grandchildren).
+ * Get who referred the user and their two levels of referrals, with the points each earned them.
  */
-export async function getReferralTree(): Promise<ReferralTreeResponse> {
-  return apiClient<ReferralTreeResponse>("/users/referral-tree");
+export async function getReferralNetwork(): Promise<ReferralNetworkResponse> {
+  return apiClient<ReferralNetworkResponse>("/users/referral-network");
 }
 
 /**

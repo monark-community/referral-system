@@ -10,7 +10,6 @@ import {
   getInvites,
   getReferralRewardHistory,
   getReferralNetwork,
-  getReferralTree,
   acceptTerms,
   disableAccount,
   enableAccount,
@@ -46,9 +45,6 @@ router.get('/referral-rewards', authMiddleware, getReferralRewardHistory);
 
 // GET /api/users/referral-network - Get who referred you and your level-1 and level-2 referrals
 router.get('/referral-network', authMiddleware, getReferralNetwork);
-
-// GET /api/users/referral-tree - Grandparent, parent, children and grandchildren
-router.get('/referral-tree', authMiddleware, getReferralTree);
 
 // POST /api/users/disable - Disable account
 router.post('/disable', authMiddleware, disableAccount);

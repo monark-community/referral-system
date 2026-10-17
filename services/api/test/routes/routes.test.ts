@@ -178,7 +178,6 @@ describe("API routes", () => {
       ["get", "/api/users/referrals"],
       ["get", "/api/users/referral-rewards"],
       ["get", "/api/users/referral-network"],
-      ["get", "/api/users/referral-tree"],
       ["post", "/api/users/disable"],
       ["post", "/api/users/enable"],
       ["post", "/api/users/referrals/private"],
@@ -208,22 +207,6 @@ describe("API routes", () => {
         ancestors: { parent: null, grandparent: null },
         referrals: [],
         totals: { level1Count: 0, level2Count: 0, level1Points: 0, level2Points: 0 },
-      });
-    });
-
-    test("a logged-in user gets their referral tree through the full chain", async () => {
-      db.user.findUnique
-        .mockResolvedValueOnce(user) // the auth middleware loads the account first
-        .mockResolvedValueOnce({ id: "user1", name: "Alice", walletAddress: "0xabc", referrer: null, referrals: [] });
-
-      const res = await request(app).get("/api/users/referral-tree").set(loggedIn());
-
-      expect(res.status).toBe(200);
-      expect(res.body).toEqual({
-        me: { id: "user1", name: "Alice", walletAddress: "0xabc" },
-        parent: null,
-        grandparent: null,
-        children: [],
       });
     });
 

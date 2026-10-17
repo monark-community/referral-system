@@ -7,7 +7,7 @@ import {
   useProfile,
   useInvites,
   useReferralRewardHistory,
-  useReferralTree,
+  useReferralNetwork,
   useMilestoneTiers,
   useUserMilestone,
 } from "@/lib/api/hooks";
@@ -18,7 +18,7 @@ jest.mock("@/lib/api/user", () => ({
   getProfile: jest.fn().mockResolvedValue({ source: "getProfile" }),
   getInvites: jest.fn().mockResolvedValue({ source: "getInvites" }),
   getReferralRewardHistory: jest.fn().mockResolvedValue({ source: "getReferralRewardHistory" }),
-  getReferralTree: jest.fn().mockResolvedValue({ source: "getReferralTree" }),
+  getReferralNetwork: jest.fn().mockResolvedValue({ source: "getReferralNetwork" }),
   getMilestoneTiers: jest.fn().mockResolvedValue({ source: "getMilestoneTiers" }),
   getUserMilestone: jest.fn().mockResolvedValue({ source: "getUserMilestone" }),
 }));
@@ -45,7 +45,7 @@ const hooks = [
   ["useProfile", useProfile, "getProfile"],
   ["useInvites", useInvites, "getInvites"],
   ["useReferralRewardHistory", useReferralRewardHistory, "getReferralRewardHistory"],
-  ["useReferralTree", useReferralTree, "getReferralTree"],
+  ["useReferralNetwork", useReferralNetwork, "getReferralNetwork"],
   ["useMilestoneTiers", useMilestoneTiers, "getMilestoneTiers"],
   ["useUserMilestone", useUserMilestone, "getUserMilestone"],
 ] as const;

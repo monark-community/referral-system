@@ -1,6 +1,6 @@
 // Purpose: Tests for the referral tree page - who is shown and how they relate, the details card, tooltips, and moving around the canvas
 // Notes:
-// - The data hook is mocked so each test controls exactly which tree the page receives
+// - The network hook and the logged-in user are mocked so each test controls exactly which tree the page receives
 // - The layout shell is stubbed; it is covered by the sidebar tests
 // - jsdom has no layout or pointer capture, so the canvas is given a fixed size and setPointerCapture is stubbed
 // - jsdom has no PointerEvent either, so drags, pinches and hovers are sent as mouse events that carry the pointer fields the page reads
@@ -9,8 +9,9 @@ import type { ReactNode } from "react";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import ReferralTreePage from "@/app/referrals/tree/page";
-import { useReferralTree } from "@/lib/api/hooks";
-import type { ReferralTreeResponse, TreeUser } from "@/lib/api/user";
+import { useAuth } from "@/contexts/auth-context";
+import { useReferralNetwork } from "@/lib/api/hooks";
+import type { NetworkMember, NetworkPerson, ReferralNetworkResponse } from "@/lib/api/user";
 
 const mockPush = jest.fn();
 
@@ -18,52 +19,85 @@ jest.mock("next/navigation", () => ({ useRouter: () => ({ push: mockPush }) }));
 jest.mock("@/components/layout/responsive-shell", () => ({
   ResponsiveShell: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
-jest.mock("@/lib/api/hooks", () => ({ useReferralTree: jest.fn() }));
+jest.mock("@/contexts/auth-context", () => ({ useAuth: jest.fn() }));
+jest.mock("@/lib/api/hooks", () => ({ useReferralNetwork: jest.fn() }));
 
 const WINDOW = { width: 1000, height: 800 };
 
-const person = (id: string, name: string | null, walletDigit: string): TreeUser => ({
-  id,
+const person = (name: string | null, walletDigit: string): NetworkPerson => ({
   name,
   walletAddress: `0x${walletDigit.repeat(40)}`,
 });
 
+const member = (who: NetworkPerson, level: 1 | 2, pointsEarned: number): NetworkMember => ({
+  ...who,
+  level,
+  joinedAt: "2026-10-01T12:00:00.000Z",
+  pointsEarned,
+});
+
+// Someone the user referred, with the people they referred in turn (each earning the user the grandparent 20)
+const referral = (who: NetworkPerson, pointsEarned: number, referrals: NetworkPerson[] = []) => ({
+  ...member(who, 1, pointsEarned),
+  referrals: referrals.map((grandchild) => member(grandchild, 2, 20)),
+});
+
+// The response as the API builds it, totals included
+function network(
+  referrals: ReferralNetworkResponse["referrals"],
+  { parent = null, grandparent = null }: Partial<ReferralNetworkResponse["ancestors"]> = {},
+): ReferralNetworkResponse {
+  const level2 = referrals.flatMap((child) => child.referrals);
+  const sum = (members: NetworkMember[]) => members.reduce((total, m) => total + m.pointsEarned, 0);
+  return {
+    ancestors: { parent, grandparent },
+    referrals,
+    totals: {
+      level1Count: referrals.length,
+      level2Count: level2.length,
+      level1Points: sum(referrals),
+      level2Points: sum(level2),
+    },
+  };
+}
+
 // Grace referred Paul, who referred Alice (the user).
 // Alice referred Bob and Dana; Bob referred Carol, Dave and Erin, and Dana referred Frank.
-const grace = person("grace", "Grace", "9");
-const paul = person("paul", "Paul", "8");
-const alice = person("alice", "Alice", "1");
-const bob = person("bob", "Bob", "2");
-const dana = person("dana", "Dana", "3");
-const carol = person("carol", "Carol", "4");
-const dave = person("dave", "Dave", "5");
-const erin = person("erin", "Erin", "6");
-const frank = person("frank", "Frank", "7");
+const grace = person("Grace", "9");
+const paul = person("Paul", "8");
+const alice = person("Alice", "1");
+const bob = person("Bob", "2");
+const dana = person("Dana", "3");
+const carol = person("Carol", "4");
+const dave = person("Dave", "5");
+const erin = person("Erin", "6");
+const frank = person("Frank", "7");
 
-const fullTree: ReferralTreeResponse = {
-  me: alice,
+// Alice has a referrer, so each person she refers earns her the 80-point direct share
+const fullNetwork = network([referral(bob, 80, [carol, dave, erin]), referral(dana, 80, [frank])], {
   parent: paul,
   grandparent: grace,
-  children: [
-    { ...bob, referrals: [carol, dave, erin] },
-    { ...dana, referrals: [frank] },
-  ],
-};
+});
 
 // Alice joined without an invite and has not referred anyone
-const lonelyTree: ReferralTreeResponse = { me: alice, parent: null, grandparent: null, children: [] };
+const lonelyNetwork = network([]);
 
-function renderPage({ tree = fullTree, loading = false }: { tree?: ReferralTreeResponse; loading?: boolean } = {}) {
-  jest.mocked(useReferralTree).mockReturnValue({
-    data: loading ? undefined : tree,
+function renderPage({
+  data = fullNetwork,
+  loading = false,
+  me = alice,
+}: { data?: ReferralNetworkResponse; loading?: boolean; me?: NetworkPerson | null } = {}) {
+  jest.mocked(useAuth).mockReturnValue({ user: me } as unknown as ReturnType<typeof useAuth>);
+  jest.mocked(useReferralNetwork).mockReturnValue({
+    data: loading ? undefined : data,
     isLoading: loading,
-  } as unknown as ReturnType<typeof useReferralTree>);
+  } as unknown as ReturnType<typeof useReferralNetwork>);
   render(<ReferralTreePage />);
 }
 
 // Each person is a button labelled "<name>, <how they relate to the user>"
 const personButton = (label: string) => screen.getByRole("button", { name: label });
-const walletButton = (user: TreeUser) => screen.queryByRole("button", { name: user.walletAddress });
+const walletButton = (user: NetworkPerson) => screen.queryByRole("button", { name: user.walletAddress });
 
 // The layer that moves and scales: every person sits directly inside it
 const canvas = () => personButton("Alice, You").parentElement as HTMLElement;
@@ -128,6 +162,13 @@ test("shows a spinner while the tree is loading", () => {
   expect(screen.queryByRole("button", { name: "Alice, You" })).not.toBeInTheDocument();
 });
 
+test("keeps the spinner until the logged-in user is known", () => {
+  renderPage({ me: null });
+
+  expect(screen.getByRole("status", { name: "Loading" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Bob, You referred them" })).not.toBeInTheDocument();
+});
+
 test("shows the user, the two people above them, and two levels of referrals below", () => {
   renderPage();
 
@@ -151,8 +192,8 @@ test("tags only the user as Me", () => {
 });
 
 test("shows a shortened wallet address and a wallet icon for someone without a name", () => {
-  const unnamed: TreeUser = { id: "zed", name: null, walletAddress: "0xAbCdEf0000000000000000000000000000001234" };
-  renderPage({ tree: { ...lonelyTree, children: [{ ...unnamed, referrals: [carol] }] } });
+  const unnamed: NetworkPerson = { name: null, walletAddress: "0xAbCdEf0000000000000000000000000000001234" };
+  renderPage({ data: network([referral(unnamed, 100, [carol])]) });
 
   const button = personButton("0xAbCd...1234, You referred them");
   expect(button).toHaveTextContent("0xAbCd...1234");
@@ -164,7 +205,7 @@ test("shows a shortened wallet address and a wallet icon for someone without a n
 });
 
 test("invites a user with no referrals to refer people", async () => {
-  renderPage({ tree: lonelyTree });
+  renderPage({ data: lonelyNetwork });
 
   expect(screen.getByText("You haven't referred anyone yet")).toBeInTheDocument();
   await userEvent.click(screen.getByRole("button", { name: "Refer people" }));
@@ -217,8 +258,7 @@ test("centres each person over the people they referred", () => {
 });
 
 test("spreads the user's referrals evenly on both sides of them", () => {
-  const children = [bob, dana, erin].map((child) => ({ ...child, referrals: [] }));
-  renderPage({ tree: { ...lonelyTree, children } });
+  renderPage({ data: network([bob, dana, erin].map((child) => referral(child, 100))) });
   const x = (label: string) => position(label).x;
 
   expect(x("Dana, You referred them")).toBe(x("Alice, You"));
@@ -237,8 +277,11 @@ test("draws a line from every person to the people they referred", () => {
 });
 
 test("opens with the whole tree in the window, zooming out for a wide one", () => {
-  const children = Array.from({ length: 12 }, (_, i) => ({ ...person(`child-${i}`, `Child ${i}`, "a"), referrals: [] }));
-  renderPage({ tree: { ...lonelyTree, children } });
+  // Each child needs their own wallet address, since that is how the page tells people apart
+  const children = Array.from({ length: 12 }, (_, i) =>
+    referral({ name: `Child ${i}`, walletAddress: `0x${String(i).padStart(40, "a")}` }, 100),
+  );
+  renderPage({ data: network(children) });
 
   const { x, y, scale } = view();
   expect(scale).toBeLessThan(1);
@@ -252,7 +295,7 @@ test("opens with the whole tree in the window, zooming out for a wide one", () =
 });
 
 test("does not zoom in past 100% to fill the window with a small tree", () => {
-  renderPage({ tree: lonelyTree });
+  renderPage({ data: lonelyNetwork });
 
   expect(view().scale).toBe(1);
 });
@@ -267,6 +310,38 @@ test("clicking a person opens a card with how they relate to the user and their 
   expect(personButton("Bob, You referred them")).toHaveAttribute("aria-pressed", "true");
   expect(screen.getByText("You referred them")).toBeInTheDocument();
   expect(walletButton(bob)).toBeInTheDocument();
+});
+
+test("the card shows the points each of the user's referrals earned them", async () => {
+  renderPage();
+
+  await userEvent.click(personButton("Bob, You referred them"));
+  expect(screen.getByText("Earned you", { exact: false })).toHaveTextContent("Earned you 80 points");
+
+  // People two levels down earn the user the grandparent share
+  await userEvent.click(personButton("Carol, Referred by Bob"));
+  expect(screen.getByText("Earned you", { exact: false })).toHaveTextContent("Earned you 20 points");
+});
+
+test("the card says point, not points, for a single point", async () => {
+  renderPage({ data: network([referral(bob, 1)]) });
+
+  await userEvent.click(personButton("Bob, You referred them"));
+
+  expect(screen.getByText("Earned you", { exact: false })).toHaveTextContent("Earned you 1 point");
+  expect(screen.getByText("Earned you", { exact: false })).not.toHaveTextContent("points");
+});
+
+test("the card shows no points for the user or the people above them", async () => {
+  renderPage();
+
+  await userEvent.click(personButton("Paul, Referred you"));
+  expect(walletButton(paul)).toBeInTheDocument();
+  expect(screen.queryByText("Earned you", { exact: false })).not.toBeInTheDocument();
+
+  await userEvent.click(personButton("Alice, You"));
+  expect(walletButton(alice)).toBeInTheDocument();
+  expect(screen.queryByText("Earned you", { exact: false })).not.toBeInTheDocument();
 });
 
 test("clicking the same person again closes their card", async () => {
