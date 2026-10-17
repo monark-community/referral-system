@@ -4,6 +4,8 @@
 // - Drag anywhere to pan; pinch, ctrl/cmd + wheel or the buttons to zoom
 // - Hovering a person for a moment shows a tooltip; clicking or tapping them opens a details card in the corner
 // - If the user has no children, a "Refer people" button links to the dashboard share tools
+// - People come from /referral-network, so a referral only appears once the chain confirms their sign-up,
+//   and their details card shows the points they earned the user
 
 "use client";
 
@@ -23,18 +25,22 @@ import { ResponsiveShell } from "@/components/layout/responsive-shell";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
-import { useReferralTree } from "@/lib/api/hooks";
-import type { ReferralTreeResponse, TreeUser } from "@/lib/api/user";
+import { useAuth } from "@/contexts/auth-context";
+import { useReferralNetwork } from "@/lib/api/hooks";
+import type { NetworkPerson, ReferralNetworkResponse } from "@/lib/api/user";
 
 type Level = "ancestor" | "me" | "child" | "grandchild";
 type Point = { x: number; y: number };
 type View = { x: number; y: number; scale: number };
 
+// Nodes are keyed by wallet address, which is unique per account
 interface TreeNode {
-  user: TreeUser;
+  user: NetworkPerson;
   level: Level;
   parentId: string | null;
   relation: string;
+  // Only the user's referrals carry this: what they earned the user
+  pointsEarned?: number;
 }
 
 const avatarSize: Record<Level, string> = {
@@ -75,14 +81,15 @@ const LINE_COLOR = "color-mix(in srgb, hsl(var(--primary)) 50%, hsl(var(--backgr
 
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
 
-function displayName(user: TreeUser) {
+function displayName(user: NetworkPerson) {
   return user.name || `${user.walletAddress.slice(0, 6)}...${user.walletAddress.slice(-4)}`;
 }
 
 // Ancestors stack above "Me"; each child gets enough width for its own referrals and sits centred over them
-function buildTree(data: ReferralTreeResponse) {
+function buildTree(data: ReferralNetworkResponse, me: NetworkPerson) {
   const nodes = new Map<string, TreeNode>();
   const layout = new Map<string, Point>();
+  const { parent, grandparent } = data.ancestors;
   let y = 0;
   let prev: Level | null = null;
 
@@ -93,47 +100,54 @@ function buildTree(data: ReferralTreeResponse) {
     return y;
   };
 
-  if (data.grandparent) {
-    nodes.set(data.grandparent.id, {
-      user: data.grandparent,
+  if (grandparent) {
+    nodes.set(grandparent.walletAddress, {
+      user: grandparent,
       level: "ancestor",
       parentId: null,
-      relation: data.parent ? `Referred ${displayName(data.parent)}` : "Referred your referrer",
+      relation: parent ? `Referred ${displayName(parent)}` : "Referred your referrer",
     });
-    layout.set(data.grandparent.id, { x: 0, y: nextY("ancestor") });
+    layout.set(grandparent.walletAddress, { x: 0, y: nextY("ancestor") });
   }
-  if (data.parent) {
-    nodes.set(data.parent.id, {
-      user: data.parent,
+  if (parent) {
+    nodes.set(parent.walletAddress, {
+      user: parent,
       level: "ancestor",
-      parentId: data.grandparent?.id ?? null,
+      parentId: grandparent?.walletAddress ?? null,
       relation: "Referred you",
     });
-    layout.set(data.parent.id, { x: 0, y: nextY("ancestor") });
+    layout.set(parent.walletAddress, { x: 0, y: nextY("ancestor") });
   }
 
-  nodes.set(data.me.id, { user: data.me, level: "me", parentId: data.parent?.id ?? null, relation: "You" });
-  layout.set(data.me.id, { x: 0, y: nextY("me") });
+  nodes.set(me.walletAddress, { user: me, level: "me", parentId: parent?.walletAddress ?? null, relation: "You" });
+  layout.set(me.walletAddress, { x: 0, y: nextY("me") });
 
   const childY = nextY("child");
   const grandchildY = nextY("grandchild");
-  const widths = data.children.map((c) => Math.max(CHILD_MIN, c.referrals.length * GRANDCHILD_SLOT));
+  const widths = data.referrals.map((c) => Math.max(CHILD_MIN, c.referrals.length * GRANDCHILD_SLOT));
   let x = -(widths.reduce((a, b) => a + b, 0) + CHILD_GAP * (widths.length - 1)) / 2;
 
-  data.children.forEach((child, i) => {
+  data.referrals.forEach((child, i) => {
     const cx = x + widths[i] / 2;
-    nodes.set(child.id, { user: child, level: "child", parentId: data.me.id, relation: "You referred them" });
-    layout.set(child.id, { x: cx, y: childY });
+    nodes.set(child.walletAddress, {
+      user: child,
+      level: "child",
+      parentId: me.walletAddress,
+      relation: "You referred them",
+      pointsEarned: child.pointsEarned,
+    });
+    layout.set(child.walletAddress, { x: cx, y: childY });
 
     const start = cx - ((child.referrals.length - 1) * GRANDCHILD_SLOT) / 2;
     child.referrals.forEach((gc, j) => {
-      nodes.set(gc.id, {
+      nodes.set(gc.walletAddress, {
         user: gc,
         level: "grandchild",
-        parentId: child.id,
+        parentId: child.walletAddress,
         relation: `Referred by ${displayName(child)}`,
+        pointsEarned: gc.pointsEarned,
       });
-      layout.set(gc.id, { x: start + j * GRANDCHILD_SLOT, y: grandchildY });
+      layout.set(gc.walletAddress, { x: start + j * GRANDCHILD_SLOT, y: grandchildY });
     });
     x += widths[i] + CHILD_GAP;
   });
@@ -179,7 +193,7 @@ function fitView(positions: Map<string, Point>, width: number, height: number, e
   };
 }
 
-function Avatar({ user, level, selected }: { user: TreeUser; level: Level; selected?: boolean }) {
+function Avatar({ user, level, selected }: { user: NetworkPerson; level: Level; selected?: boolean }) {
   return (
     <div
       className={cn(
@@ -242,6 +256,14 @@ function DetailsCard({ node, onClose }: { node: TreeNode; onClose: () => void })
           <X className="h-4 w-4" />
         </button>
       </div>
+      {node.pointsEarned !== undefined && (
+        <p className="mt-3 text-xs text-muted-foreground">
+          Earned you{" "}
+          <span className="font-semibold text-primary">
+            {node.pointsEarned} {node.pointsEarned === 1 ? "point" : "points"}
+          </span>
+        </p>
+      )}
       <button
         type="button"
         onClick={copy}
@@ -254,8 +276,16 @@ function DetailsCard({ node, onClose }: { node: TreeNode; onClose: () => void })
   );
 }
 
-function TreeCanvas({ data, onRefer }: { data: ReferralTreeResponse; onRefer: () => void }) {
-  const { nodes, layout } = useMemo(() => buildTree(data), [data]);
+function TreeCanvas({
+  data,
+  me: currentUser,
+  onRefer,
+}: {
+  data: ReferralNetworkResponse;
+  me: NetworkPerson;
+  onRefer: () => void;
+}) {
+  const { nodes, layout } = useMemo(() => buildTree(data, currentUser), [data, currentUser]);
   const [view, setView] = useState<View>({ x: 0, y: 0, scale: 1 });
   const [tooltipId, setTooltipId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -269,7 +299,7 @@ function TreeCanvas({ data, onRefer }: { data: ReferralTreeResponse; onRefer: ()
   const gesture = useRef<{ start: Point; view: View; dist?: number; travelled: number; nodeId?: string } | null>(null);
   const hoverTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  const isEmpty = data.children.length === 0;
+  const isEmpty = data.referrals.length === 0;
 
   const fit = useCallback(() => {
     const el = viewportRef.current;
@@ -397,7 +427,7 @@ function TreeCanvas({ data, onRefer }: { data: ReferralTreeResponse; onRefer: ()
     setTooltipId(null);
   };
 
-  const me = layout.get(data.me.id)!;
+  const me = layout.get(currentUser.walletAddress)!;
   const tooltip = tooltipId ? nodes.get(tooltipId) : undefined;
   const selected = selectedId ? nodes.get(selectedId) : undefined;
   const tooltipAt = tooltipId ? layout.get(tooltipId) : undefined;
@@ -541,7 +571,8 @@ function TreeCanvas({ data, onRefer }: { data: ReferralTreeResponse; onRefer: ()
 
 export default function ReferralTreePage() {
   const router = useRouter();
-  const { data, isLoading } = useReferralTree();
+  const { user } = useAuth();
+  const { data, isLoading } = useReferralNetwork();
 
   return (
     <ResponsiveShell
@@ -551,12 +582,13 @@ export default function ReferralTreePage() {
       desktopTitle="Referrals"
       desktopSubtitle="See who referred you and who you've brought in"
     >
-      {isLoading || !data ? (
+      {isLoading || !data || !user ? (
         <div className="flex justify-center py-16">
           <Spinner />
         </div>
       ) : (
-        <TreeCanvas data={data} onRefer={() => router.push("/referrals")} />
+        // The logged-in user is passed as is: a new object each render would rebuild the tree and reset the view
+        <TreeCanvas data={data} me={user} onRefer={() => router.push("/referrals")} />
       )}
     </ResponsiveShell>
   );

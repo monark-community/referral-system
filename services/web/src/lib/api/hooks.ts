@@ -12,7 +12,7 @@ import {
   getMilestoneTiers,
   getUserMilestone,
   getReferralRewardHistory,
-  getReferralTree,
+  getReferralNetwork,
 } from "./user";
 import { useAuth } from "@/contexts/auth-context";
 
@@ -46,11 +46,11 @@ export function useReferralRewardHistory() {
   });
 }
 
-export function useReferralTree() {
+export function useReferralNetwork() {
   const { isAuthenticated } = useAuth();
   return useQuery({
-    queryKey: ["referral-tree"],
-    queryFn: () => getReferralTree(),
+    queryKey: ["referral-network"],
+    queryFn: () => getReferralNetwork(),
     enabled: isAuthenticated,
     refetchOnMount: "always",
   });
