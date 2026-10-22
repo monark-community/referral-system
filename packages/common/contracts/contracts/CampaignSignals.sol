@@ -34,12 +34,12 @@ abstract contract CampaignSignals {
         bytes32 fulfillmentId,
         CampaignTypes.FulfillmentStatus currentStatus
     );
-    error UnauthorizedManualVerifier(
-        bytes32 campaignId,
-        address verifier
-    );
+    error UnauthorizedManualVerifier(bytes32 campaignId, address verifier);
+    error UnauthorizedUser(address user);
     error CampaignOwnerCannotParticipate(bytes32 campaignId, address owner);
     error CampaignRewardAboveMaximum(uint256 reward, uint256 maximum);
+    error InsufficientFunds(uint256 amount);
+    error NonFundableCampaign();
 
     event CampaignCreated(
         bytes32 indexed campaignId,

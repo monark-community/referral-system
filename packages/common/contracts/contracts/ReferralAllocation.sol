@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.28;
 
+import {CampaignTypes} from "./CampaignTypes.sol";
+
 // Purpose: Splits an integer reward pool between the two supported referral levels.
 // The math is deliberately unaware of points so it can be reused by a future reward
 // implementation without representing reward types that do not exist yet.
@@ -15,6 +17,8 @@ library ReferralAllocation {
         uint256 directAmount;
         uint256 grandparentAmount;
         uint256 unallocatedAmount;
+        CampaignTypes.RewardType rewardType;
+        bytes32 campaignId;
     }
 
     function validateSplit(
@@ -52,9 +56,7 @@ library ReferralAllocation {
             return allocation;
         }
 
-        allocation.grandparentAmount =
-            (pool * grandparentBps) /
-            BASIS_POINTS;
+        allocation.grandparentAmount = (pool * grandparentBps) / BASIS_POINTS;
         allocation.directAmount = pool - allocation.grandparentAmount;
     }
 }

@@ -37,10 +37,8 @@ contract Campaigns is AccessControl, CampaignSignals {
     ) external onlyRole(ACCESS_ROLE) returns (CampaignTypes.Campaign memory) {
         if (campaignId == bytes32(0)) revert ZeroCampaignId();
         if (owner == address(0)) revert ZeroOwner();
-        if (
-            campaigns[campaignId].status !=
-            CampaignTypes.CampaignStatus.None
-        ) revert CampaignAlreadyExists(campaignId);
+        if (campaigns[campaignId].status != CampaignTypes.CampaignStatus.None)
+            revert CampaignAlreadyExists(campaignId);
         if (!isSupportedCombination(taskType, verificationType)) {
             revert UnsupportedCampaignCombination(taskType, verificationType);
         }
@@ -53,16 +51,53 @@ contract Campaigns is AccessControl, CampaignSignals {
             status: CampaignTypes.CampaignStatus.Active,
             rewardType: rewardType,
             completerReward: completerReward,
-            referralPool: referralPool
+            referralPool: referralPool,
+            balance: 0
         });
         return campaigns[campaignId];
+    }
+
+    function fundCampaign(
+        bytes32 campaignId,
+        address owner,
+        uint256 amount
+    ) external onlyRole(ACCESS_ROLE) returns (uint256 numberOfRunsRemaining) {
+        require(
+            hasRole(ACCESS_ROLE, msg.sender),
+            "fundCampaign: caller lacks ACCESS_ROLE"
+        );
+        CampaignTypes.Campaign storage campaign = _requireCampaign(campaignId);
+        if (campaign.status != CampaignTypes.CampaignStatus.Active) {
+            revert CampaignNotActive(campaignId);
+        }
+        if (owner != campaign.owner) {
+            revert UnauthorizedUser(owner);
+        }
+        if (campaign.rewardType != CampaignTypes.RewardType.Direct) {
+            revert NonFundableCampaign();
+        }
+
+        campaign.balance += amount;
+        if (campaign.referralPool + campaign.completerReward == 0) {
+            return 0;
+        }
+
+        numberOfRunsRemaining =
+            campaign.balance /
+            (campaign.referralPool + campaign.completerReward);
+
+        return numberOfRunsRemaining;
     }
 
     function submitFulfillment(
         bytes32 campaignId,
         bytes32 fulfillmentId,
         address participant
-    ) external onlyRole(ACCESS_ROLE) returns (CampaignTypes.Fulfillment memory) {
+    )
+        external
+        onlyRole(ACCESS_ROLE)
+        returns (CampaignTypes.Fulfillment memory)
+    {
         if (fulfillmentId == bytes32(0)) revert ZeroFulfillmentId();
         if (participant == address(0)) revert ZeroParticipant();
         if (
@@ -104,7 +139,11 @@ contract Campaigns is AccessControl, CampaignSignals {
     function verifyFulfillment(
         bytes32 fulfillmentId,
         address verifier
-    ) external onlyRole(ACCESS_ROLE) returns (CampaignTypes.Fulfillment memory) {
+    )
+        external
+        onlyRole(ACCESS_ROLE)
+        returns (CampaignTypes.Fulfillment memory)
+    {
         return
             _decideFulfillment(
                 fulfillmentId,
@@ -117,13 +156,29 @@ contract Campaigns is AccessControl, CampaignSignals {
     function rejectFulfillment(
         bytes32 fulfillmentId,
         address verifier
-    ) external onlyRole(ACCESS_ROLE) returns (CampaignTypes.Fulfillment memory) {
+    )
+        external
+        onlyRole(ACCESS_ROLE)
+        returns (CampaignTypes.Fulfillment memory)
+    {
         return
             _decideFulfillment(
                 fulfillmentId,
                 verifier,
                 CampaignTypes.FulfillmentStatus.Rejected
             );
+    }
+
+    function updateCampaignBalance(
+        bytes32 campaignId,
+        uint256 amount
+    ) external {
+        CampaignTypes.Campaign storage campaign = _requireCampaign(campaignId);
+        if (campaign.balance < amount) {
+            revert InsufficientFunds(amount - campaign.balance);
+        }
+
+        campaign.balance -= amount;
     }
 
     function getCampaign(
@@ -164,14 +219,8 @@ contract Campaigns is AccessControl, CampaignSignals {
         CampaignTypes.Fulfillment storage fulfillment = _requireFulfillment(
             fulfillmentId
         );
-        if (
-            fulfillment.status !=
-            CampaignTypes.FulfillmentStatus.Submitted
-        ) {
-            revert InvalidFulfillmentStatus(
-                fulfillmentId,
-                fulfillment.status
-            );
+        if (fulfillment.status != CampaignTypes.FulfillmentStatus.Submitted) {
+            revert InvalidFulfillmentStatus(fulfillmentId, fulfillment.status);
         }
 
         CampaignTypes.Campaign storage campaign = _requireCampaign(
@@ -199,8 +248,7 @@ contract Campaigns is AccessControl, CampaignSignals {
         address verifier
     ) private view {
         if (
-            campaign.verificationType !=
-            CampaignTypes.VerificationType.Manual
+            campaign.verificationType != CampaignTypes.VerificationType.Manual
         ) {
             revert UnsupportedVerificationType(campaign.verificationType);
         }
@@ -222,9 +270,7 @@ contract Campaigns is AccessControl, CampaignSignals {
         bytes32 fulfillmentId
     ) private view returns (CampaignTypes.Fulfillment storage fulfillment) {
         fulfillment = fulfillments[fulfillmentId];
-        if (
-            fulfillment.status == CampaignTypes.FulfillmentStatus.None
-        ) {
+        if (fulfillment.status == CampaignTypes.FulfillmentStatus.None) {
             revert FulfillmentNotFound(fulfillmentId);
         }
     }

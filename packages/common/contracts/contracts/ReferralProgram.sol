@@ -125,10 +125,7 @@ contract ReferralProgram is AccessControl, CampaignSignals {
     // Calculates the currently configured fixed points pool. Future reward
     // calculators can be added beside this function without changing allocation math.
     function viewReferralPointPool() public view returns (uint256) {
-        return
-            points.getPointsForAction(
-                ReferralPoints.Action.ReferredNewUser
-            );
+        return points.getPointsForAction(ReferralPoints.Action.ReferredNewUser);
     }
 
     function setReferralSplit(
@@ -186,7 +183,7 @@ contract ReferralProgram is AccessControl, CampaignSignals {
         CampaignTypes.RewardType rewardType,
         uint256 completerReward,
         uint256 referralPool
-    ) public returns (CampaignTypes.Campaign memory campaign) {
+    ) public payable returns (CampaignTypes.Campaign memory campaign) {
         uint256 totalReward = completerReward + referralPool;
         if (totalReward > maxCampaignPointsPerCompletion) {
             revert CampaignRewardAboveMaximum(
@@ -212,6 +209,10 @@ contract ReferralProgram is AccessControl, CampaignSignals {
             campaign.completerReward,
             campaign.referralPool
         );
+
+        if (rewardType == CampaignTypes.RewardType.Direct && msg.value > 0) {
+            campaigns.fundCampaign(campaignId, msg.sender, msg.value);
+        }
     }
 
     function submitCampaignFulfillment(
@@ -262,6 +263,15 @@ contract ReferralProgram is AccessControl, CampaignSignals {
             msg.sender,
             fulfillment.participant
         );
+    }
+
+    function fundCampaign(
+        bytes32 campaignId
+    ) public payable returns (uint256 numberOfRunsRemaining) {
+        if (msg.value <= 0) {
+            revert InsufficientFunds(msg.value);
+        }
+        return campaigns.fundCampaign(campaignId, msg.sender, msg.value);
     }
 
     function getCampaign(
@@ -419,13 +429,17 @@ contract ReferralProgram is AccessControl, CampaignSignals {
         if (allocation.directAmount > 0) {
             _awardAndUpdateMilestone(
                 allocation.directRecipient,
-                allocation.directAmount
+                allocation.directAmount,
+                allocation.rewardType,
+                allocation.campaignId
             );
         }
         if (allocation.grandparentAmount > 0) {
             _awardAndUpdateMilestone(
                 allocation.grandparentRecipient,
-                allocation.grandparentAmount
+                allocation.grandparentAmount,
+                allocation.rewardType,
+                allocation.campaignId
             );
         }
     }
@@ -440,7 +454,9 @@ contract ReferralProgram is AccessControl, CampaignSignals {
         if (campaign.completerReward > 0) {
             _awardAndUpdateMilestone(
                 fulfillment.participant,
-                campaign.completerReward
+                campaign.completerReward,
+                campaign.rewardType,
+                campaign.id
             );
         }
 
@@ -470,13 +486,22 @@ contract ReferralProgram is AccessControl, CampaignSignals {
     }
 
     function _awardAndUpdateMilestone(
-        address recipient,
-        uint256 amount
+        address payable recipient,
+        uint256 amount,
+        CampaignTypes.RewardType rewardType,
+        bytes32 campaignId
     ) private {
-        points.awardPoints(recipient, amount);
-        uint256 balance = points.getUserPoints(recipient);
-        emit ReferralPoints.PointsAdded(recipient, balance, false);
-        milestones.updateUserMilestone(recipient, balance);
+        if (rewardType == CampaignTypes.RewardType.Points) {
+            points.awardPoints(recipient, amount);
+            uint256 balance = points.getUserPoints(recipient);
+            emit ReferralPoints.PointsAdded(recipient, balance, false);
+            milestones.updateUserMilestone(recipient, balance);
+        }
+        if (rewardType == CampaignTypes.RewardType.Direct) {
+            campaigns.updateCampaignBalance(campaignId, amount);
+
+            recipient.transfer(amount);
+        }
     }
 
     function _addPendingPoints(
