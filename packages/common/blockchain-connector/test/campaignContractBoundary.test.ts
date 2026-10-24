@@ -33,16 +33,25 @@ describe("campaign contract boundary", () => {
       ["function", "submitCampaignFulfillment"],
       ["function", "verifyCampaignFulfillment"],
       ["function", "rejectCampaignFulfillment"],
+      ["function", "fundCampaign"],
+      ["function", "withdrawDirectRewards"],
+      ["function", "directRewardBalances"],
       ["function", "setMaxCampaignPointsPerCompletion"],
+      ["function", "setMaxCampaignDirectRewardPerCompletion"],
       ["event", "CampaignCreated"],
       ["event", "CampaignFulfillmentSubmitted"],
       ["event", "CampaignFulfillmentVerified"],
       ["event", "CampaignFulfillmentRejected"],
       ["event", "CampaignRewardPaid"],
+      ["event", "DirectRewardAccrued"],
+      ["event", "DirectRewardsWithdrawn"],
       ["error", "UnsupportedCampaignCombination"],
       ["error", "UnauthorizedManualVerifier"],
       ["error", "CampaignOwnerCannotParticipate"],
       ["error", "CampaignRewardAboveMaximum"],
+      ["error", "NoDirectRewards"],
+      ["error", "ZeroWithdrawalDestination"],
+      ["error", "DirectPaymentFailed"],
     ]) {
       expect(
         contracts.referral.abi.some(
@@ -58,6 +67,29 @@ describe("campaign contract boundary", () => {
     await expect(service.getMaxCampaignPointsPerCompletion()).resolves.toBe(1000n);
     expect(publicClient.readContract).toHaveBeenCalledWith(
       expect.objectContaining({ functionName: "maxCampaignPointsPerCompletion" }),
+    );
+  });
+
+  test("reads the direct-reward cap and an account's accrued balance", async () => {
+    publicClient.readContract
+      .mockResolvedValueOnce(5000n)
+      .mockResolvedValueOnce(75n);
+
+    await expect(service.getMaxCampaignDirectRewardPerCompletion()).resolves.toBe(5000n);
+    await expect(
+      service.getDirectRewardBalance("0x0000000000000000000000000000000000000001"),
+    ).resolves.toBe(75n);
+
+    expect(publicClient.readContract).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ functionName: "maxCampaignDirectRewardPerCompletion" }),
+    );
+    expect(publicClient.readContract).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        functionName: "directRewardBalances",
+        args: ["0x0000000000000000000000000000000000000001"],
+      }),
     );
   });
 
@@ -144,7 +176,27 @@ describe("campaign contract boundary", () => {
           directAmount: 8n,
           grandparentAmount: 2n,
           unallocatedAmount: 0n,
+          rewardType: CampaignRewardType.Points,
+          campaignId: "0xcampaign",
         },
+      },
+    ],
+    [
+      "listenToDirectRewardAccruedEvent",
+      "DirectRewardAccrued",
+      {
+        account: "0xparticipant",
+        amount: 30n,
+        balance: 60n,
+      },
+    ],
+    [
+      "listenToDirectRewardsWithdrawnEvent",
+      "DirectRewardsWithdrawn",
+      {
+        account: "0xparticipant",
+        destination: "0xdestination",
+        amount: 60n,
       },
     ],
   ] as const)(
@@ -187,6 +239,8 @@ describe("campaign contract boundary", () => {
     ["getCampaignFulfillmentVerifiedEvents", "CampaignFulfillmentVerified"],
     ["getCampaignFulfillmentRejectedEvents", "CampaignFulfillmentRejected"],
     ["getCampaignRewardPaidEvents", "CampaignRewardPaid"],
+    ["getDirectRewardAccruedEvents", "DirectRewardAccrued"],
+    ["getDirectRewardsWithdrawnEvents", "DirectRewardsWithdrawn"],
   ] as const)("%s reads %s over a block range", async (method, eventName) => {
     const expected = [{ blockNumber: 2n }];
     publicClient.getContractEvents.mockResolvedValueOnce(expected);
@@ -214,6 +268,8 @@ describe("campaign contract boundary", () => {
       "stopListeningToCampaignFulfillmentRejectedEvent",
     ],
     ["listenToCampaignRewardPaidEvent", "stopListeningToCampaignRewardPaidEvent"],
+    ["listenToDirectRewardAccruedEvent", "stopListeningToDirectRewardAccruedEvent"],
+    ["listenToDirectRewardsWithdrawnEvent", "stopListeningToDirectRewardsWithdrawnEvent"],
   ] as const)("%s is stopped only once", async (listenMethod, stopMethod) => {
     await (service[listenMethod] as any)(jest.fn());
     await service[stopMethod]();

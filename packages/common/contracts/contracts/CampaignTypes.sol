@@ -21,7 +21,8 @@ library CampaignTypes {
     enum CampaignStatus {
         None,
         Active,
-        Archived
+        Archived,
+        PendingFunding
     }
 
     // How a campaign pays each completion. Points is the only kind so far; others, like tokens, can be added

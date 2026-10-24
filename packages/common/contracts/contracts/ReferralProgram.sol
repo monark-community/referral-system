@@ -31,6 +31,11 @@ contract ReferralProgram is AccessControl, CampaignSignals {
     uint16 public grandparentReferralBps = 2_000;
     // Most points one campaign completion may pay: the completer's reward plus the referral pool
     uint256 public maxCampaignPointsPerCompletion;
+    // Most wei one direct-payment campaign completion may pay: the completer's reward plus the referral pool
+    uint256 public maxCampaignDirectRewardPerCompletion;
+
+    // Direct rewards accrue here so one recipient cannot block campaign verification by rejecting ETH.
+    mapping(address => uint256) public directRewardBalances;
 
     struct PendingPointAllocation {
         address directRecipient;
@@ -176,6 +181,12 @@ contract ReferralProgram is AccessControl, CampaignSignals {
         maxCampaignPointsPerCompletion = maximum;
     }
 
+    function setMaxCampaignDirectRewardPerCompletion(
+        uint256 maximum
+    ) public onlyRole(DEFAULT_ADMIN_ROLE) {
+        maxCampaignDirectRewardPerCompletion = maximum;
+    }
+
     function createCampaign(
         bytes32 campaignId,
         CampaignTypes.TaskType taskType,
@@ -185,11 +196,16 @@ contract ReferralProgram is AccessControl, CampaignSignals {
         uint256 referralPool
     ) public payable returns (CampaignTypes.Campaign memory campaign) {
         uint256 totalReward = completerReward + referralPool;
-        if (totalReward > maxCampaignPointsPerCompletion) {
-            revert CampaignRewardAboveMaximum(
-                totalReward,
-                maxCampaignPointsPerCompletion
-            );
+        if (
+            rewardType == CampaignTypes.RewardType.Points && msg.value != 0
+        ) {
+            revert NonFundableCampaign();
+        }
+        uint256 maximumReward = rewardType == CampaignTypes.RewardType.Points
+            ? maxCampaignPointsPerCompletion
+            : maxCampaignDirectRewardPerCompletion;
+        if (totalReward > maximumReward) {
+            revert CampaignRewardAboveMaximum(totalReward, maximumReward);
         }
         campaign = campaigns.createCampaign(
             campaignId,
@@ -212,6 +228,7 @@ contract ReferralProgram is AccessControl, CampaignSignals {
 
         if (rewardType == CampaignTypes.RewardType.Direct && msg.value > 0) {
             campaigns.fundCampaign(campaignId, msg.sender, msg.value);
+            campaign = campaigns.getCampaign(campaignId);
         }
     }
 
@@ -298,6 +315,24 @@ contract ReferralProgram is AccessControl, CampaignSignals {
             revert FulfillmentNotFound(fulfillmentId);
         }
         return campaigns.getFulfillment(fulfillmentId);
+    }
+
+    // Withdraws every direct reward the caller has accumulated. A separate destination lets
+    // contract accounts that cannot receive plain ETH route their funds to a payable address.
+    function withdrawDirectRewards(
+        address payable destination
+    ) public returns (uint256 amount) {
+        if (destination == address(0)) revert ZeroWithdrawalDestination();
+
+        amount = directRewardBalances[msg.sender];
+        if (amount == 0) revert NoDirectRewards(msg.sender);
+
+        // Checks-effects-interactions: a reentrant withdrawal sees a zero balance.
+        directRewardBalances[msg.sender] = 0;
+        (bool success, ) = destination.call{value: amount}("");
+        if (!success) revert DirectPaymentFailed(destination, amount);
+
+        emit DirectRewardsWithdrawn(msg.sender, destination, amount);
     }
 
     // -- Functions for invites and statuses
@@ -464,6 +499,8 @@ contract ReferralProgram is AccessControl, CampaignSignals {
             fulfillment.participant,
             campaign.referralPool
         );
+        allocation.rewardType = campaign.rewardType;
+        allocation.campaignId = campaign.id;
         if (allocation.directRecipient == campaign.owner) {
             allocation.unallocatedAmount += allocation.directAmount;
             allocation.directAmount = 0;
@@ -486,7 +523,7 @@ contract ReferralProgram is AccessControl, CampaignSignals {
     }
 
     function _awardAndUpdateMilestone(
-        address payable recipient,
+        address recipient,
         uint256 amount,
         CampaignTypes.RewardType rewardType,
         bytes32 campaignId
@@ -499,8 +536,9 @@ contract ReferralProgram is AccessControl, CampaignSignals {
         }
         if (rewardType == CampaignTypes.RewardType.Direct) {
             campaigns.updateCampaignBalance(campaignId, amount);
-
-            recipient.transfer(amount);
+            uint256 balance = directRewardBalances[recipient] + amount;
+            directRewardBalances[recipient] = balance;
+            emit DirectRewardAccrued(recipient, amount, balance);
         }
     }
 

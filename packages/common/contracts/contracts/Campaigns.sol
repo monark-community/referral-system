@@ -42,13 +42,16 @@ contract Campaigns is AccessControl, CampaignSignals {
         if (!isSupportedCombination(taskType, verificationType)) {
             revert UnsupportedCampaignCombination(taskType, verificationType);
         }
+        if (completerReward + referralPool == 0) revert ZeroCampaignReward();
 
         campaigns[campaignId] = CampaignTypes.Campaign({
             id: campaignId,
             owner: owner,
             taskType: taskType,
             verificationType: verificationType,
-            status: CampaignTypes.CampaignStatus.Active,
+            status: rewardType == CampaignTypes.RewardType.Direct
+                ? CampaignTypes.CampaignStatus.PendingFunding
+                : CampaignTypes.CampaignStatus.Active,
             rewardType: rewardType,
             completerReward: completerReward,
             referralPool: referralPool,
@@ -67,7 +70,7 @@ contract Campaigns is AccessControl, CampaignSignals {
             "fundCampaign: caller lacks ACCESS_ROLE"
         );
         CampaignTypes.Campaign storage campaign = _requireCampaign(campaignId);
-        if (campaign.status != CampaignTypes.CampaignStatus.Active) {
+        if (campaign.status == CampaignTypes.CampaignStatus.Archived) {
             revert CampaignNotActive(campaignId);
         }
         if (owner != campaign.owner) {
@@ -78,13 +81,10 @@ contract Campaigns is AccessControl, CampaignSignals {
         }
 
         campaign.balance += amount;
-        if (campaign.referralPool + campaign.completerReward == 0) {
-            return 0;
-        }
-
-        numberOfRunsRemaining =
-            campaign.balance /
-            (campaign.referralPool + campaign.completerReward);
+        numberOfRunsRemaining = campaign.balance / _rewardPerRun(campaign);
+        campaign.status = numberOfRunsRemaining > 0
+            ? CampaignTypes.CampaignStatus.Active
+            : CampaignTypes.CampaignStatus.PendingFunding;
 
         return numberOfRunsRemaining;
     }
@@ -172,13 +172,16 @@ contract Campaigns is AccessControl, CampaignSignals {
     function updateCampaignBalance(
         bytes32 campaignId,
         uint256 amount
-    ) external {
+    ) external onlyRole(ACCESS_ROLE) {
         CampaignTypes.Campaign storage campaign = _requireCampaign(campaignId);
         if (campaign.balance < amount) {
             revert InsufficientFunds(amount - campaign.balance);
         }
 
         campaign.balance -= amount;
+        if (campaign.balance < _rewardPerRun(campaign)) {
+            campaign.status = CampaignTypes.CampaignStatus.PendingFunding;
+        }
     }
 
     function getCampaign(
@@ -264,6 +267,12 @@ contract Campaigns is AccessControl, CampaignSignals {
         if (campaign.status == CampaignTypes.CampaignStatus.None) {
             revert CampaignNotFound(campaignId);
         }
+    }
+
+    function _rewardPerRun(
+        CampaignTypes.Campaign storage campaign
+    ) private view returns (uint256) {
+        return campaign.completerReward + campaign.referralPool;
     }
 
     function _requireFulfillment(
