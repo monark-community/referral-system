@@ -6,8 +6,11 @@
 // - Each user submits once per campaign, a rejection frees the spot but not the user's one try,
 //   and creators can't take part in their own campaigns
 // - Pause, end and cancel are kept here; the contract has no such states, so the API stops taking submissions
+// - A private campaign is left off the board, and submitting to it needs the code from its link. The code is
+//   random rather than the campaign id, since the chain makes every campaign id public. It is set while the
+//   campaign is a draft and never changes after publishing
 
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { Prisma, type CampaignFulfillmentStatus } from "@prisma/client";
 import { createClient } from "@reffinity/blockchain-connector/clients";
 import { ReadReferralContractService } from "@reffinity/blockchain-connector/readReferralContract";
@@ -124,12 +127,32 @@ function isUniqueViolation(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
 }
 
+// 18 random bytes make 24 URL-safe characters, too many to guess
+function generatePrivateCode(): string {
+  return randomBytes(18).toString("base64url");
+}
+
+// A draft switched to private gets a code, one switched to public loses it, and one staying private keeps it
+function privateCodeFor(isPrivate: boolean, current: string | null = null): string | null {
+  if (!isPrivate) return null;
+  return current ?? generatePrivateCode();
+}
+
 // ---------- Reading campaigns ----------
 
 /** A user campaign by id or key, or null if there is none (the built-in referral campaign is not one). */
 export async function findManualCampaign(idOrKey: string): Promise<ManualCampaignDefinition | null> {
   const row = await prisma.campaign.findFirst({
     where: { OR: [{ id: idOrKey }, { key: idOrKey }], isSystem: false, ownerId: { not: null } },
+    include: campaignInclude,
+  });
+  return row ? parseStoredManualCampaign(row) : null;
+}
+
+/** The private campaign a link's code opens, or null if no private campaign has that code. */
+export async function findPrivateManualCampaign(code: string): Promise<ManualCampaignDefinition | null> {
+  const row = await prisma.campaign.findFirst({
+    where: { privateCode: code, isPrivate: true, isSystem: false, ownerId: { not: null } },
     include: campaignInclude,
   });
   return row ? parseStoredManualCampaign(row) : null;
@@ -160,10 +183,10 @@ export async function countSpotsTaken(taskIds: string[]): Promise<Map<string, nu
   return new Map(groups.map((group) => [group.taskId, group._count._all]));
 }
 
-/** Campaigns taking submissions now, for the campaign board, newest first. */
+/** Public campaigns taking submissions now, for the campaign board, newest first. */
 export async function listOpenManualCampaigns(now = new Date()): Promise<ManualCampaignDefinition[]> {
   const rows = await prisma.campaign.findMany({
-    where: { isSystem: false, ownerId: { not: null }, status: "ACTIVE", endsAt: { gt: now } },
+    where: { isSystem: false, ownerId: { not: null }, isPrivate: false, status: "ACTIVE", endsAt: { gt: now } },
     include: campaignInclude,
     orderBy: { createdAt: "desc" },
   });
@@ -267,6 +290,8 @@ export async function createManualCampaignDraft(
       ownerId,
       maxCompletions: input.maxCompletions,
       endsAt: input.endsAt,
+      isPrivate: input.isPrivate,
+      privateCode: privateCodeFor(input.isPrivate),
       task: {
         create: {
           type: "BOUNTY",
@@ -323,6 +348,8 @@ export async function updateManualCampaignDraft(
         instructions: input.instructions,
         maxCompletions: input.maxCompletions,
         endsAt: input.endsAt,
+        isPrivate: input.isPrivate,
+        privateCode: privateCodeFor(input.isPrivate, current.privateCode),
       },
     });
     if (count === 0) throw new ManualCampaignError("NOT_EDITABLE", "Only a draft can be edited");
@@ -387,7 +414,10 @@ export async function getMyManualCampaignFulfillment(userId: string, campaign: M
   });
 }
 
-/** Saves a participant's proof as SUBMITTED; their wallet then sends it to the chain. */
+/**
+ * Saves a participant's proof as SUBMITTED; their wallet then sends it to the chain.
+ * A private campaign also needs `code` from its link; without the right one it is not found, like an unknown id.
+ */
 export async function submitManualCampaignProof(
   userId: string,
   campaignId: string,
@@ -396,6 +426,10 @@ export async function submitManualCampaignProof(
   now = new Date(),
 ) {
   const campaign = await requireManualCampaign(campaignId);
+  const fields = body as Record<string, unknown> | null;
+  if (campaign.isPrivate && fields?.code !== campaign.privateCode) {
+    throw new ManualCampaignError("CAMPAIGN_NOT_FOUND", "Campaign not found");
+  }
   if (campaign.ownerId === userId) {
     throw new ManualCampaignError("OWN_CAMPAIGN", "Creators can't complete their own campaigns");
   }
@@ -412,7 +446,7 @@ export async function submitManualCampaignProof(
 
   let proof;
   try {
-    proof = parseProof(campaign.category, (body as Record<string, unknown> | null)?.proof);
+    proof = parseProof(campaign.category, fields?.proof);
   } catch (error) {
     invalid(error);
   }

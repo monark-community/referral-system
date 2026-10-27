@@ -211,6 +211,9 @@ model Campaign {
   // When its CampaignCreated event was seen
   publishedAt            DateTime? @map("published_at")
   publishTransactionHash String?   @map("publish_transaction_hash")
+  // A private campaign stays off the board; people open it through one link holding its code
+  isPrivate              Boolean   @default(false) @map("is_private")
+  privateCode            String?   @unique @map("private_code")
 
   owner User?         @relation("CampaignOwner", fields: [ownerId], references: [id], onDelete: Restrict)
   task  CampaignTask?

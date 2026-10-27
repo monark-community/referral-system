@@ -49,11 +49,18 @@ describe("parseManualCampaignInput", () => {
       referralPoolPoints: 10,
       maxCompletions: 50,
       endsAt: new Date("2026-11-01T00:00:00.000Z"),
+      isPrivate: false,
     });
   });
 
   test("the description is optional", () => {
     expect(parseManualCampaignInput(body({ description: undefined }), { now }).description).toBe("");
+  });
+
+  test("a campaign is public unless the creator makes it private", () => {
+    expect(parseManualCampaignInput(body(), { now }).isPrivate).toBe(false);
+    expect(parseManualCampaignInput(body({ isPrivate: true }), { now }).isPrivate).toBe(true);
+    expect(fieldOf(() => parseManualCampaignInput(body({ isPrivate: "yes" }), { now }))).toBe("isPrivate");
   });
 
   test.each([
@@ -85,6 +92,10 @@ describe("parseManualCampaignInput", () => {
     const current = parseManualCampaignInput(body(), { now });
 
     expect(parseManualCampaignInput({ title: "New title" }, { now, current })).toEqual({ ...current, title: "New title" });
+    // Being private is kept the same way
+    const privateCurrent = { ...current, isPrivate: true };
+    expect(parseManualCampaignInput({ title: "New title" }, { now, current: privateCurrent }).isPrivate).toBe(true);
+    expect(parseManualCampaignInput({ isPrivate: false }, { now, current: privateCurrent }).isPrivate).toBe(false);
     // The merged campaign must still be valid
     expect(fieldOf(() => parseManualCampaignInput({ completerPoints: 0, referralPoolPoints: 0 }, { now, current }))).toBe(
       "completerPoints",
@@ -136,6 +147,8 @@ describe("parseStoredManualCampaign", () => {
       owner: { name: "Dave", walletAddress: "0xdave" },
       maxCompletions: 50,
       endsAt: new Date("2026-11-01T00:00:00.000Z"),
+      isPrivate: false,
+      privateCode: null,
       publishedAt: new Date("2026-10-17T12:00:00.000Z"),
       createdAt: new Date("2026-10-16T12:00:00.000Z"),
       task: {
@@ -167,7 +180,15 @@ describe("parseStoredManualCampaign", () => {
         referralPoolPoints: 10,
         taskId: "task-1",
         rewardPolicyId: "reward-1",
+        isPrivate: false,
+        privateCode: null,
       }),
+    );
+  });
+
+  test("reads a private campaign's code", () => {
+    expect(parseStoredManualCampaign(row({ isPrivate: true, privateCode: "secret-code" }))).toEqual(
+      expect.objectContaining({ isPrivate: true, privateCode: "secret-code" }),
     );
   });
 
@@ -177,6 +198,8 @@ describe("parseStoredManualCampaign", () => {
     ["an unknown status", { status: "ARCHIVED" }],
     ["a missing end date", { endsAt: null }],
     ["a missing task", { task: null }],
+    ["a private campaign without a code", { isPrivate: true, privateCode: null }],
+    ["a public campaign with a code", { privateCode: "secret-code" }],
   ])("refuses %s", (_case, overrides) => {
     expect(() => parseStoredManualCampaign(row(overrides as Partial<StoredManualCampaign>))).toThrow(
       ManualCampaignDataError,
