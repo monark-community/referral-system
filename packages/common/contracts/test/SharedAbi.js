@@ -1,4 +1,4 @@
-// Purpose: Checks that the hand-maintained ABI in index.ts, which the API and web app use, matches the compiled contract
+// Purpose: Checks that the generated ABI in index.ts, which the API and web app use, matches the compiled contract
 // Notes:
 // - A contract change without the matching index.ts edit fails here instead of in the listener or the web app
 // - Reads compiled artifacts only, so it needs no Hardhat node or accounts

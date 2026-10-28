@@ -21,12 +21,14 @@ library CampaignTypes {
     enum CampaignStatus {
         None,
         Active,
-        Archived
+        Archived,
+        PendingFunding
     }
 
     // How a campaign pays each completion. Points is the only kind so far; others, like tokens, can be added
     enum RewardType {
-        Points
+        Points,
+        Direct
     }
 
     enum FulfillmentStatus {
@@ -47,6 +49,8 @@ library CampaignTypes {
         uint256 completerReward;
         // Split between the completer's referrer and grandparent, like a sign-up's referral pool
         uint256 referralPool;
+        // For bounty type campaigns the balance is how much money remains
+        uint256 balance;
     }
 
     struct Fulfillment {

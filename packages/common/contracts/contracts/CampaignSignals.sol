@@ -34,12 +34,16 @@ abstract contract CampaignSignals {
         bytes32 fulfillmentId,
         CampaignTypes.FulfillmentStatus currentStatus
     );
-    error UnauthorizedManualVerifier(
-        bytes32 campaignId,
-        address verifier
-    );
+    error UnauthorizedManualVerifier(bytes32 campaignId, address verifier);
+    error UnauthorizedUser(address user);
     error CampaignOwnerCannotParticipate(bytes32 campaignId, address owner);
     error CampaignRewardAboveMaximum(uint256 reward, uint256 maximum);
+    error ZeroCampaignReward();
+    error InsufficientFunds(uint256 amount);
+    error NonFundableCampaign();
+    error NoDirectRewards(address account);
+    error ZeroWithdrawalDestination();
+    error DirectPaymentFailed(address recipient, uint256 amount);
 
     event CampaignCreated(
         bytes32 indexed campaignId,
@@ -82,5 +86,17 @@ abstract contract CampaignSignals {
         uint256 completerReward,
         uint256 referralPool,
         ReferralAllocation.Allocation referralPayout
+    );
+
+    event DirectRewardAccrued(
+        address indexed account,
+        uint256 amount,
+        uint256 balance
+    );
+
+    event DirectRewardsWithdrawn(
+        address indexed account,
+        address indexed destination,
+        uint256 amount
     );
 }

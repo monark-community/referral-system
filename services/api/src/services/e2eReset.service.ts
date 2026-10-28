@@ -27,6 +27,8 @@ export type E2EResetResult = {
     campaignVerificationPolicies: number;
     campaignRewardPolicies: number;
     campaignFulfillments: number;
+    directCampaignSettlements: number;
+    directRewardEvents: number;
   };
 };
 
@@ -108,6 +110,8 @@ async function databaseCounts(): Promise<E2EResetResult["counts"]> {
     campaignVerificationPolicies,
     campaignRewardPolicies,
     campaignFulfillments,
+    directCampaignSettlements,
+    directRewardEvents,
   ] = await Promise.all([
     prisma.user.count(),
     prisma.referral.count(),
@@ -119,6 +123,8 @@ async function databaseCounts(): Promise<E2EResetResult["counts"]> {
     prisma.campaignVerificationPolicy.count(),
     prisma.campaignRewardPolicy.count(),
     prisma.campaignFulfillment.count(),
+    prisma.directCampaignSettlement.count(),
+    prisma.directRewardEvent.count(),
   ]);
   return {
     users,
@@ -131,6 +137,8 @@ async function databaseCounts(): Promise<E2EResetResult["counts"]> {
     campaignVerificationPolicies,
     campaignRewardPolicies,
     campaignFulfillments,
+    directCampaignSettlements,
+    directRewardEvents,
   };
 }
 
@@ -156,6 +164,8 @@ async function performReset(): Promise<E2EResetResult> {
       prisma.$executeRaw`
         TRUNCATE TABLE
           "campaign_fulfillments",
+          "direct_campaign_settlements",
+          "direct_reward_events",
           "referral_point_allocations",
           "referrals",
           "milestone_tiers",
@@ -188,6 +198,8 @@ async function performReset(): Promise<E2EResetResult> {
       counts.campaignVerificationPolicies !== 1 ||
       counts.campaignRewardPolicies !== 1 ||
       counts.campaignFulfillments !== 0
+      || counts.directCampaignSettlements !== 0
+      || counts.directRewardEvents !== 0
     ) {
       throw new Error(`Database reset left application rows behind: ${JSON.stringify(counts)}`);
     }

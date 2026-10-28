@@ -21,10 +21,12 @@ export enum CampaignStatus {
   None,
   Active,
   Archived,
+  PendingFunding,
 }
 
 export enum CampaignRewardType {
   Points,
+  Direct,
 }
 
 export enum CampaignFulfillmentStatus {
@@ -43,6 +45,7 @@ export type Campaign = {
   rewardType: CampaignRewardType;
   completerReward: bigint;
   referralPool: bigint;
+  balance: bigint;
 };
 
 export type CampaignFulfillment = {
@@ -97,6 +100,9 @@ export type ReferralPayout = {
   directAmount: bigint;
   grandparentAmount: bigint;
   unallocatedAmount: bigint;
+  // Optional for compatibility with deployments whose nested tuple predates these mirrors.
+  rewardType?: CampaignRewardType;
+  campaignId?: Hex;
 };
 
 export type CampaignRewardPaidEvent = ChainEventPosition & {
@@ -107,6 +113,18 @@ export type CampaignRewardPaidEvent = ChainEventPosition & {
   completerReward: bigint;
   referralPool: bigint;
   referralPayout: ReferralPayout;
+};
+
+export type DirectRewardAccruedEvent = ChainEventPosition & {
+  account: Address;
+  amount: bigint;
+  balance: bigint;
+};
+
+export type DirectRewardsWithdrawnEvent = ChainEventPosition & {
+  account: Address;
+  destination: Address;
+  amount: bigint;
 };
 
 enum InviteStatus {
@@ -124,6 +142,8 @@ export class ReadReferralContractService {
   private unwatchCampaignFulfillmentVerifiedEvent: WatchContractEventReturnType | null = null;
   private unwatchCampaignFulfillmentRejectedEvent: WatchContractEventReturnType | null = null;
   private unwatchCampaignRewardPaidEvent: WatchContractEventReturnType | null = null;
+  private unwatchDirectRewardAccruedEvent: WatchContractEventReturnType | null = null;
+  private unwatchDirectRewardsWithdrawnEvent: WatchContractEventReturnType | null = null;
 
   constructor(private clients: any) {}
 
@@ -225,6 +245,24 @@ export class ReadReferralContractService {
       address: contracts.referral.address.local,
       abi: contracts.referral.abi,
       functionName: "maxCampaignPointsPerCompletion",
+    })) as bigint;
+  }
+
+  // The most wei one direct-payment campaign completion may pay, set by an admin
+  async getMaxCampaignDirectRewardPerCompletion(): Promise<bigint> {
+    return (await this.clients.publicClient.readContract({
+      address: contracts.referral.address.local,
+      abi: contracts.referral.abi,
+      functionName: "maxCampaignDirectRewardPerCompletion",
+    })) as bigint;
+  }
+
+  async getDirectRewardBalance(account: Address): Promise<bigint> {
+    return (await this.clients.publicClient.readContract({
+      address: contracts.referral.address.local,
+      abi: contracts.referral.abi,
+      functionName: "directRewardBalances",
+      args: [account],
     })) as bigint;
   }
 
@@ -498,6 +536,100 @@ export class ReadReferralContractService {
     if (this.unwatchCampaignRewardPaidEvent) {
       this.unwatchCampaignRewardPaidEvent();
       this.unwatchCampaignRewardPaidEvent = null;
+    }
+  }
+
+  async listenToDirectRewardAccruedEvent(
+    callback: (eventData: DirectRewardAccruedEvent) => void | Promise<void>,
+    pollingInterval = 10000,
+  ) {
+    this.unwatchDirectRewardAccruedEvent =
+      this.clients.publicClient.watchContractEvent({
+        address: contracts.referral.address.local,
+        abi: contracts.referral.abi,
+        eventName: "DirectRewardAccrued",
+        pollingInterval,
+        onLogs: async (logs: any) => {
+          for (const log of logs) {
+            if (!log.args) continue;
+            await callback({
+              ...log.args,
+              blockNumber: log.blockNumber!,
+              logIndex: log.logIndex!,
+              transactionHash: log.transactionHash!,
+            } as DirectRewardAccruedEvent);
+          }
+        },
+      });
+  }
+
+  async getDirectRewardAccruedEvents({
+    fromBlock,
+    toBlock,
+  }: {
+    fromBlock: bigint;
+    toBlock: bigint;
+  }) {
+    return this.clients.publicClient.getContractEvents({
+      address: contracts.referral.address.local,
+      abi: contracts.referral.abi,
+      eventName: "DirectRewardAccrued",
+      fromBlock,
+      toBlock,
+    });
+  }
+
+  async stopListeningToDirectRewardAccruedEvent() {
+    if (this.unwatchDirectRewardAccruedEvent) {
+      this.unwatchDirectRewardAccruedEvent();
+      this.unwatchDirectRewardAccruedEvent = null;
+    }
+  }
+
+  async listenToDirectRewardsWithdrawnEvent(
+    callback: (eventData: DirectRewardsWithdrawnEvent) => void | Promise<void>,
+    pollingInterval = 10000,
+  ) {
+    this.unwatchDirectRewardsWithdrawnEvent =
+      this.clients.publicClient.watchContractEvent({
+        address: contracts.referral.address.local,
+        abi: contracts.referral.abi,
+        eventName: "DirectRewardsWithdrawn",
+        pollingInterval,
+        onLogs: async (logs: any) => {
+          for (const log of logs) {
+            if (!log.args) continue;
+            await callback({
+              ...log.args,
+              blockNumber: log.blockNumber!,
+              logIndex: log.logIndex!,
+              transactionHash: log.transactionHash!,
+            } as DirectRewardsWithdrawnEvent);
+          }
+        },
+      });
+  }
+
+  async getDirectRewardsWithdrawnEvents({
+    fromBlock,
+    toBlock,
+  }: {
+    fromBlock: bigint;
+    toBlock: bigint;
+  }) {
+    return this.clients.publicClient.getContractEvents({
+      address: contracts.referral.address.local,
+      abi: contracts.referral.abi,
+      eventName: "DirectRewardsWithdrawn",
+      fromBlock,
+      toBlock,
+    });
+  }
+
+  async stopListeningToDirectRewardsWithdrawnEvent() {
+    if (this.unwatchDirectRewardsWithdrawnEvent) {
+      this.unwatchDirectRewardsWithdrawnEvent();
+      this.unwatchDirectRewardsWithdrawnEvent = null;
     }
   }
 

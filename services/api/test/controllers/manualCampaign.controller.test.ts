@@ -10,6 +10,9 @@ import {
   createCampaign,
   getCampaignSubmissions,
   getMyCampaigns,
+  getMyDirectRewards,
+  prepareCampaignFunding,
+  prepareMyDirectRewardWithdrawal,
   rejectCampaignSubmission,
   submitCampaignProof,
   updateCampaign,
@@ -43,6 +46,10 @@ jest.mock("@/services/manualCampaign.service", () => {
     listManualCampaignSubmissions: jest.fn(),
     listOpenManualCampaigns: jest.fn(),
     listOwnedManualCampaigns: jest.fn(),
+    refreshManualCampaignFunding: jest.fn(),
+    prepareDirectCampaignFunding: jest.fn(),
+    getDirectRewardAccount: jest.fn(),
+    prepareDirectRewardWithdrawal: jest.fn(),
     rejectManualCampaignSubmission: jest.fn(),
     submitManualCampaignProof: jest.fn(),
     updateManualCampaignDraft: jest.fn(),
@@ -73,7 +80,7 @@ const CAMPAIGN_ID = "11111111-1111-4111-8111-111111111111";
 const FULFILLMENT_ID = "22222222-2222-4222-8222-222222222222";
 const bytes32 = (uuid: string) => `0x${uuid.replace(/-/g, "").padEnd(64, "0")}`;
 
-function campaign(overrides: Partial<ManualCampaignDefinition> = {}): ManualCampaignDefinition {
+function campaign(overrides: Record<string, unknown> = {}): ManualCampaignDefinition {
   return {
     id: CAMPAIGN_ID,
     key: CAMPAIGN_ID,
@@ -84,6 +91,7 @@ function campaign(overrides: Partial<ManualCampaignDefinition> = {}): ManualCamp
     instructions: "Follow @dave and paste the link",
     status: "ACTIVE",
     category: "SOCIAL_MEDIA",
+    rewardType: "POINTS",
     completerPoints: 30,
     referralPoolPoints: 10,
     maxCompletions: 5,
@@ -93,9 +101,11 @@ function campaign(overrides: Partial<ManualCampaignDefinition> = {}): ManualCamp
     taskId: "task-1",
     rewardPolicyId: "reward-1",
     publishedAt: new Date("2026-10-17T00:00:00.000Z"),
+    chainStatus: null,
+    chainBalanceWei: null,
     createdAt: new Date("2026-10-16T00:00:00.000Z"),
     ...overrides,
-  };
+  } as ManualCampaignDefinition;
 }
 
 function fulfillment(overrides: Record<string, unknown> = {}): any {
@@ -148,13 +158,19 @@ const body = (res: ReturnType<typeof response>) => res.json.mock.calls[0][0];
 beforeEach(() => {
   jest.resetAllMocks();
   mocked.countSpotsTaken.mockResolvedValue(new Map());
+  mocked.refreshManualCampaignFunding.mockImplementation(async (value) => value);
   jest.spyOn(console, "error").mockImplementation(() => {});
 });
 
 describe("errors", () => {
   test.each([
     ["INVALID_INPUT", 400],
+    ["INVALID_RUN_COUNT", 400],
+    ["INVALID_DESTINATION", 400],
     ["REWARD_ABOVE_MAXIMUM", 400],
+    ["WRONG_REWARD_TYPE", 409],
+    ["INSUFFICIENT_FUNDING", 409],
+    ["NO_DIRECT_REWARDS", 409],
     ["NOT_CAMPAIGN_OWNER", 403],
     ["OWN_CAMPAIGN", 403],
     ["CAMPAIGN_NOT_FOUND", 404],
@@ -230,9 +246,9 @@ describe("the creator's campaigns", () => {
         instructions: "Follow @dave and paste the link",
         spotsLeft: 5,
         endsAt: "2026-11-01T00:00:00.000Z",
+        chain: expect.objectContaining({ functionName: "createCampaign", args: [bytes32(CAMPAIGN_ID), 1, 1, 0, 30, 10] }),
         isPrivate: false,
         privateCode: null,
-        chain: { functionName: "createCampaign", args: [bytes32(CAMPAIGN_ID), 1, 1, 0, 30, 10] },
       }),
     );
   });
@@ -267,6 +283,46 @@ describe("the creator's campaigns", () => {
     expect(mocked.updateManualCampaignDraft).toHaveBeenCalledWith("dave", CAMPAIGN_ID, { title: "New" });
     expect(mocked.changeManualCampaignStatus).toHaveBeenCalledWith("dave", CAMPAIGN_ID, "PAUSED");
     expect(body(paused).campaign).toEqual(expect.objectContaining({ status: "PAUSED", chain: null }));
+  });
+
+  test("Direct create and edit responses preserve wei strings and the payable value", async () => {
+    const directDraft = campaign({
+      status: "DRAFT",
+      publishedAt: null,
+      rewardType: "DIRECT",
+      completerRewardWei: "30",
+      referralPoolWei: "10",
+      initialFundingRuns: 10,
+      chainBalanceWei: null,
+      chainStatus: null,
+    });
+    mocked.createManualCampaignDraft.mockResolvedValue(directDraft);
+    mocked.updateManualCampaignDraft.mockResolvedValue({ ...directDraft, title: "Edited Direct" });
+    const created = response();
+    const edited = response();
+
+    await createCampaign(request({ body: { rewardType: "DIRECT" } }), created);
+    await updateCampaign(request({ body: { title: "Edited Direct" } }), edited);
+
+    for (const result of [created, edited]) {
+      expect(body(result).campaign).toEqual(expect.objectContaining({
+        reward: {
+          type: "DIRECT",
+          completerRewardWei: "30",
+          referralPoolWei: "10",
+          rewardPerRunWei: "40",
+          initialFundingRuns: 10,
+          initialFundingWei: "400",
+          chainBalanceWei: null,
+          chainStatus: null,
+        },
+        chain: expect.objectContaining({
+          functionName: "createCampaign",
+          args: [bytes32(CAMPAIGN_ID), 1, 1, 1, "30", "10"],
+          valueWei: "400",
+        }),
+      }));
+    }
   });
 
   test("my campaigns lists what I created with submission counts, and what I joined with my status", async () => {
@@ -341,10 +397,10 @@ describe("submitting proof", () => {
         status: "SUBMITTED",
         proof: "https://x.com/alice",
         submission: null,
-        chain: {
+        chain: expect.objectContaining({
           functionName: "submitCampaignFulfillment",
           args: [bytes32(CAMPAIGN_ID), bytes32(FULFILLMENT_ID)],
-        },
+        }),
       }),
     );
   });
@@ -394,7 +450,7 @@ describe("reviewing", () => {
         chain: null,
       }),
     );
-    expect(approvedHere.chain).toEqual({ functionName: "verifyCampaignFulfillment", args: [bytes32("approved-here")] });
+    expect(approvedHere.chain).toEqual(expect.objectContaining({ functionName: "verifyCampaignFulfillment", args: [bytes32("approved-here")] }));
     expect(approvedOnChain.chain).toBeNull();
   });
 
@@ -422,9 +478,41 @@ describe("reviewing", () => {
     expect(body(rejected).fulfillment).toEqual(
       expect.objectContaining({
         rejectionReason: "Wrong profile",
-        chain: { functionName: "rejectCampaignFulfillment", args: [bytes32(FULFILLMENT_ID)] },
+        chain: expect.objectContaining({ functionName: "rejectCampaignFulfillment", args: [bytes32(FULFILLMENT_ID)] }),
       }),
     );
+  });
+});
+
+describe("Direct funding and rewards", () => {
+  test("returns funding and withdrawal descriptors without claiming they were submitted", async () => {
+    mocked.prepareDirectCampaignFunding.mockResolvedValue({
+      funding: { requestedRuns: 10, valueWei: "4000", currentBalanceWei: "100", currentRunsRemaining: 0, projectedBalanceWei: "4100", projectedRunsRemaining: 10 },
+      chain: { chainId: 31337, contractAddress: "0xcontract", functionName: "fundCampaign", args: ["0xcampaign"], valueWei: "4000" },
+    });
+    mocked.prepareDirectRewardWithdrawal.mockResolvedValue({
+      wallet: "0xaccount", destination: "0xdestination", balanceWei: "7000",
+      chain: { chainId: 31337, contractAddress: "0xcontract", functionName: "withdrawDirectRewards", args: ["0xdestination"] },
+    });
+    const funding = response();
+    const withdrawal = response();
+    await prepareCampaignFunding(request({ body: { runs: 10 } }), funding);
+    await prepareMyDirectRewardWithdrawal(request({ body: { destination: "0xdestination" } }), withdrawal);
+    expect(body(funding)).toEqual(expect.objectContaining({ funding: expect.objectContaining({ valueWei: "4000" }) }));
+    expect(body(withdrawal).chain.functionName).toBe("withdrawDirectRewards");
+  });
+
+  test("serializes balance history block numbers and dates safely", async () => {
+    mocked.getDirectRewardAccount.mockResolvedValue({
+      wallet: "0xaccount", chainId: 31337, balanceWei: "7000",
+      history: [{ id: "event-1", blockNumber: 42n, observedAt: new Date("2026-10-26T00:00:00.000Z"), amountWei: "7000" }],
+    });
+    const res = response();
+    await getMyDirectRewards(request(), res);
+    expect(body(res)).toEqual(expect.objectContaining({
+      balanceWei: "7000",
+      history: [expect.objectContaining({ blockNumber: "42", observedAt: "2026-10-26T00:00:00.000Z" })],
+    }));
   });
 });
 

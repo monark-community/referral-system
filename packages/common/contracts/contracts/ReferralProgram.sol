@@ -31,6 +31,11 @@ contract ReferralProgram is AccessControl, CampaignSignals {
     uint16 public grandparentReferralBps = 2_000;
     // Most points one campaign completion may pay: the completer's reward plus the referral pool
     uint256 public maxCampaignPointsPerCompletion;
+    // Most wei one direct-payment campaign completion may pay: the completer's reward plus the referral pool
+    uint256 public maxCampaignDirectRewardPerCompletion;
+
+    // Direct rewards accrue here so one recipient cannot block campaign verification by rejecting ETH.
+    mapping(address => uint256) public directRewardBalances;
 
     struct PendingPointAllocation {
         address directRecipient;
@@ -125,10 +130,7 @@ contract ReferralProgram is AccessControl, CampaignSignals {
     // Calculates the currently configured fixed points pool. Future reward
     // calculators can be added beside this function without changing allocation math.
     function viewReferralPointPool() public view returns (uint256) {
-        return
-            points.getPointsForAction(
-                ReferralPoints.Action.ReferredNewUser
-            );
+        return points.getPointsForAction(ReferralPoints.Action.ReferredNewUser);
     }
 
     function setReferralSplit(
@@ -179,6 +181,12 @@ contract ReferralProgram is AccessControl, CampaignSignals {
         maxCampaignPointsPerCompletion = maximum;
     }
 
+    function setMaxCampaignDirectRewardPerCompletion(
+        uint256 maximum
+    ) public onlyRole(DEFAULT_ADMIN_ROLE) {
+        maxCampaignDirectRewardPerCompletion = maximum;
+    }
+
     function createCampaign(
         bytes32 campaignId,
         CampaignTypes.TaskType taskType,
@@ -186,13 +194,18 @@ contract ReferralProgram is AccessControl, CampaignSignals {
         CampaignTypes.RewardType rewardType,
         uint256 completerReward,
         uint256 referralPool
-    ) public returns (CampaignTypes.Campaign memory campaign) {
+    ) public payable returns (CampaignTypes.Campaign memory campaign) {
         uint256 totalReward = completerReward + referralPool;
-        if (totalReward > maxCampaignPointsPerCompletion) {
-            revert CampaignRewardAboveMaximum(
-                totalReward,
-                maxCampaignPointsPerCompletion
-            );
+        if (
+            rewardType == CampaignTypes.RewardType.Points && msg.value != 0
+        ) {
+            revert NonFundableCampaign();
+        }
+        uint256 maximumReward = rewardType == CampaignTypes.RewardType.Points
+            ? maxCampaignPointsPerCompletion
+            : maxCampaignDirectRewardPerCompletion;
+        if (totalReward > maximumReward) {
+            revert CampaignRewardAboveMaximum(totalReward, maximumReward);
         }
         campaign = campaigns.createCampaign(
             campaignId,
@@ -212,6 +225,11 @@ contract ReferralProgram is AccessControl, CampaignSignals {
             campaign.completerReward,
             campaign.referralPool
         );
+
+        if (rewardType == CampaignTypes.RewardType.Direct && msg.value > 0) {
+            campaigns.fundCampaign(campaignId, msg.sender, msg.value);
+            campaign = campaigns.getCampaign(campaignId);
+        }
     }
 
     function submitCampaignFulfillment(
@@ -264,6 +282,15 @@ contract ReferralProgram is AccessControl, CampaignSignals {
         );
     }
 
+    function fundCampaign(
+        bytes32 campaignId
+    ) public payable returns (uint256 numberOfRunsRemaining) {
+        if (msg.value <= 0) {
+            revert InsufficientFunds(msg.value);
+        }
+        return campaigns.fundCampaign(campaignId, msg.sender, msg.value);
+    }
+
     function getCampaign(
         bytes32 campaignId
     ) public view returns (CampaignTypes.Campaign memory) {
@@ -288,6 +315,24 @@ contract ReferralProgram is AccessControl, CampaignSignals {
             revert FulfillmentNotFound(fulfillmentId);
         }
         return campaigns.getFulfillment(fulfillmentId);
+    }
+
+    // Withdraws every direct reward the caller has accumulated. A separate destination lets
+    // contract accounts that cannot receive plain ETH route their funds to a payable address.
+    function withdrawDirectRewards(
+        address payable destination
+    ) public returns (uint256 amount) {
+        if (destination == address(0)) revert ZeroWithdrawalDestination();
+
+        amount = directRewardBalances[msg.sender];
+        if (amount == 0) revert NoDirectRewards(msg.sender);
+
+        // Checks-effects-interactions: a reentrant withdrawal sees a zero balance.
+        directRewardBalances[msg.sender] = 0;
+        (bool success, ) = destination.call{value: amount}("");
+        if (!success) revert DirectPaymentFailed(destination, amount);
+
+        emit DirectRewardsWithdrawn(msg.sender, destination, amount);
     }
 
     // -- Functions for invites and statuses
@@ -419,13 +464,17 @@ contract ReferralProgram is AccessControl, CampaignSignals {
         if (allocation.directAmount > 0) {
             _awardAndUpdateMilestone(
                 allocation.directRecipient,
-                allocation.directAmount
+                allocation.directAmount,
+                allocation.rewardType,
+                allocation.campaignId
             );
         }
         if (allocation.grandparentAmount > 0) {
             _awardAndUpdateMilestone(
                 allocation.grandparentRecipient,
-                allocation.grandparentAmount
+                allocation.grandparentAmount,
+                allocation.rewardType,
+                allocation.campaignId
             );
         }
     }
@@ -440,7 +489,9 @@ contract ReferralProgram is AccessControl, CampaignSignals {
         if (campaign.completerReward > 0) {
             _awardAndUpdateMilestone(
                 fulfillment.participant,
-                campaign.completerReward
+                campaign.completerReward,
+                campaign.rewardType,
+                campaign.id
             );
         }
 
@@ -448,6 +499,8 @@ contract ReferralProgram is AccessControl, CampaignSignals {
             fulfillment.participant,
             campaign.referralPool
         );
+        allocation.rewardType = campaign.rewardType;
+        allocation.campaignId = campaign.id;
         if (allocation.directRecipient == campaign.owner) {
             allocation.unallocatedAmount += allocation.directAmount;
             allocation.directAmount = 0;
@@ -471,12 +524,22 @@ contract ReferralProgram is AccessControl, CampaignSignals {
 
     function _awardAndUpdateMilestone(
         address recipient,
-        uint256 amount
+        uint256 amount,
+        CampaignTypes.RewardType rewardType,
+        bytes32 campaignId
     ) private {
-        points.awardPoints(recipient, amount);
-        uint256 balance = points.getUserPoints(recipient);
-        emit ReferralPoints.PointsAdded(recipient, balance, false);
-        milestones.updateUserMilestone(recipient, balance);
+        if (rewardType == CampaignTypes.RewardType.Points) {
+            points.awardPoints(recipient, amount);
+            uint256 balance = points.getUserPoints(recipient);
+            emit ReferralPoints.PointsAdded(recipient, balance, false);
+            milestones.updateUserMilestone(recipient, balance);
+        }
+        if (rewardType == CampaignTypes.RewardType.Direct) {
+            campaigns.updateCampaignBalance(campaignId, amount);
+            uint256 balance = directRewardBalances[recipient] + amount;
+            directRewardBalances[recipient] = balance;
+            emit DirectRewardAccrued(recipient, amount, balance);
+        }
     }
 
     function _addPendingPoints(

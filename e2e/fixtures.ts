@@ -72,6 +72,8 @@ export const test = base.extend<E2EFixtures & { failureDiagnostics: void }>({
           campaignVerificationPolicies: 1,
           campaignRewardPolicies: 1,
           campaignFulfillments: 0,
+          directCampaignSettlements: 0,
+          directRewardEvents: 0,
         }),
       }));
       await expect.poll(async () => {

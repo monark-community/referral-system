@@ -62,6 +62,38 @@ export class WriteReferralContractHelper {
     } as const;
   }
 
+  static async setMaxCampaignPointsPerCompletionContext() {
+    return {
+      abi: contracts.referral.abi,
+      address: contracts.referral.address.local,
+      functionName: "setMaxCampaignPointsPerCompletion",
+    } as const;
+  }
+
+  static async setMaxCampaignDirectRewardPerCompletionContext() {
+    return {
+      abi: contracts.referral.abi,
+      address: contracts.referral.address.local,
+      functionName: "setMaxCampaignDirectRewardPerCompletion",
+    } as const;
+  }
+
+  static async fundCampaignContext() {
+    return {
+      abi: contracts.referral.abi,
+      address: contracts.referral.address.local,
+      functionName: "fundCampaign",
+    } as const;
+  }
+
+  static async withdrawDirectRewardsContext() {
+    return {
+      abi: contracts.referral.abi,
+      address: contracts.referral.address.local,
+      functionName: "withdrawDirectRewards",
+    } as const;
+  }
+
   static async submitCampaignFulfillmentContext() {
     return {
       abi: contracts.referral.abi,

@@ -17,6 +17,8 @@ import {
   type CampaignFulfillmentSubmittedEvent,
   type CampaignFulfillmentVerifiedEvent,
   type CampaignRewardPaidEvent,
+  type DirectRewardAccruedEvent,
+  type DirectRewardsWithdrawnEvent,
 } from "@reffinity/blockchain-connector/readReferralContract";
 import {
   createWebSocketClient,
@@ -34,8 +36,11 @@ import {
   applyCampaignFulfillmentSubmitted,
   applyCampaignFulfillmentVerified,
   applyCampaignRewardPaid,
+  applyDirectRewardAccrued,
+  applyDirectRewardsWithdrawn,
   type ProjectionResult,
 } from "./manualCampaignProjection.service.js";
+import { reconcilePublishedDirectCampaigns } from "./manualCampaign.service.js";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 const BASIS_POINTS = 10_000n;
@@ -51,6 +56,8 @@ export class BlockchainListenerService {
   private isListeningToCampaignFulfillmentVerified: boolean = false;
   private isListeningToCampaignFulfillmentRejected: boolean = false;
   private isListeningToCampaignRewardPaid: boolean = false;
+  private isListeningToDirectRewardAccrued: boolean = false;
+  private isListeningToDirectRewardsWithdrawn: boolean = false;
   private publicClient: any = createClient(
     process.env.CHAIN_TYPE as "localhost" | "sepolia",
   ).publicClient;
@@ -65,6 +72,9 @@ export class BlockchainListenerService {
 
       await this.syncToChain();
       await this.reconcileCampaignFulfillments();
+      await reconcilePublishedDirectCampaigns().catch((error) =>
+        console.warn("Direct campaign funding startup reconciliation failed", error),
+      );
       await this.startPointsAddedListener();
       await this.startInviteChangedListener();
       await this.startReferralPointsAllocatedListener();
@@ -73,6 +83,8 @@ export class BlockchainListenerService {
       await this.startCampaignFulfillmentVerifiedListener();
       await this.startCampaignFulfillmentRejectedListener();
       await this.startCampaignRewardPaidListener();
+      await this.startDirectRewardAccruedListener();
+      await this.startDirectRewardsWithdrawnListener();
 
       console.log("Blockchain listener initialized successfully.");
     } catch (error) {
@@ -429,7 +441,14 @@ export class BlockchainListenerService {
   }
 
   private async handleCampaignCreated(event: CampaignCreatedEvent): Promise<void> {
-    await this.applyCampaignEvent("CampaignCreated", applyCampaignCreated, event, "live");
+    await this.applyCampaignEvent(
+      "CampaignCreated",
+      (created) => created.rewardType === 1
+        ? applyCampaignCreated(created, this.readReferralContractService)
+        : applyCampaignCreated(created),
+      event,
+      "live",
+    );
   }
 
   private async handleCampaignFulfillmentSubmitted(
@@ -466,7 +485,40 @@ export class BlockchainListenerService {
   }
 
   private async handleCampaignRewardPaid(event: CampaignRewardPaidEvent): Promise<void> {
-    await this.applyCampaignEvent("CampaignRewardPaid", applyCampaignRewardPaid, event, "live");
+    await this.applyCampaignEvent(
+      "CampaignRewardPaid",
+      (reward) => reward.rewardType === 1
+        ? applyCampaignRewardPaid(reward, this.readReferralContractService)
+        : applyCampaignRewardPaid(reward),
+      event,
+      "live",
+    );
+  }
+
+  private async handleDirectRewardAccrued(event: DirectRewardAccruedEvent): Promise<void> {
+    await this.applyCampaignEvent("DirectRewardAccrued", applyDirectRewardAccrued, event, "live");
+  }
+
+  private async handleDirectRewardsWithdrawn(event: DirectRewardsWithdrawnEvent): Promise<void> {
+    await this.applyCampaignEvent("DirectRewardsWithdrawn", applyDirectRewardsWithdrawn, event, "live");
+  }
+
+  private async startDirectRewardAccruedListener(): Promise<void> {
+    if (this.isListeningToDirectRewardAccrued) return;
+    await this.readReferralContractService.listenToDirectRewardAccruedEvent(
+      (event) => this.handleDirectRewardAccrued(event),
+      10000,
+    );
+    this.isListeningToDirectRewardAccrued = true;
+  }
+
+  private async startDirectRewardsWithdrawnListener(): Promise<void> {
+    if (this.isListeningToDirectRewardsWithdrawn) return;
+    await this.readReferralContractService.listenToDirectRewardsWithdrawnEvent(
+      (event) => this.handleDirectRewardsWithdrawn(event),
+      10000,
+    );
+    this.isListeningToDirectRewardsWithdrawn = true;
   }
 
   private async startCampaignFulfillmentRejectedListener(): Promise<void> {
@@ -761,7 +813,13 @@ export class BlockchainListenerService {
     const range = { fromBlock, toBlock: latestBlock };
     const service = this.readReferralContractService;
     const sources: [string, () => Promise<any[]>, (event: any) => Promise<ProjectionResult>][] = [
-      ["CampaignCreated", () => service.getCampaignCreatedEvents(range), applyCampaignCreated],
+      [
+        "CampaignCreated",
+        () => service.getCampaignCreatedEvents(range),
+        (created: CampaignCreatedEvent) => created.rewardType === 1
+          ? applyCampaignCreated(created, service)
+          : applyCampaignCreated(created),
+      ],
       [
         "CampaignFulfillmentSubmitted",
         () => service.getCampaignFulfillmentSubmittedEvents(range),
@@ -777,7 +835,15 @@ export class BlockchainListenerService {
         () => service.getCampaignFulfillmentRejectedEvents(range),
         applyCampaignFulfillmentRejected,
       ],
-      ["CampaignRewardPaid", () => service.getCampaignRewardPaidEvents(range), applyCampaignRewardPaid],
+      [
+        "CampaignRewardPaid",
+        () => service.getCampaignRewardPaidEvents(range),
+        (reward: CampaignRewardPaidEvent) => reward.rewardType === 1
+          ? applyCampaignRewardPaid(reward, service)
+          : applyCampaignRewardPaid(reward),
+      ],
+      ["DirectRewardAccrued", () => service.getDirectRewardAccruedEvents(range), applyDirectRewardAccrued],
+      ["DirectRewardsWithdrawn", () => service.getDirectRewardsWithdrawnEvents(range), applyDirectRewardsWithdrawn],
     ];
 
     const events: { eventName: string; apply: (event: any) => Promise<ProjectionResult>; event: any }[] = [];
@@ -875,6 +941,14 @@ export class BlockchainListenerService {
     if (this.isListeningToCampaignRewardPaid) {
       stops.push(this.readReferralContractService.stopListeningToCampaignRewardPaidEvent());
       this.isListeningToCampaignRewardPaid = false;
+    }
+    if (this.isListeningToDirectRewardAccrued) {
+      stops.push(this.readReferralContractService.stopListeningToDirectRewardAccruedEvent());
+      this.isListeningToDirectRewardAccrued = false;
+    }
+    if (this.isListeningToDirectRewardsWithdrawn) {
+      stops.push(this.readReferralContractService.stopListeningToDirectRewardsWithdrawnEvent());
+      this.isListeningToDirectRewardsWithdrawn = false;
     }
     await Promise.all(stops);
   }

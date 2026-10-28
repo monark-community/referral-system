@@ -17,6 +17,9 @@ import {
   createCampaign,
   getCampaignSubmissions,
   getMyCampaigns,
+  getMyDirectRewards,
+  prepareMyDirectRewardWithdrawal,
+  prepareCampaignFunding,
   rejectCampaignSubmission,
   submitCampaignProof,
   updateCampaign,
@@ -31,6 +34,9 @@ router.get("/", getCampaigns);
 router.post("/", authMiddleware, createCampaign);
 // GET /api/campaigns/mine - Campaigns you created, and the ones you submitted to
 router.get("/mine", authMiddleware, getMyCampaigns);
+// Fixed reward routes must precede /:idOrKey.
+router.get("/rewards/direct/me", authMiddleware, getMyDirectRewards);
+router.post("/rewards/direct/withdraw", authMiddleware, prepareMyDirectRewardWithdrawal);
 // GET /api/campaigns/private/:code - A private campaign, opened through its link
 router.get("/private/:code", getPrivateCampaign);
 router.get(
@@ -54,6 +60,7 @@ router.post(
 );
 // POST /api/campaigns/:id/status - Pause, resume, end or cancel
 router.post("/:id/status", authMiddleware, changeCampaignStatus);
+router.post("/:id/funding", authMiddleware, prepareCampaignFunding);
 // PATCH /api/campaigns/:id - Edit a draft
 router.patch("/:id", authMiddleware, updateCampaign);
 router.get("/:idOrKey", getCampaign);

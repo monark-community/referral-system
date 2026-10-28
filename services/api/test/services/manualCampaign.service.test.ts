@@ -17,6 +17,9 @@ import {
   listManualCampaignSubmissions,
   listOpenManualCampaigns,
   listOwnedManualCampaigns,
+  prepareDirectCampaignFunding,
+  getDirectRewardAccount,
+  prepareDirectRewardWithdrawal,
   rejectManualCampaignSubmission,
   submitFulfillmentCall,
   submitManualCampaignProof,
@@ -29,6 +32,8 @@ jest.mock("@/lib/prisma", () => ({
     campaign: { findFirst: jest.fn(), findMany: jest.fn(), create: jest.fn(), updateMany: jest.fn() },
     campaignTask: { update: jest.fn() },
     campaignRewardPolicy: { update: jest.fn() },
+    user: { findUnique: jest.fn() },
+    directRewardEvent: { findMany: jest.fn() },
     campaignFulfillment: {
       findFirst: jest.fn(),
       findMany: jest.fn(),
@@ -60,7 +65,13 @@ const FULFILLMENT_ID = "22222222-2222-4222-8222-222222222222";
 const bytes32 = (uuid: string) => `0x${uuid.replace(/-/g, "").padEnd(64, "0")}`;
 
 function chain(maximum = 1000n): ManualCampaignChain & { getMaxCampaignPointsPerCompletion: jest.Mock } {
-  return { chainId: 31337, getMaxCampaignPointsPerCompletion: jest.fn().mockResolvedValue(maximum) };
+  return {
+    chainId: 31337,
+    getMaxCampaignPointsPerCompletion: jest.fn().mockResolvedValue(maximum),
+    getMaxCampaignDirectRewardPerCompletion: jest.fn().mockResolvedValue(maximum),
+    getCampaign: jest.fn(),
+    getDirectRewardBalance: jest.fn(),
+  };
 }
 
 // A campaign row as Prisma returns it with the service's includes
@@ -95,6 +106,26 @@ function storedCampaign(overrides: Record<string, unknown> = {}) {
         type: "POINTS",
         strategyKey: "CAMPAIGN_POINTS_V1",
         configuration: { completerPoints: 30, referralPoolPoints: 10 },
+      },
+    },
+    ...overrides,
+  };
+}
+
+function storedDirectCampaign(overrides: Record<string, unknown> = {}) {
+  const base = storedCampaign();
+  return {
+    ...base,
+    owner: { name: "Dave", walletAddress: "0xDdDdDdDdDdDdDdDdDdDdDdDdDdDdDdDdDdDdDdDd" },
+    chainStatus: "ACTIVE",
+    chainBalanceWei: "900",
+    task: {
+      ...base.task,
+      rewardPolicy: {
+        id: "reward-1",
+        type: "DIRECT",
+        strategyKey: "CAMPAIGN_DIRECT_NATIVE_V1",
+        configuration: { completerRewardWei: "300", referralPoolWei: "100", initialFundingRuns: 2 },
       },
     },
     ...overrides,
@@ -153,22 +184,111 @@ describe("contract calls", () => {
     db.campaign.findFirst.mockResolvedValue(storedCampaign());
     const campaign = { id: CAMPAIGN_ID, completerPoints: 30, referralPoolPoints: 10 } as any;
 
-    expect(createCampaignCall(campaign)).toEqual({
+    expect(createCampaignCall(campaign)).toEqual(expect.objectContaining({
       functionName: "createCampaign",
       args: [bytes32(CAMPAIGN_ID), 1, 1, 0, 30, 10],
-    });
+      chainId: 31337,
+    }));
+    expect(createCampaignCall(campaign).valueWei).toBeUndefined();
   });
 
   test("submitting and deciding name the campaign and submission by their on-chain ids", () => {
-    expect(submitFulfillmentCall(CAMPAIGN_ID, FULFILLMENT_ID)).toEqual({
+    expect(submitFulfillmentCall(CAMPAIGN_ID, FULFILLMENT_ID)).toEqual(expect.objectContaining({
       functionName: "submitCampaignFulfillment",
       args: [bytes32(CAMPAIGN_ID), bytes32(FULFILLMENT_ID)],
-    });
+    }));
     expect(decideFulfillmentCall("approve", FULFILLMENT_ID).functionName).toBe("verifyCampaignFulfillment");
-    expect(decideFulfillmentCall("reject", FULFILLMENT_ID)).toEqual({
+    expect(decideFulfillmentCall("reject", FULFILLMENT_ID)).toEqual(expect.objectContaining({
       functionName: "rejectCampaignFulfillment",
       args: [bytes32(FULFILLMENT_ID)],
+    }));
+  });
+
+  test("Direct creation uses decimal-string args and the exact initial payable value", () => {
+    const call = createCampaignCall({
+      id: CAMPAIGN_ID,
+      rewardType: "DIRECT",
+      completerRewardWei: "3000000000000000",
+      referralPoolWei: "1000000000000000",
+      initialFundingRuns: 10,
+    } as any, 31337);
+    expect(call).toEqual(expect.objectContaining({
+      chainId: 31337,
+      functionName: "createCampaign",
+      args: [bytes32(CAMPAIGN_ID), 1, 1, 1, "3000000000000000", "1000000000000000"],
+      valueWei: "40000000000000000",
+    }));
+  });
+});
+
+describe("Direct campaign funding", () => {
+  test("prepares an exact run-based top-up from authoritative chain state", async () => {
+    db.campaign.findFirst.mockResolvedValue(storedDirectCampaign());
+    const directChain = chain();
+    (directChain.getCampaign as jest.Mock).mockResolvedValue({
+      owner: "0xDdDdDdDdDdDdDdDdDdDdDdDdDdDdDdDdDdDdDdDd",
+      rewardType: 1,
+      status: 3,
+      completerReward: 300n,
+      referralPool: 100n,
+      balance: 100n,
     });
+
+    const result = await prepareDirectCampaignFunding("dave", CAMPAIGN_ID, { runs: 10 }, directChain);
+
+    expect(result.funding).toEqual({
+      requestedRuns: 10,
+      valueWei: "4000",
+      currentBalanceWei: "100",
+      currentRunsRemaining: 0,
+      projectedBalanceWei: "4100",
+      projectedRunsRemaining: 10,
+    });
+    expect(result.chain).toEqual(expect.objectContaining({ functionName: "fundCampaign", valueWei: "4000" }));
+    expect(db.campaign.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: { chainBalanceWei: "100", chainStatus: "PENDING_FUNDING" },
+    }));
+  });
+
+  test("does not constrain funded runs by maxCompletions", async () => {
+    db.campaign.findFirst.mockResolvedValue(storedDirectCampaign({ maxCompletions: 1 }));
+    const directChain = chain();
+    (directChain.getCampaign as jest.Mock).mockResolvedValue({
+      owner: "0xDdDdDdDdDdDdDdDdDdDdDdDdDdDdDdDdDdDdDdDd", rewardType: 1, status: 1, balance: 400n,
+    });
+    expect((await prepareDirectCampaignFunding("dave", CAMPAIGN_ID, { runs: 100 }, directChain)).funding.valueWei).toBe("40000");
+  });
+});
+
+describe("Direct reward account", () => {
+  const wallet = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
+  beforeEach(() => {
+    db.user.findUnique.mockResolvedValue({ walletAddress: wallet });
+    db.directRewardEvent.findMany.mockResolvedValue([]);
+  });
+
+  test("reads the authoritative balance and prepares one full withdrawal", async () => {
+    const directChain = chain();
+    (directChain.getDirectRewardBalance as jest.Mock).mockResolvedValue(7_000_000_000_000_000n);
+    expect(await getDirectRewardAccount("alice", directChain)).toEqual(expect.objectContaining({
+      chainId: 31337,
+      balanceWei: "7000000000000000",
+    }));
+    const prepared = await prepareDirectRewardWithdrawal("alice", {}, directChain);
+    expect(prepared).toEqual(expect.objectContaining({
+      balanceWei: "7000000000000000",
+      destination: expect.any(String),
+      chain: expect.objectContaining({ functionName: "withdrawDirectRewards" }),
+    }));
+  });
+
+  test("rejects zero balance and an invalid destination", async () => {
+    const directChain = chain();
+    (directChain.getDirectRewardBalance as jest.Mock).mockResolvedValue(0n);
+    expect(await codeOf(prepareDirectRewardWithdrawal("alice", {}, directChain))).toBe("NO_DIRECT_REWARDS");
+    (directChain.getDirectRewardBalance as jest.Mock).mockResolvedValue(1n);
+    expect(await codeOf(prepareDirectRewardWithdrawal("alice", { destination: "0x0" }, directChain))).toBe("INVALID_DESTINATION");
   });
 });
 
@@ -280,7 +400,11 @@ describe("updateManualCampaignDraft", () => {
     });
     expect(db.campaignRewardPolicy.update).toHaveBeenCalledWith({
       where: { id: "reward-1" },
-      data: { configuration: { completerPoints: 30, referralPoolPoints: 20 } },
+      data: {
+        type: "POINTS",
+        strategyKey: "CAMPAIGN_POINTS_V1",
+        configuration: { completerPoints: 30, referralPoolPoints: 20 },
+      },
     });
   });
 

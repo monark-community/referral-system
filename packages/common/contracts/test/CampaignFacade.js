@@ -35,9 +35,12 @@ let referralAbi;
 
 const campaignId = stringToHex("campaign-facade", { size: 32 });
 const fulfillmentId = stringToHex("fulfillment-facade", { size: 32 });
+const secondCampaignId = stringToHex("campaign-facade-2", { size: 32 });
+const secondFulfillmentId = stringToHex("fulfillment-facade-2", { size: 32 });
 // RewardType.Points, then 30 points for the completer and a 10-point referral pool
 const pointsReward = [0, 30, 10];
 const MAX_POINTS_PER_COMPLETION = 1000;
+const MAX_DIRECT_REWARD_PER_COMPLETION = 1000;
 
 before(async () => {
     // Test files run at the same time against one Hardhat node, so each file signs with its own accounts;
@@ -85,15 +88,19 @@ beforeEach(async () => {
     await writeFacade(admin, adminWallet, "setMaxCampaignPointsPerCompletion", [
         MAX_POINTS_PER_COMPLETION,
     ]);
+    await writeFacade(admin, adminWallet, "setMaxCampaignDirectRewardPerCompletion", [
+        MAX_DIRECT_REWARD_PER_COMPLETION,
+    ]);
 });
 
-async function writeFacade(account, wallet, functionName, args) {
+async function writeFacade(account, wallet, functionName, args, value) {
     const { request, result } = await publicClient.simulateContract({
         account,
         address: referralAddress,
         abi: referralAbi,
         functionName,
         args,
+        ...(value === undefined ? {} : { value }),
     });
     const hash = await wallet.writeContract(request);
     const receipt = await publicClient.waitForTransactionReceipt({ hash });
@@ -120,9 +127,9 @@ function eventFrom(receipt, eventName) {
     return event;
 }
 
-async function createCampaign(reward = pointsReward) {
+async function createCampaign(reward = pointsReward, value) {
     // TaskType.Bounty = 1 and VerificationType.Manual = 1
-    return writeFacade(owner, ownerWallet, "createCampaign", [campaignId, 1, 1, ...reward]);
+    return writeFacade(owner, ownerWallet, "createCampaign", [campaignId, 1, 1, ...reward], value);
 }
 
 async function joinProgram(account, wallet) {
@@ -145,6 +152,15 @@ async function pointsOf(account) {
         address: referralAddress,
         abi: referralAbi,
         functionName: "viewPoints",
+        args: [account.address],
+    });
+}
+
+async function directRewardsOf(account) {
+    return publicClient.readContract({
+        address: referralAddress,
+        abi: referralAbi,
+        functionName: "directRewardBalances",
         args: [account.address],
     });
 }
@@ -186,6 +202,10 @@ test("facade ABI exposes campaign errors, events, and object returns", () => {
         "ZeroFulfillmentId",
         "CampaignOwnerCannotParticipate",
         "CampaignRewardAboveMaximum",
+        "ZeroCampaignReward",
+        "NoDirectRewards",
+        "ZeroWithdrawalDestination",
+        "DirectPaymentFailed",
     ]) {
         assert.ok(errorNames.includes(name), `${name} missing from facade ABI`);
     }
@@ -211,6 +231,8 @@ test("facade ABI exposes campaign errors, events, and object returns", () => {
     assert.ok(eventNames.includes("CampaignFulfillmentVerified"));
     assert.ok(eventNames.includes("CampaignFulfillmentRejected"));
     assert.ok(eventNames.includes("CampaignRewardPaid"));
+    assert.ok(eventNames.includes("DirectRewardAccrued"));
+    assert.ok(eventNames.includes("DirectRewardsWithdrawn"));
 
     for (const name of [
         "createCampaign",
@@ -253,6 +275,86 @@ test("creates a campaign for the calling owner and returns its object", async ()
         args: [campaignId],
     });
     assert.deepEqual(stored, result);
+});
+
+test("a direct campaign stays pending until funding covers at least one complete run", async () => {
+    const { result: created } = await createCampaign([1, 30, 10], 20n);
+    assert.equal(created.status, 3); // PendingFunding
+    assert.equal(created.balance, 20n);
+
+    await assert.rejects(
+        publicClient.simulateContract({
+            account: participant,
+            address: referralAddress,
+            abi: referralAbi,
+            functionName: "submitCampaignFulfillment",
+            args: [campaignId, fulfillmentId],
+        }),
+    );
+
+    const { result: runsAfterFirstFunding } = await writeFacade(
+        owner,
+        ownerWallet,
+        "fundCampaign",
+        [campaignId],
+        10n,
+    );
+    assert.equal(runsAfterFirstFunding, 0n);
+
+    let stored = await publicClient.readContract({
+        address: referralAddress,
+        abi: referralAbi,
+        functionName: "getCampaign",
+        args: [campaignId],
+    });
+    assert.equal(stored.status, 3);
+    assert.equal(stored.balance, 30n);
+
+    const { result: runsAfterSecondFunding } = await writeFacade(
+        owner,
+        ownerWallet,
+        "fundCampaign",
+        [campaignId],
+        50n,
+    );
+    assert.equal(runsAfterSecondFunding, 2n);
+
+    stored = await publicClient.readContract({
+        address: referralAddress,
+        abi: referralAbi,
+        functionName: "getCampaign",
+        args: [campaignId],
+    });
+    assert.equal(stored.status, 1); // Active
+    assert.equal(stored.balance, 80n);
+
+    const { result: fulfillment } = await submitFulfillment();
+    assert.equal(fulfillment.status, 1);
+});
+
+test("rejects native currency for points campaigns and rejects zero-value rewards", async () => {
+    await assert.rejects(
+        publicClient.simulateContract({
+            account: owner,
+            address: referralAddress,
+            abi: referralAbi,
+            functionName: "createCampaign",
+            args: [campaignId, 1, 1, ...pointsReward],
+            value: 1n,
+        }),
+    );
+    await assert.rejects(
+        publicClient.simulateContract({
+            account: owner,
+            address: referralAddress,
+            abi: referralAbi,
+            functionName: "createCampaign",
+            args: [campaignId, 1, 1, 1, 0, 0],
+        }),
+    );
+
+    const { result } = await createCampaign();
+    assert.equal(result.status, 1);
 });
 
 test("submits from the calling participant and returns its object", async () => {
@@ -410,6 +512,150 @@ test("verifying pays the completer and splits the pool 80/20 between their refer
     assert.equal(eventsFrom(receipt, "ReferralPointsAllocated").length, 0);
 });
 
+test("a direct campaign accrues native rewards for the completer and their ancestors", async () => {
+    // grandparent -> parent -> participant
+    await joinProgram(grandparent, grandparentWallet);
+    await acceptInvite(parent, parentWallet, grandparent, "grandparent-to-parent");
+    await acceptInvite(participant, participantWallet, parent, "parent-to-participant");
+
+    const participantPointsBefore = await pointsOf(participant);
+    const parentPointsBefore = await pointsOf(parent);
+    const grandparentPointsBefore = await pointsOf(grandparent);
+
+    // RewardType.Direct = 1, with 30 wei for the completer and a 10 wei referral pool.
+    await createCampaign([1, 30, 10], 40n);
+    await submitFulfillment();
+    const participantBalanceBefore = await publicClient.getBalance({ address: participant.address });
+    const parentBalanceBefore = await publicClient.getBalance({ address: parent.address });
+    const grandparentBalanceBefore = await publicClient.getBalance({ address: grandparent.address });
+    const receipt = (await verify()).receipt;
+
+    // Verification has no external ETH calls; it only moves campaign funds into user balances.
+    assert.equal(await publicClient.getBalance({ address: participant.address }), participantBalanceBefore);
+    assert.equal(await publicClient.getBalance({ address: parent.address }), parentBalanceBefore);
+    assert.equal(await publicClient.getBalance({ address: grandparent.address }), grandparentBalanceBefore);
+    assert.equal(await directRewardsOf(participant), 30n);
+    assert.equal(await directRewardsOf(parent), 8n);
+    assert.equal(await directRewardsOf(grandparent), 2n);
+    assert.equal(await pointsOf(participant), participantPointsBefore);
+    assert.equal(await pointsOf(parent), parentPointsBefore);
+    assert.equal(await pointsOf(grandparent), grandparentPointsBefore);
+
+    const paid = rewardPaid(receipt);
+    assert.equal(paid.rewardType, 1);
+    assert.equal(paid.referralPayout.rewardType, 1);
+    assert.equal(paid.referralPayout.campaignId, campaignId);
+
+    const accrued = eventsFrom(receipt, "DirectRewardAccrued").map(({ args }) => [
+        args.account.toLowerCase(),
+        args.amount,
+        args.balance,
+    ]);
+    assert.deepEqual(accrued, [
+        [participant.address.toLowerCase(), 30n, 30n],
+        [parent.address.toLowerCase(), 8n, 8n],
+        [grandparent.address.toLowerCase(), 2n, 2n],
+    ]);
+
+    const stored = await publicClient.readContract({
+        address: referralAddress,
+        abi: referralAbi,
+        functionName: "getCampaign",
+        args: [campaignId],
+    });
+    assert.equal(stored.balance, 0n);
+    assert.equal(stored.status, 3); // PendingFunding
+});
+
+test("direct rewards accumulate and the owner withdraws the whole balance once", async () => {
+    await createCampaign([1, 30, 10], 40n);
+    await submitFulfillment();
+    await verify();
+
+    await writeFacade(
+        owner,
+        ownerWallet,
+        "createCampaign",
+        [secondCampaignId, 1, 1, 1, 30, 10],
+        40n,
+    );
+    await writeFacade(
+        participant,
+        participantWallet,
+        "submitCampaignFulfillment",
+        [secondCampaignId, secondFulfillmentId],
+    );
+    await writeFacade(
+        owner,
+        ownerWallet,
+        "verifyCampaignFulfillment",
+        [secondFulfillmentId],
+    );
+
+    assert.equal(await directRewardsOf(participant), 60n);
+
+    // Another address cannot withdraw the participant's balance.
+    await assert.rejects(
+        publicClient.simulateContract({
+            account: other,
+            address: referralAddress,
+            abi: referralAbi,
+            functionName: "withdrawDirectRewards",
+            args: [other.address],
+        }),
+    );
+
+    // A bad destination only rejects this withdrawal; verification and the accrued balance survive.
+    await assert.rejects(
+        participantWallet.writeContract({
+            address: referralAddress,
+            abi: referralAbi,
+            functionName: "withdrawDirectRewards",
+            args: [referralAddress],
+            gas: 150_000n,
+        }),
+    );
+    await assert.rejects(
+        publicClient.simulateContract({
+            account: participant,
+            address: referralAddress,
+            abi: referralAbi,
+            functionName: "withdrawDirectRewards",
+            args: [zeroAddress],
+        }),
+    );
+    assert.equal(await directRewardsOf(participant), 60n);
+
+    const destinationBalanceBefore = await publicClient.getBalance({ address: other.address });
+    const { result, receipt } = await writeFacade(
+        participant,
+        participantWallet,
+        "withdrawDirectRewards",
+        [other.address],
+    );
+    assert.equal(result, 60n);
+    assert.equal(await directRewardsOf(participant), 0n);
+    assert.equal(
+        await publicClient.getBalance({ address: other.address }),
+        destinationBalanceBefore + 60n,
+    );
+
+    const withdrawn = eventFrom(receipt, "DirectRewardsWithdrawn");
+    assert.ok(same(withdrawn.args.account, participant.address));
+    assert.ok(same(withdrawn.args.destination, other.address));
+    assert.equal(withdrawn.args.amount, 60n);
+
+    await assert.rejects(
+        publicClient.simulateContract({
+            account: participant,
+            address: referralAddress,
+            abi: referralAbi,
+            functionName: "withdrawDirectRewards",
+            args: [other.address],
+        }),
+    );
+});
+
 test("a referrer without a referrer of their own gets the whole pool", async () => {
     await joinProgram(parent, parentWallet);
     await acceptInvite(participant, participantWallet, parent, "parent-to-participant");
@@ -494,6 +740,7 @@ test("only an admin sets the most points one completion can pay, and campaigns a
     );
 
     // 30 + 10 is 40 points per completion
+    await writeFacade(admin, adminWallet, "setMaxCampaignDirectRewardPerCompletion", [0]);
     await writeFacade(admin, adminWallet, "setMaxCampaignPointsPerCompletion", [39]);
     await assert.rejects(
         publicClient.simulateContract({
@@ -508,6 +755,44 @@ test("only an admin sets the most points one completion can pay, and campaigns a
     await writeFacade(admin, adminWallet, "setMaxCampaignPointsPerCompletion", [40]);
     const { result } = await createCampaign();
     assert.equal(result.completerReward, 30n);
+});
+
+test("direct rewards have an independent admin-set maximum denominated in wei", async () => {
+    await assert.rejects(
+        publicClient.simulateContract({
+            account: owner,
+            address: referralAddress,
+            abi: referralAbi,
+            functionName: "setMaxCampaignDirectRewardPerCompletion",
+            args: [1],
+        }),
+    );
+
+    // Prove a low points cap cannot accidentally limit a direct-payment campaign.
+    await writeFacade(admin, adminWallet, "setMaxCampaignPointsPerCompletion", [0]);
+    await writeFacade(admin, adminWallet, "setMaxCampaignDirectRewardPerCompletion", [39]);
+    await assert.rejects(
+        publicClient.simulateContract({
+            account: owner,
+            address: referralAddress,
+            abi: referralAbi,
+            functionName: "createCampaign",
+            args: [campaignId, 1, 1, 1, 30, 10],
+            value: 40n,
+        }),
+    );
+
+    await writeFacade(admin, adminWallet, "setMaxCampaignDirectRewardPerCompletion", [40]);
+    const { result } = await writeFacade(
+        owner,
+        ownerWallet,
+        "createCampaign",
+        [campaignId, 1, 1, 1, 30, 10],
+        40n,
+    );
+    assert.equal(result.rewardType, 1);
+    assert.equal(result.status, 1);
+    assert.equal(result.balance, 40n);
 });
 
 // ---------- Rejecting a submission ----------

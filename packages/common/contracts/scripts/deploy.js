@@ -5,7 +5,7 @@
 
 
 import hre from "hardhat";
-import { createWalletClient, createPublicClient, http } from "viem";
+import { createWalletClient, createPublicClient, http, maxUint256 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
@@ -126,6 +126,19 @@ async function main() {
     hash = await walletClient.writeContract(request);
     await publicClient.waitForTransactionReceipt({ hash });
     console.log("Max campaign points per completion set:", maxCampaignPointsPerCompletion);
+
+    // Direct rewards use native currency. A uint256 maximum preserves the contract's
+    // safety check without imposing an application-level reward cap.
+    ({ request } = await publicClient.simulateContract({
+        account: account,
+        address: receipt.contractAddress,
+        abi: artifact.abi,
+        functionName: "setMaxCampaignDirectRewardPerCompletion",
+        args: [maxUint256],
+    }));
+    hash = await walletClient.writeContract(request);
+    await publicClient.waitForTransactionReceipt({ hash });
+    console.log("Max campaign direct reward per completion set: uint256 maximum");
 
     await writeDeploymentArtifact({
       chainId: await publicClient.getChainId(),
