@@ -9,6 +9,7 @@ import {
   getCampaign,
   getCampaigns,
   getMyCampaignFulfillment,
+  getPrivateCampaign,
 } from "../controllers/campaign.controller.js";
 import {
   approveCampaignSubmission,
@@ -30,6 +31,8 @@ router.get("/", getCampaigns);
 router.post("/", authMiddleware, createCampaign);
 // GET /api/campaigns/mine - Campaigns you created, and the ones you submitted to
 router.get("/mine", authMiddleware, getMyCampaigns);
+// GET /api/campaigns/private/:code - A private campaign, opened through its link
+router.get("/private/:code", getPrivateCampaign);
 router.get(
   "/:idOrKey/fulfillments/me",
   authMiddleware,

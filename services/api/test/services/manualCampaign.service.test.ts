@@ -1,4 +1,4 @@
-// Purpose: Tests the user campaign rules: drafts, editing, pausing, submitting proof, and the creator's review
+// Purpose: Tests the user campaign rules: drafts, editing, pausing, private links, submitting proof, and the creator's review
 // Notes:
 // - Prisma is mocked; each test sets up the rows it needs
 // - The chain is a stand-in passed to each call, so the admin's points maximum is under the test's control
@@ -13,6 +13,7 @@ import {
   createCampaignCall,
   createManualCampaignDraft,
   decideFulfillmentCall,
+  findPrivateManualCampaign,
   listManualCampaignSubmissions,
   listOpenManualCampaigns,
   listOwnedManualCampaigns,
@@ -77,6 +78,8 @@ function storedCampaign(overrides: Record<string, unknown> = {}) {
     owner: { name: "Dave", walletAddress: "0xdave" },
     maxCompletions: 2,
     endsAt: new Date("2026-11-01T00:00:00.000Z"),
+    isPrivate: false,
+    privateCode: null,
     publishedAt: new Date("2026-10-17T00:00:00.000Z"),
     publishTransactionHash: "0xpublish",
     createdAt: new Date("2026-10-16T00:00:00.000Z"),
@@ -203,6 +206,25 @@ describe("createManualCampaignDraft", () => {
       }),
     );
     expect(campaign.status).toBe("DRAFT");
+    // Public unless asked otherwise, so it has no link code
+    expect(data).toEqual(expect.objectContaining({ isPrivate: false, privateCode: null }));
+  });
+
+  test("a private draft gets a random code for its link", async () => {
+    db.campaign.create.mockImplementation(async ({ data }: any) =>
+      storedCampaign({ id: data.id, key: data.key, status: "DRAFT", publishedAt: null, isPrivate: true, privateCode: data.privateCode }),
+    );
+
+    const campaign = await createManualCampaignDraft("dave", { ...draftBody, isPrivate: true }, chain(), now);
+    const second = await createManualCampaignDraft("dave", { ...draftBody, isPrivate: true }, chain(), now);
+
+    const { data } = db.campaign.create.mock.calls[0][0];
+    expect(data.isPrivate).toBe(true);
+    // 24 URL-safe characters, and not the campaign id, which the chain makes public
+    expect(data.privateCode).toMatch(/^[A-Za-z0-9_-]{24}$/);
+    expect(data.privateCode).not.toBe(data.id);
+    expect(campaign.privateCode).toBe(data.privateCode);
+    expect(second.privateCode).not.toBe(campaign.privateCode);
   });
 
   test("refuses a reward above the admin's maximum for one completion", async () => {
@@ -260,6 +282,27 @@ describe("updateManualCampaignDraft", () => {
       where: { id: "reward-1" },
       data: { configuration: { completerPoints: 30, referralPoolPoints: 20 } },
     });
+  });
+
+  test("making a draft private gives it a code, and making it public again removes it", async () => {
+    await updateManualCampaignDraft("dave", CAMPAIGN_ID, { isPrivate: true }, chain(), now);
+    const madePrivate = db.campaign.updateMany.mock.calls[0][0].data;
+    expect(madePrivate.isPrivate).toBe(true);
+    expect(madePrivate.privateCode).toMatch(/^[A-Za-z0-9_-]{24}$/);
+
+    db.campaign.findFirst.mockResolvedValue(
+      storedCampaign({ status: "DRAFT", publishedAt: null, isPrivate: true, privateCode: "kept-code" }),
+    );
+    await updateManualCampaignDraft("dave", CAMPAIGN_ID, { title: "Still private" }, chain(), now);
+    // Staying private keeps the same code
+    expect(db.campaign.updateMany.mock.calls[1][0].data).toEqual(
+      expect.objectContaining({ isPrivate: true, privateCode: "kept-code" }),
+    );
+
+    await updateManualCampaignDraft("dave", CAMPAIGN_ID, { isPrivate: false }, chain(), now);
+    expect(db.campaign.updateMany.mock.calls[2][0].data).toEqual(
+      expect.objectContaining({ isPrivate: false, privateCode: null }),
+    );
   });
 
   test("only the creator can edit", async () => {
@@ -401,6 +444,39 @@ describe("submitManualCampaignProof", () => {
     expect(db.campaignFulfillment.create).not.toHaveBeenCalled();
   });
 
+  test("a private campaign takes submissions only with the code from its link", async () => {
+    db.campaign.findFirst.mockResolvedValue(storedCampaign({ isPrivate: true, privateCode: "secret-code" }));
+    db.campaignFulfillment.create.mockImplementation(async ({ data }: any) => data);
+
+    // Without the right code it looks like an unknown campaign
+    for (const body of [{ proof: "https://x.com/a" }, { proof: "https://x.com/a", code: "guess" }, null]) {
+      expect(await codeOf(submitManualCampaignProof("alice", CAMPAIGN_ID, body, chain(), now))).toBe("CAMPAIGN_NOT_FOUND");
+    }
+    expect(db.campaignFulfillment.create).not.toHaveBeenCalled();
+
+    const { fulfillment } = await submitManualCampaignProof(
+      "alice",
+      CAMPAIGN_ID,
+      { proof: "https://x.com/a", code: "secret-code" },
+      chain(),
+      now,
+    );
+    expect(fulfillment.status).toBe("SUBMITTED");
+  });
+
+  test("a public campaign ignores any code sent", async () => {
+    db.campaignFulfillment.create.mockImplementation(async ({ data }: any) => data);
+
+    const { fulfillment } = await submitManualCampaignProof(
+      "alice",
+      CAMPAIGN_ID,
+      { proof: "https://x.com/a", code: "anything" },
+      chain(),
+      now,
+    );
+    expect(fulfillment.status).toBe("SUBMITTED");
+  });
+
   test("two submissions from the same person at the same moment save only one", async () => {
     db.campaignFulfillment.create.mockRejectedValue(
       new Prisma.PrismaClientKnownRequestError("Unique constraint failed", { code: "P2002", clientVersion: "5.22.0" }),
@@ -496,7 +572,7 @@ describe("reviewing submissions", () => {
 });
 
 describe("listing", () => {
-  test("the board shows active user campaigns that have not ended", async () => {
+  test("the board shows active public user campaigns that have not ended", async () => {
     db.campaign.findMany.mockResolvedValue([storedCampaign()]);
 
     const open = await listOpenManualCampaigns(now);
@@ -504,9 +580,23 @@ describe("listing", () => {
     expect(open).toHaveLength(1);
     expect(db.campaign.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { isSystem: false, ownerId: { not: null }, status: "ACTIVE", endsAt: { gt: now } },
+        where: { isSystem: false, ownerId: { not: null }, isPrivate: false, status: "ACTIVE", endsAt: { gt: now } },
       }),
     );
+  });
+
+  test("a link's code finds only the private campaign it belongs to", async () => {
+    db.campaign.findFirst.mockResolvedValue(storedCampaign({ isPrivate: true, privateCode: "secret-code" }));
+
+    expect((await findPrivateManualCampaign("secret-code"))?.id).toBe(CAMPAIGN_ID);
+    expect(db.campaign.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { privateCode: "secret-code", isPrivate: true, isSystem: false, ownerId: { not: null } },
+      }),
+    );
+
+    db.campaign.findFirst.mockResolvedValue(null);
+    expect(await findPrivateManualCampaign("unknown")).toBeNull();
   });
 
   test("a creator's campaigns come with how many submissions are in each state", async () => {

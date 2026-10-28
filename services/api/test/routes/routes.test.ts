@@ -315,6 +315,16 @@ describe("API routes", () => {
       expect(res.body).toEqual({ error: "Campaign not found" });
     });
 
+    test("GET /api/campaigns/private/:code looks up a private campaign by its link's code, without a login", async () => {
+      const res = await request(app).get("/api/campaigns/private/some-code");
+
+      expect(res.status).toBe(404);
+      expect(res.body).toEqual({ error: "Campaign not found" });
+      expect(db.campaign.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ privateCode: "some-code", isPrivate: true }) }),
+      );
+    });
+
     test("GET /api/campaigns/:idOrKey/fulfillments/me requires authentication", async () => {
       const res = await request(app).get(
         "/api/campaigns/builtin-referral/fulfillments/me",
