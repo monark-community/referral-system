@@ -18,6 +18,7 @@ import {
   Settings,
   Gift,
   Network,
+  Megaphone,
   FileText,
   LogOut,
   ChevronRight,
@@ -30,6 +31,7 @@ const navItems = [
   { label: "Profile", href: "/referrals/profile", icon: User },
   { label: "How it Works", href: "/referrals/how-it-works", icon: HelpCircle },
   { label: "Referrals", href: "/referrals/tree", icon: Network },
+  { label: "Campaigns", href: "/referrals/campaigns", icon: Megaphone },
   { label: "History", href: "/referrals/history", icon: History },
   { label: "Rewards", href: "/referrals/rewards", icon: Gift },
 ];
@@ -75,7 +77,9 @@ export function SidebarNav() {
       {/* Primary Nav */}
       <nav className="flex-1 overflow-y-auto px-3 space-y-0.5">
         {navItems.map((item) => {
-          const isActive = pathname === item.href;
+          const isActive = pathname === item.href || (
+            item.href === "/referrals/campaigns" && pathname.startsWith(`${item.href}/`)
+          );
           const Icon = item.icon;
           return (
             <Link
