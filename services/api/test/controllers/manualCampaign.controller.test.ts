@@ -17,7 +17,12 @@ import {
   submitCampaignProof,
   updateCampaign,
 } from "@/controllers/manualCampaign.controller.js";
-import { getCampaign, getCampaigns, getMyCampaignFulfillment } from "@/controllers/campaign.controller.js";
+import {
+  getCampaign,
+  getCampaigns,
+  getMyCampaignFulfillment,
+  getPrivateCampaign,
+} from "@/controllers/campaign.controller.js";
 import { ManualCampaignDataError, type ManualCampaignDefinition } from "@/models/manualCampaign.js";
 import * as service from "@/services/manualCampaign.service.js";
 import { getBuiltinReferralCampaign } from "@/services/campaign.service.js";
@@ -35,6 +40,7 @@ jest.mock("@/services/manualCampaign.service", () => {
     countSpotsTaken: jest.fn(),
     createManualCampaignDraft: jest.fn(),
     findManualCampaign: jest.fn(),
+    findPrivateManualCampaign: jest.fn(),
     getMyManualCampaignFulfillment: jest.fn(),
     listJoinedManualCampaigns: jest.fn(),
     listManualCampaignSubmissions: jest.fn(),
@@ -90,6 +96,8 @@ function campaign(overrides: Record<string, unknown> = {}): ManualCampaignDefini
     referralPoolPoints: 10,
     maxCompletions: 5,
     endsAt: new Date("2026-11-01T00:00:00.000Z"),
+    isPrivate: false,
+    privateCode: null,
     taskId: "task-1",
     rewardPolicyId: "reward-1",
     publishedAt: new Date("2026-10-17T00:00:00.000Z"),
@@ -239,8 +247,28 @@ describe("the creator's campaigns", () => {
         spotsLeft: 5,
         endsAt: "2026-11-01T00:00:00.000Z",
         chain: expect.objectContaining({ functionName: "createCampaign", args: [bytes32(CAMPAIGN_ID), 1, 1, 0, 30, 10] }),
+        isPrivate: false,
+        privateCode: null,
       }),
     );
+  });
+
+  test("the creator's views of a private campaign carry the code for its link", async () => {
+    const secret = campaign({ isPrivate: true, privateCode: "secret-code" });
+    mocked.createManualCampaignDraft.mockResolvedValue({ ...secret, status: "DRAFT", publishedAt: null });
+    mocked.listOwnedManualCampaigns.mockResolvedValue([
+      { campaign: secret, submissions: { SUBMITTED: 0, UNDER_REVIEW: 0, APPROVED: 0, REJECTED: 0, REWARDED: 0 } },
+    ]);
+    mocked.listJoinedManualCampaigns.mockResolvedValue([]);
+    mocked.countSpotsTaken.mockResolvedValue(new Map());
+    const created = response();
+    const mine = response();
+
+    await createCampaign(request({ body: { isPrivate: true } }), created);
+    await getMyCampaigns(request(), mine);
+
+    expect(body(created).campaign).toEqual(expect.objectContaining({ isPrivate: true, privateCode: "secret-code" }));
+    expect(body(mine).created[0]).toEqual(expect.objectContaining({ isPrivate: true, privateCode: "secret-code" }));
   });
 
   test("an edit is passed the campaign id, and a published campaign has no createCampaign call", async () => {
@@ -335,6 +363,23 @@ describe("the creator's campaigns", () => {
       }),
     );
   });
+
+  test("a private campaign I joined shows in my list without its code", async () => {
+    mocked.listOwnedManualCampaigns.mockResolvedValue([]);
+    mocked.listJoinedManualCampaigns.mockResolvedValue([
+      {
+        campaign: campaign({ ownerId: "erin", isPrivate: true, privateCode: "secret-code" }),
+        fulfillment: fulfillment({ status: "UNDER_REVIEW" }),
+      },
+    ]);
+    mocked.countSpotsTaken.mockResolvedValue(new Map());
+    const res = response();
+
+    await getMyCampaigns(request({ user: { id: "alice" } }), res);
+
+    expect(body(res).joined[0].campaign).toEqual(expect.objectContaining({ isPrivate: true }));
+    expect(body(res).joined[0].campaign).not.toHaveProperty("privateCode");
+  });
 });
 
 describe("submitting proof", () => {
@@ -358,6 +403,27 @@ describe("submitting proof", () => {
         }),
       }),
     );
+  });
+
+  test("the code from a private campaign's link is passed on with the proof", async () => {
+    mocked.submitManualCampaignProof.mockResolvedValue({ campaign: campaign(), fulfillment: fulfillment() });
+    const proof = { proof: "https://x.com/alice", code: "secret-code" };
+
+    await submitCampaignProof(request({ user: { id: "alice" }, body: proof }), response());
+
+    expect(mocked.submitManualCampaignProof).toHaveBeenCalledWith("alice", CAMPAIGN_ID, proof);
+  });
+
+  test("a private campaign without the right code is a 404", async () => {
+    mocked.submitManualCampaignProof.mockRejectedValue(
+      new service.ManualCampaignError("CAMPAIGN_NOT_FOUND", "Campaign not found"),
+    );
+    const res = response();
+
+    await submitCampaignProof(request({ user: { id: "alice" }, body: { proof: "https://x.com/alice" } }), res);
+
+    expect(res.status).toHaveBeenCalledWith(404);
+    expect(body(res)).toEqual({ error: "Campaign not found", code: "CAMPAIGN_NOT_FOUND" });
   });
 });
 
@@ -513,5 +579,81 @@ describe("public reads", () => {
 
     expect(body(mine).fulfillment).toEqual(expect.objectContaining({ id: FULFILLMENT_ID, status: "UNDER_REVIEW" }));
     expect(body(none)).toEqual({ fulfillment: null });
+  });
+});
+
+describe("private campaigns", () => {
+  const secret = () => campaign({ isPrivate: true, privateCode: "secret-code" });
+
+  beforeEach(() => {
+    (getBuiltinReferralCampaign as jest.Mock).mockResolvedValue({ id: "builtin-id", key: "builtin-referral" });
+    mocked.findManualCampaign.mockResolvedValue(secret());
+    mocked.findPrivateManualCampaign.mockResolvedValue(secret());
+    mocked.countSpotsTaken.mockResolvedValue(new Map([["task-1", 1]]));
+  });
+
+  test("the link opens the campaign's detail without a login, but never repeats the code", async () => {
+    const res = response();
+
+    await getPrivateCampaign(request({ user: undefined, params: { code: "secret-code" } }), res);
+
+    expect(mocked.findPrivateManualCampaign).toHaveBeenCalledWith("secret-code");
+    expect(body(res).campaign).toEqual(
+      expect.objectContaining({ id: CAMPAIGN_ID, isPrivate: true, instructions: expect.any(String), spotsLeft: 4 }),
+    );
+    expect(body(res).campaign).not.toHaveProperty("privateCode");
+    expect(body(res).campaign).not.toHaveProperty("chain");
+  });
+
+  test("an unknown code, or a draft not on chain yet, is a 404", async () => {
+    mocked.findPrivateManualCampaign.mockResolvedValueOnce(null).mockResolvedValueOnce({
+      ...secret(),
+      status: "DRAFT",
+      publishedAt: null,
+    });
+    const unknown = response();
+    const draft = response();
+
+    await getPrivateCampaign(request({ params: { code: "guess" } }), unknown);
+    await getPrivateCampaign(request({ params: { code: "secret-code" } }), draft);
+
+    expect(unknown.status).toHaveBeenCalledWith(404);
+    expect(draft.status).toHaveBeenCalledWith(404);
+  });
+
+  test("a stored campaign that fails to parse is a 500", async () => {
+    mocked.findPrivateManualCampaign.mockRejectedValue(new ManualCampaignDataError(CAMPAIGN_ID, "it has no owner"));
+    jest.spyOn(console, "error").mockImplementation(() => {});
+    const res = response();
+
+    await getPrivateCampaign(request({ params: { code: "secret-code" } }), res);
+
+    expect(res.status).toHaveBeenCalledWith(500);
+  });
+
+  test("its id alone doesn't open it", async () => {
+    const res = response();
+
+    await getCampaign(request({ user: undefined, params: { idOrKey: CAMPAIGN_ID } }), res);
+
+    expect(res.status).toHaveBeenCalledWith(404);
+  });
+
+  test("my fulfillment answers only its creator and the people who joined it", async () => {
+    mocked.getMyManualCampaignFulfillment
+      .mockResolvedValueOnce(fulfillment({ status: "UNDER_REVIEW" }))
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null);
+    const joined = response();
+    const creator = response();
+    const stranger = response();
+
+    await getMyCampaignFulfillment(request({ user: { id: "alice" }, params: { idOrKey: CAMPAIGN_ID } }), joined);
+    await getMyCampaignFulfillment(request({ user: { id: "dave" }, params: { idOrKey: CAMPAIGN_ID } }), creator);
+    await getMyCampaignFulfillment(request({ user: { id: "mallory" }, params: { idOrKey: CAMPAIGN_ID } }), stranger);
+
+    expect(body(joined).fulfillment).toEqual(expect.objectContaining({ id: FULFILLMENT_ID }));
+    expect(body(creator)).toEqual({ fulfillment: null });
+    expect(stranger.status).toHaveBeenCalledWith(404);
   });
 });

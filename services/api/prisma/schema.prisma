@@ -215,6 +215,9 @@ model Campaign {
   // Cached Direct funding state; refreshed from chain before any decision that depends on it.
   chainStatus            String?   @map("chain_status")
   chainBalanceWei        String?   @map("chain_balance_wei")
+  // A private campaign stays off the board; people open it through one link holding its code
+  isPrivate              Boolean   @default(false) @map("is_private")
+  privateCode            String?   @unique @map("private_code")
 
   owner User?         @relation("CampaignOwner", fields: [ownerId], references: [id], onDelete: Restrict)
   task  CampaignTask?

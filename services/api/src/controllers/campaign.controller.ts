@@ -4,6 +4,7 @@
 // - VERIFIED reads may attempt one safe refresh but always return the latest durable status
 // - User campaigns are listed and looked up beside the built-in one; drafts stay hidden from these
 //   public reads (their creator sees them under /mine, see manualCampaign.controller.ts)
+// - A private campaign is not found by its id; it opens only through /private/:code, the code in its link
 
 import type { Request, Response } from "express";
 import { createClient } from "@reffinity/blockchain-connector/clients";
@@ -21,6 +22,7 @@ import {
 import {
   countSpotsTaken,
   findManualCampaign,
+  findPrivateManualCampaign,
   getMyManualCampaignFulfillment,
   listOpenManualCampaigns,
   refreshManualCampaignFunding,
@@ -31,10 +33,10 @@ import {
   manualFulfillmentResponse,
 } from "./manualCampaign.controller.js";
 
-// A user campaign other people may see: anything past draft
+// A user campaign other people may open by its id: a public one past draft
 async function findPublicManualCampaign(idOrKey: string) {
   const campaign = await findManualCampaign(idOrKey);
-  return campaign && campaign.status !== "DRAFT" ? refreshManualCampaignFunding(campaign) : null;
+  return campaign && campaign.status !== "DRAFT" && !campaign.isPrivate ? refreshManualCampaignFunding(campaign) : null;
 }
 
 function campaignSummary(campaign: BuiltinReferralCampaignDefinition) {
@@ -154,6 +156,22 @@ export async function getCampaign(req: Request, res: Response): Promise<void> {
   }
 }
 
+/** GET /api/campaigns/private/:code - A private campaign, opened through its link; no login needed */
+export async function getPrivateCampaign(req: Request, res: Response): Promise<void> {
+  try {
+    const manual = await findPrivateManualCampaign(String(req.params.code));
+    // Like a public campaign, its link works once the chain has it
+    if (!manual || manual.status === "DRAFT") {
+      res.status(404).json({ error: "Campaign not found" });
+      return;
+    }
+    const spotsTaken = await countSpotsTaken([manual.taskId]);
+    res.json({ campaign: manualCampaignDetail(manual, spotsTaken.get(manual.taskId) ?? 0) });
+  } catch (error) {
+    handleReadError(error, res, "Failed to get campaign");
+  }
+}
+
 export async function getMyCampaignFulfillment(
   req: Request,
   res: Response,
@@ -164,11 +182,14 @@ export async function getMyCampaignFulfillment(
   }
 
   try {
-    const manual = await findPublicManualCampaign(String(req.params.idOrKey));
-    if (manual) {
+    const manual = await findManualCampaign(String(req.params.idOrKey));
+    if (manual && manual.status !== "DRAFT") {
       const mine = await getMyManualCampaignFulfillment(req.user.id, manual);
-      res.json({ fulfillment: mine ? manualFulfillmentResponse(manual, mine) : null });
-      return;
+      // A private campaign answers only its creator and the people who joined it through its link
+      if (!manual.isPrivate || mine || manual.ownerId === req.user.id) {
+        res.json({ fulfillment: mine ? manualFulfillmentResponse(manual, mine) : null });
+        return;
+      }
     }
 
     const campaign = await getBuiltinReferralCampaign();

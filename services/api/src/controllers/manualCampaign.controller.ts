@@ -4,6 +4,7 @@
 // - A response that needs the user's wallet next carries `chain`: the contract function and arguments to send.
 //   Point amounts are plain numbers; pass them to the contract as bigints
 // - Block numbers are strings, since JSON has no bigint
+// - Only the creator's views carry a private campaign's code; everyone else gets it from the link
 
 import type { Request, Response } from "express";
 import type { CampaignFulfillment } from "@prisma/client";
@@ -102,6 +103,7 @@ export function manualCampaignSummary(campaign: ManualCampaignDefinition, spotsT
     reward,
     maxCompletions: campaign.maxCompletions,
     spotsLeft: Math.max(0, campaign.maxCompletions - spotsTaken),
+    isPrivate: campaign.isPrivate,
     endsAt: campaign.endsAt.toISOString(),
     publishedAt: campaign.publishedAt?.toISOString() ?? null,
     createdAt: campaign.createdAt.toISOString(),
@@ -112,10 +114,11 @@ export function manualCampaignDetail(campaign: ManualCampaignDefinition, spotsTa
   return { ...manualCampaignSummary(campaign, spotsTaken), instructions: campaign.instructions };
 }
 
-// The creator's view adds the createCampaign call while the draft is not on chain yet
+// The creator's view adds the private link's code, and the createCampaign call while the draft is not on chain yet
 function ownerCampaign(campaign: ManualCampaignDefinition, spotsTaken: number) {
   return {
     ...manualCampaignDetail(campaign, spotsTaken),
+    privateCode: campaign.privateCode,
     chain: campaign.status === "DRAFT" && !campaign.publishedAt ? createCampaignCall(campaign) : null,
   };
 }

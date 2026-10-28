@@ -606,8 +606,9 @@ and existing referral APIs remain responsible for execution and points.
 
 ### `GET /api/campaigns`
 
-Return active campaign summaries: the built-in Referral campaign, then the user campaigns taking
-submissions (see [the board summary](#user-campaign-summary)).
+Return active campaign summaries: the built-in Referral campaign, then the public user campaigns
+taking submissions (see [the board summary](#user-campaign-summary)). Private campaigns are never
+listed.
 
 **Auth required:** No
 
@@ -679,7 +680,7 @@ verification and points-reward policies.
 
 | Status | Error | Cause |
 |--------|-------|-------|
-| 404 | `"Campaign not found"` | The identifier or key is unknown |
+| 404 | `"Campaign not found"` | The identifier or key is unknown, or the campaign is a draft or [private](#private-campaigns) |
 | 503 | `"Campaign configuration unavailable"` | Installed campaign configuration failed its invariant checks |
 
 ### `GET /api/campaigns/:idOrKey/fulfillments/me`
@@ -722,7 +723,8 @@ This endpoint never awards points or creates referral records. If receipt eviden
 incomplete or temporarily unavailable, it returns the current durable status.
 
 For a user campaign, it returns the user's [submission](#user-campaign-submission) instead, or
-`{ "fulfillment": null }`.
+`{ "fulfillment": null }`. A private campaign answers only its creator and the people who have
+submitted to it; anyone else gets a 404.
 
 ---
 
@@ -755,6 +757,18 @@ are final; a draft can be cancelled too. Only an `ACTIVE` campaign before its `e
 spot left, takes submissions. Pausing, ending and cancelling happen in the API only; the contract
 has no such states.
 
+<a id="private-campaigns"></a>
+**Public and private campaigns.** A campaign is public unless the creator sends `isPrivate: true`
+while it is a draft; once published it stays public or private. A public campaign is on the board
+and opens by its id. A private one is never on the board and doesn't open by its id. Instead it
+has one link, the same for everyone the creator sends it to, holding its `privateCode`. Only the
+creator's own views include the code. The web app builds the link from it, for example
+`/campaigns/private/<privateCode>`. Anyone with the link can read the campaign through
+[`GET /api/campaigns/private/:code`](#get-apicampaignsprivatecode) without logging in, and a
+signed-in user submits with the same code. The code stays the same for the campaign's life.
+"Private" covers what is in our database (title, instructions, proof). The chain is public for
+every campaign, so its id, rewards, submissions and payouts can still be seen there.
+
 **Submission states.** `SUBMITTED` (proof saved) → `UNDER_REVIEW` (on chain) → `APPROVED` or
 `REJECTED` (the creator's decision) → `REWARDED` (paid on chain). Every submission except a
 rejected one holds a spot. Until the chain has the creator's decision, they can change it or
@@ -772,7 +786,7 @@ send it again; the chain's decision is final and wins over the API's.
 | 400 | `REWARD_ABOVE_MAXIMUM` | The reward plus the pool is above the contract's maximum |
 | 403 | `NOT_CAMPAIGN_OWNER` | Only the campaign's creator can do this |
 | 403 | `OWN_CAMPAIGN` | Creators can't complete their own campaigns |
-| 404 | `CAMPAIGN_NOT_FOUND`, `SUBMISSION_NOT_FOUND` | Unknown campaign, or a submission not in it |
+| 404 | `CAMPAIGN_NOT_FOUND`, `SUBMISSION_NOT_FOUND` | Unknown campaign (or a private one without its code), or a submission not in it |
 | 409 | `NOT_EDITABLE` | Only a draft can be edited |
 | 409 | `INVALID_STATUS_CHANGE` | That state change isn't allowed from the current state |
 | 409 | `NOT_ACCEPTING_SUBMISSIONS` | Not active, or past its end date |
@@ -783,8 +797,10 @@ send it again; the chain's decision is final and wins over the API's.
 | 503 | `CHAIN_UNAVAILABLE` | Required chain state could not be read |
 
 <a id="user-campaign-summary"></a>
-**A campaign** on the board (`GET /api/campaigns`). Detail (`GET /api/campaigns/:idOrKey`) adds
-`instructions`; a draft is only visible to its creator, under `/mine`:
+**A campaign** on the board (`GET /api/campaigns`). Detail (`GET /api/campaigns/:idOrKey`, or
+`GET /api/campaigns/private/:code` for a private one) adds `instructions`. The creator's own views
+also add `privateCode` (`null` for a public campaign). A draft is only visible to its creator,
+under `/mine`:
 
 ```json
 {
@@ -802,6 +818,7 @@ send it again; the chain's decision is final and wins over the API's.
   "reward": { "type": "POINTS", "completerPoints": 30, "referralPoolPoints": 10 },
   "maxCompletions": 50,
   "spotsLeft": 48,
+  "isPrivate": false,
   "endsAt": "2026-11-01T00:00:00.000Z",
   "publishedAt": "2026-10-17T12:00:00.000Z",
   "createdAt": "2026-10-17T11:00:00.000Z"
@@ -851,9 +868,10 @@ Save a new campaign as a `DRAFT`. **Auth required:** Yes
 | `referralPoolPoints` | integer | Yes | Split 80/20 between the completer's referrer and grandparent; 0 or more |
 | `maxCompletions` | integer | Yes | 1 or more |
 | `endsAt` | ISO date | Yes | In the future |
+| `isPrivate` | boolean | No | `true` for a [private campaign](#private-campaigns); defaults to `false` |
 
 The campaign must pay at least one point. **Response (201):** `{ "campaign": ... }`, the campaign
-detail with the call that publishes it:
+detail with its `privateCode` (a private campaign) and the call that publishes it:
 
 ```json
 "chain": {
@@ -896,6 +914,8 @@ the chain transaction to revert and leaves the accrued balance available for ano
 
 Edit a draft. Send any of the fields above; the rest keep their value. **Auth required:** Yes
 (creator). **Response (200):** `{ "campaign": ... }` with the updated `createCampaign` call.
+Making a draft private gives it a `privateCode`, and making it public again removes it; a draft
+that stays private keeps its code.
 
 ### `POST /api/campaigns/:id/status`
 
@@ -919,9 +939,18 @@ campaigns they submitted to. **Auth required:** Yes
 }
 ```
 
+### `GET /api/campaigns/private/:code`
+
+A [private campaign](#private-campaigns), opened through its link: the campaign detail, with
+`instructions` and the `id` to submit to, but never the code. **Auth required:** No. **Response
+(404):** `{ "error": "Campaign not found" }` for an unknown code, or a draft not on chain yet.
+
 ### `POST /api/campaigns/:id/fulfillments`
 
-Submit proof. Body: `{ "proof": "https://x.com/alice/status/1" }`, up to 500 characters.
+Submit proof. Body: `{ "proof": "https://x.com/alice/status/1" }`, up to 500 characters. For a
+[private campaign](#private-campaigns), also send the code from its link:
+`{ "proof": "...", "code": "<privateCode>" }`; without the right code it is a 404
+`CAMPAIGN_NOT_FOUND`, like an unknown campaign. A public campaign ignores `code`.
 **Auth required:** Yes. **Response (201):** `{ "fulfillment": ... }`, `SUBMITTED`, with the call
 that puts it on chain: `{ "functionName": "submitCampaignFulfillment", "args": [campaignId, fulfillmentId] }`
 (both bytes32). The participant's `fulfillments/me` keeps returning this call until the chain has it.

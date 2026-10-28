@@ -9,6 +9,7 @@ import {
   getCampaign,
   getCampaigns,
   getMyCampaignFulfillment,
+  getPrivateCampaign,
 } from "../controllers/campaign.controller.js";
 import {
   approveCampaignSubmission,
@@ -36,6 +37,8 @@ router.get("/mine", authMiddleware, getMyCampaigns);
 // Fixed reward routes must precede /:idOrKey.
 router.get("/rewards/direct/me", authMiddleware, getMyDirectRewards);
 router.post("/rewards/direct/withdraw", authMiddleware, prepareMyDirectRewardWithdrawal);
+// GET /api/campaigns/private/:code - A private campaign, opened through its link
+router.get("/private/:code", getPrivateCampaign);
 router.get(
   "/:idOrKey/fulfillments/me",
   authMiddleware,

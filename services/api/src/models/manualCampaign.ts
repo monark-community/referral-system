@@ -2,6 +2,8 @@
 // Notes:
 // - Matches the on-chain Bounty + Manual + Points combination; the chain pays the reward when the creator verifies
 // - Instructions, limits and proof stay in the database; only IDs, statuses and payouts go on chain
+// - A private campaign stays off the board and is opened through one link holding its code; being private
+//   is also database-only, so the chain still shows its id, rewards and payouts
 // - Stored campaigns are parsed strictly, like the built-in referral campaign, so a bad row fails loudly
 
 export const BOUNTY_TASK_STRATEGY = "BOUNTY_V1" as const;
@@ -36,6 +38,7 @@ type ManualCampaignCommonInput = {
   category: BountyCategory;
   maxCompletions: number;
   endsAt: Date;
+  isPrivate: boolean;
 };
 
 export type PointsManualCampaignInput = ManualCampaignCommonInput & {
@@ -56,6 +59,8 @@ export type ManualCampaignInput = PointsManualCampaignInput | DirectManualCampai
 export type ManualCampaignDefinition = ManualCampaignInput & {
   id: string;
   key: string;
+  // Set exactly when the campaign is private
+  privateCode: string | null;
   ownerId: string;
   owner: { name: string | null; walletAddress: string };
   status: ManualCampaignStatus;
@@ -125,6 +130,14 @@ function requireWholeNumber(value: unknown, field: string, minimum: number): num
   return value;
 }
 
+function optionalBoolean(value: unknown, field: string): boolean {
+  if (value === undefined) return false;
+  if (typeof value !== "boolean") {
+    throw new ManualCampaignValidationError(field, "must be true or false");
+  }
+  return value;
+}
+
 function requireCategory(value: unknown, field: string): BountyCategory {
   if (!BOUNTY_CATEGORIES.includes(value as BountyCategory)) {
     throw new ManualCampaignValidationError(field, `must be one of ${BOUNTY_CATEGORIES.join(", ")}`);
@@ -168,6 +181,7 @@ export function parseManualCampaignInput(
     category: requireCategory(field("category"), "category"),
     maxCompletions: requireWholeNumber(field("maxCompletions"), "maxCompletions", 1),
     endsAt,
+    isPrivate: optionalBoolean(field("isPrivate"), "isPrivate"),
   };
 
   if (rewardTypeValue === "POINTS") {
@@ -244,6 +258,8 @@ export type StoredManualCampaign = {
   owner: { name: string | null; walletAddress: string } | null;
   maxCompletions: number | null;
   endsAt: Date | null;
+  isPrivate: boolean;
+  privateCode: string | null;
   publishedAt: Date | null;
   chainStatus?: string | null;
   chainBalanceWei?: string | null;
@@ -267,6 +283,7 @@ export function parseStoredManualCampaign(row: StoredManualCampaign): ManualCamp
   if (row.isSystem || !row.ownerId || !row.owner) fail("it has no owner");
   if (!MANUAL_STATUSES.includes(row.status)) fail(`status ${row.status} is not a user campaign state`);
   if (row.maxCompletions === null || row.endsAt === null) fail("it has no completion limit or end date");
+  if (row.isPrivate !== (row.privateCode !== null)) fail("a private campaign needs a code, and only a private one");
 
   const task = row.task ?? fail("it has no task");
   if (task.type !== "BOUNTY" || task.strategyKey !== BOUNTY_TASK_STRATEGY) fail("its task is not a bounty");
@@ -291,6 +308,8 @@ export function parseStoredManualCampaign(row: StoredManualCampaign): ManualCamp
     category: category as BountyCategory,
     maxCompletions: row.maxCompletions!,
     endsAt: row.endsAt!,
+    isPrivate: row.isPrivate,
+    privateCode: row.privateCode,
     taskId: task.id,
     rewardPolicyId: reward.id,
     publishedAt: row.publishedAt,
