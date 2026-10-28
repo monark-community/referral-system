@@ -23,6 +23,10 @@
     "./uuidBytesConverter": {
       "import": "./dist/uuidBytesConverter.js",
       "types": "./dist/uuidBytesConverter.d.ts"
+    },
+    "./contracts": {
+      "import": "./dist/contracts.js",
+      "types": "./dist/contracts.d.ts"
     }
   },
   "scripts": {

@@ -23,6 +23,7 @@ import {
   findManualCampaign,
   getMyManualCampaignFulfillment,
   listOpenManualCampaigns,
+  refreshManualCampaignFunding,
 } from "../services/manualCampaign.service.js";
 import {
   manualCampaignDetail,
@@ -33,7 +34,7 @@ import {
 // A user campaign other people may see: anything past draft
 async function findPublicManualCampaign(idOrKey: string) {
   const campaign = await findManualCampaign(idOrKey);
-  return campaign && campaign.status !== "DRAFT" ? campaign : null;
+  return campaign && campaign.status !== "DRAFT" ? refreshManualCampaignFunding(campaign) : null;
 }
 
 function campaignSummary(campaign: BuiltinReferralCampaignDefinition) {

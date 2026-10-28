@@ -19,6 +19,8 @@ import {
   applyCampaignFulfillmentSubmitted,
   applyCampaignFulfillmentVerified,
   applyCampaignRewardPaid,
+  applyDirectRewardAccrued,
+  applyDirectRewardsWithdrawn,
 } from "@/services/manualCampaignProjection.service.js";
 
 // Stand-ins for the viem client and the connector service the listener creates
@@ -35,6 +37,8 @@ const mockReadService = {
   listenToCampaignFulfillmentVerifiedEvent: jest.fn(),
   listenToCampaignFulfillmentRejectedEvent: jest.fn(),
   listenToCampaignRewardPaidEvent: jest.fn(),
+  listenToDirectRewardAccruedEvent: jest.fn(),
+  listenToDirectRewardsWithdrawnEvent: jest.fn(),
   getUserCurrentMilestone: jest.fn(),
   getReferralPointPool: jest.fn(),
   getGrandparentReferralBps: jest.fn(),
@@ -47,6 +51,8 @@ const mockReadService = {
   getCampaignFulfillmentVerifiedEvents: jest.fn(),
   getCampaignFulfillmentRejectedEvents: jest.fn(),
   getCampaignRewardPaidEvents: jest.fn(),
+  getDirectRewardAccruedEvents: jest.fn(),
+  getDirectRewardsWithdrawnEvents: jest.fn(),
   stopListeningToPointsAddedEvent: jest.fn(),
   stopListeningToInviteChangedEvent: jest.fn(),
   stopListeningToReferralPointsAllocatedEvent: jest.fn(),
@@ -55,6 +61,8 @@ const mockReadService = {
   stopListeningToCampaignFulfillmentVerifiedEvent: jest.fn(),
   stopListeningToCampaignFulfillmentRejectedEvent: jest.fn(),
   stopListeningToCampaignRewardPaidEvent: jest.fn(),
+  stopListeningToDirectRewardAccruedEvent: jest.fn(),
+  stopListeningToDirectRewardsWithdrawnEvent: jest.fn(),
 };
 
 jest.mock("@/lib/prisma", () => ({
@@ -98,6 +106,8 @@ jest.mock("@/services/manualCampaignProjection.service", () => ({
   applyCampaignFulfillmentVerified: jest.fn(),
   applyCampaignFulfillmentRejected: jest.fn(),
   applyCampaignRewardPaid: jest.fn(),
+  applyDirectRewardAccrued: jest.fn(),
+  applyDirectRewardsWithdrawn: jest.fn(),
 }));
 
 // The mocked Prisma client, untyped so tests can set return values freely
@@ -108,6 +118,8 @@ const campaignProjections = [
   applyCampaignFulfillmentVerified,
   applyCampaignFulfillmentRejected,
   applyCampaignRewardPaid,
+  applyDirectRewardAccrued,
+  applyDirectRewardsWithdrawn,
 ] as jest.Mock[];
 const mockProjectBuiltinReferralFulfillment =
   projectBuiltinReferralFulfillment as jest.Mock;
@@ -159,6 +171,8 @@ async function startListener() {
     onCampaignFulfillmentRejected:
       mockReadService.listenToCampaignFulfillmentRejectedEvent.mock.calls[0][0],
     onCampaignRewardPaid: mockReadService.listenToCampaignRewardPaidEvent.mock.calls[0][0],
+    onDirectRewardAccrued: mockReadService.listenToDirectRewardAccruedEvent.mock.calls[0][0],
+    onDirectRewardsWithdrawn: mockReadService.listenToDirectRewardsWithdrawnEvent.mock.calls[0][0],
   };
 }
 
@@ -179,6 +193,8 @@ describe("BlockchainListenerService", () => {
     mockReadService.listenToCampaignFulfillmentVerifiedEvent.mockReset().mockResolvedValue(undefined);
     mockReadService.listenToCampaignFulfillmentRejectedEvent.mockReset().mockResolvedValue(undefined);
     mockReadService.listenToCampaignRewardPaidEvent.mockReset().mockResolvedValue(undefined);
+    mockReadService.listenToDirectRewardAccruedEvent.mockReset().mockResolvedValue(undefined);
+    mockReadService.listenToDirectRewardsWithdrawnEvent.mockReset().mockResolvedValue(undefined);
     mockReadService.getUserCurrentMilestone.mockReset().mockResolvedValue(2n);
     // The deployed settings: a 100-point pool split 80/20, and no referrer above the inviter
     mockReadService.getReferralPointPool.mockReset().mockResolvedValue(100n);
@@ -193,6 +209,8 @@ describe("BlockchainListenerService", () => {
       mockReadService.getCampaignFulfillmentVerifiedEvents,
       mockReadService.getCampaignFulfillmentRejectedEvents,
       mockReadService.getCampaignRewardPaidEvents,
+      mockReadService.getDirectRewardAccruedEvents,
+      mockReadService.getDirectRewardsWithdrawnEvents,
     ]) {
       read.mockReset().mockResolvedValue([]);
     }
@@ -206,6 +224,8 @@ describe("BlockchainListenerService", () => {
     mockReadService.stopListeningToCampaignFulfillmentSubmittedEvent.mockReset();
     mockReadService.stopListeningToCampaignFulfillmentVerifiedEvent.mockReset();
     mockReadService.stopListeningToCampaignFulfillmentRejectedEvent.mockReset();
+    mockReadService.stopListeningToDirectRewardAccruedEvent.mockReset();
+    mockReadService.stopListeningToDirectRewardsWithdrawnEvent.mockReset();
     mockReadService.stopListeningToCampaignRewardPaidEvent.mockReset();
     mockProjectBuiltinReferralFulfillment.mockReset().mockResolvedValue({
       outcome: "REWARDED",

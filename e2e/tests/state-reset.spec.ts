@@ -26,6 +26,8 @@ test("restores the database, contract, mailbox, and listener to a clean baseline
     campaignVerificationPolicies: 1,
     campaignRewardPolicies: 1,
     campaignFulfillments: 0,
+    directCampaignSettlements: 0,
+    directRewardEvents: 0,
   }));
 
   await page.addInitScript(() => {
@@ -67,6 +69,8 @@ test("restores the database, contract, mailbox, and listener to a clean baseline
     campaignVerificationPolicies: 1,
     campaignRewardPolicies: 1,
     campaignFulfillments: 0,
+    directCampaignSettlements: 0,
+    directRewardEvents: 0,
   }));
 
   await page.evaluate(() => localStorage.clear());
@@ -117,6 +121,8 @@ test("removes users' campaigns and keeps the built-in campaign", async ({
     campaignVerificationPolicies: 1,
     campaignRewardPolicies: 1,
     campaignFulfillments: 0,
+    directCampaignSettlements: 0,
+    directRewardEvents: 0,
   }));
   const builtin = await request.get(`${apiBaseUrl}/api/campaigns/builtin-referral`);
   expect(builtin.ok(), await builtin.text()).toBeTruthy();

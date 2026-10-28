@@ -729,8 +729,9 @@ For a user campaign, it returns the user's [submission](#user-campaign-submissio
 ## User Campaigns
 
 Any signed-in user can create a campaign with one manually checked task, such as following an
-account or joining a Discord. Whoever completes it gets the campaign's points reward, and their
-referrer and grandparent split the campaign's referral pool 80/20, like a sign-up. The creator
+account or joining a Discord. Rewards may be `POINTS` or `DIRECT` native-chain currency. For
+Direct rewards, the completer and eligible referrers accrue withdrawable balances on chain; no
+external native-currency transfer occurs during verification. The creator
 approves or rejects each submission. A creator can't complete their own campaign or earn
 referral points from it, and each user can submit to a campaign once.
 
@@ -738,7 +739,8 @@ referral points from it, and each user can submit to a campaign once.
 contract records the sender as the creator or participant:
 
 1. The API saves the step and returns a `chain` object: the `ReferralProgram` function and the
-   arguments to send. Point amounts are plain numbers; pass them to the contract as bigints.
+   arguments to send, plus `chainId`, `contractAddress`, and payable `valueWei` when needed.
+   Direct amounts are base-10 wei strings and must be converted to bigint only at the signing boundary.
 2. The web app sends that transaction with the user's wallet.
 3. The blockchain listener sees the event and updates the database. Re-sending a `chain` call
    that already went through fails on chain and changes nothing.
@@ -766,7 +768,7 @@ send it again; the chain's decision is final and wins over the API's.
 
 | Status | `code` | Cause |
 |--------|--------|-------|
-| 400 | `INVALID_INPUT` | A field is missing or invalid |
+| 400 | `INVALID_INPUT`, `INVALID_RUN_COUNT`, `INVALID_DESTINATION` | A field, run count, or destination is invalid |
 | 400 | `REWARD_ABOVE_MAXIMUM` | The reward plus the pool is above the contract's maximum |
 | 403 | `NOT_CAMPAIGN_OWNER` | Only the campaign's creator can do this |
 | 403 | `OWN_CAMPAIGN` | Creators can't complete their own campaigns |
@@ -777,7 +779,8 @@ send it again; the chain's decision is final and wins over the API's.
 | 409 | `CAMPAIGN_FULL` | No spots left |
 | 409 | `ALREADY_SUBMITTED` | The user has already submitted, even if rejected |
 | 409 | `NOT_REVIEWABLE` | Not on chain yet, or already decided on chain |
-| 503 | `CHAIN_UNAVAILABLE` | The points maximum could not be read from the chain |
+| 409 | `WRONG_REWARD_TYPE`, `INSUFFICIENT_FUNDING`, `NO_DIRECT_REWARDS` | The requested Direct operation conflicts with chain state |
+| 503 | `CHAIN_UNAVAILABLE` | Required chain state could not be read |
 
 <a id="user-campaign-summary"></a>
 **A campaign** on the board (`GET /api/campaigns`). Detail (`GET /api/campaigns/:idOrKey`) adds
@@ -862,6 +865,32 @@ detail with the call that publishes it:
 The arguments are the campaign id as bytes32, `TaskType.Bounty`, `VerificationType.Manual`,
 `RewardType.Points`, the completer's reward and the pool. When the chain has it, the campaign is
 `ACTIVE` and `chain` is `null`; the chain's reward is the one paid, even if the draft changed after sending.
+
+For a Direct campaign send `rewardType: "DIRECT"`, `completerRewardWei`, `referralPoolWei`, and
+`initialFundingRuns`. The API returns `RewardType.Direct` in `args` and
+`valueWei = (completerRewardWei + referralPoolWei) * initialFundingRuns`. Wei values remain
+decimal strings in JSON. The creator's wallet submits the descriptor with `value = BigInt(valueWei)`.
+
+### `POST /api/campaigns/:id/funding`
+
+Prepare an owner-only Direct top-up. Body: `{ "runs": 10 }`. The response reports current and
+projected chain balances/runs and a payable `fundCampaign` descriptor. Any positive whole run
+count is accepted independently of `maxCompletions`; preparing the call does not fund the campaign.
+The contract does not emit a funding event, so detail/owner/submission/approval reads and bounded
+startup reconciliation refresh the authoritative balance and status with `getCampaign`.
+
+### `GET /api/campaigns/rewards/direct/me`
+
+Return the authenticated wallet's authoritative `balanceWei` from the chain plus up to 100
+listener-confirmed accrual/withdrawal history entries. **Auth required:** Yes.
+
+### `POST /api/campaigns/rewards/direct/withdraw`
+
+Prepare `withdrawDirectRewards(destination)` for the caller's complete accumulated balance.
+Body is optional; `{ "destination": "0x..." }` redirects payment to another non-zero EVM address,
+otherwise it defaults to the authenticated wallet. A prepared response never marks withdrawal
+complete; only the confirmed chain event does. A destination that rejects native currency causes
+the chain transaction to revert and leaves the accrued balance available for another destination.
 
 ### `PATCH /api/campaigns/:id`
 

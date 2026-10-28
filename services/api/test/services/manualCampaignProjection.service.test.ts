@@ -10,6 +10,8 @@ import {
   applyCampaignFulfillmentSubmitted,
   applyCampaignFulfillmentVerified,
   applyCampaignRewardPaid,
+  applyDirectRewardAccrued,
+  applyDirectRewardsWithdrawn,
 } from "@/services/manualCampaignProjection.service.js";
 
 jest.mock("@/lib/prisma", () => ({
@@ -18,6 +20,8 @@ jest.mock("@/lib/prisma", () => ({
     campaignRewardPolicy: { update: jest.fn() },
     campaignFulfillment: { findUnique: jest.fn(), updateMany: jest.fn() },
     referralPointAllocation: { upsert: jest.fn() },
+    directCampaignSettlement: { upsert: jest.fn() },
+    directRewardEvent: { findUnique: jest.fn(), create: jest.fn() },
     $transaction: jest.fn(),
   },
 }));
@@ -77,7 +81,7 @@ function storedCampaign(overrides: Record<string, unknown> = {}) {
     status: "DRAFT",
     publishedAt: null,
     owner: { walletAddress: DAVE.toLowerCase() },
-    task: { rewardPolicy: { id: "reward-1" } },
+    task: { rewardPolicy: { id: "reward-1", type: "POINTS", configuration: { completerPoints: 30, referralPoolPoints: 10 } } },
     ...overrides,
   };
 }
@@ -92,7 +96,7 @@ function storedFulfillment(overrides: Record<string, unknown> = {}) {
     rewardTransactionHash: null,
     rejectionReason: null,
     participant: { walletAddress: ALICE.toLowerCase() },
-    task: { campaignId: CAMPAIGN_ID },
+    task: { campaignId: CAMPAIGN_ID, rewardPolicy: { type: "POINTS" } },
     ...overrides,
   };
 }
@@ -130,6 +134,37 @@ describe("CampaignCreated", () => {
 
     expect(await applyCampaignCreated(createdEvent())).toEqual({ outcome: "ALREADY_APPLIED", id: CAMPAIGN_ID });
     expect(db.campaign.updateMany).not.toHaveBeenCalled();
+  });
+
+  test("publishes a Direct draft with lossless chain reward and post-funding state", async () => {
+    db.campaign.findUnique.mockResolvedValue(storedCampaign({
+      task: { rewardPolicy: { id: "reward-1", type: "DIRECT", configuration: { initialFundingRuns: 10 } } },
+    }));
+    const chain = { getCampaign: jest.fn().mockResolvedValue({ balance: 40_000_000_000_000_000n, status: 1 }) };
+
+    expect(await applyCampaignCreated(createdEvent({
+      rewardType: 1,
+      completerReward: 3_000_000_000_000_000n,
+      referralPool: 1_000_000_000_000_000n,
+    }), chain)).toEqual({ outcome: "APPLIED", id: CAMPAIGN_ID });
+
+    expect(db.campaignRewardPolicy.update).toHaveBeenCalledWith({
+      where: { id: "reward-1" },
+      data: { configuration: {
+        completerRewardWei: "3000000000000000",
+        referralPoolWei: "1000000000000000",
+        initialFundingRuns: 10,
+      } },
+    });
+    expect(db.campaign.updateMany.mock.calls[0][0].data).toEqual(expect.objectContaining({
+      chainBalanceWei: "40000000000000000",
+      chainStatus: "ACTIVE",
+    }));
+  });
+
+  test("skips a creation event whose reward type differs from the saved draft", async () => {
+    db.campaign.findUnique.mockResolvedValue(storedCampaign());
+    expect((await applyCampaignCreated(createdEvent({ rewardType: 1 }), { getCampaign: jest.fn() })).outcome).toBe("SKIPPED");
   });
 
   test("a draft cancelled before its transaction was mined stays cancelled", async () => {
@@ -343,6 +378,38 @@ describe("CampaignRewardPaid", () => {
     });
   });
 
+  test("stores Direct settlement as wei without touching points", async () => {
+    db.campaignFulfillment.findUnique.mockResolvedValue(storedFulfillment({
+      status: "APPROVED",
+      task: { campaignId: CAMPAIGN_ID, rewardPolicy: { type: "DIRECT" } },
+    }));
+    const chain = { getCampaign: jest.fn().mockResolvedValue({ balance: 100n, status: 3 }) };
+    const directEvent = {
+      ...event(),
+      rewardType: 1,
+      completerReward: 3000000000000000n,
+      referralPool: 1000000000000000n,
+      referralPayout: { ...event().referralPayout, directAmount: 800000000000000n, grandparentAmount: 200000000000000n },
+    };
+
+    expect(await applyCampaignRewardPaid(directEvent, chain)).toEqual({ outcome: "APPLIED", id: FULFILLMENT_ID });
+    expect(db.referralPointAllocation.upsert).not.toHaveBeenCalled();
+    expect(db.directCampaignSettlement.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      create: expect.objectContaining({
+        completerAmountWei: "3000000000000000",
+        referralPoolWei: "1000000000000000",
+        directAmountWei: "800000000000000",
+      }),
+    }));
+    expect(db.campaignFulfillment.updateMany.mock.calls[0][0].data).toEqual(expect.objectContaining({
+      completerRewardWei: "3000000000000000",
+      status: "REWARDED",
+    }));
+    expect(db.campaign.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: { chainBalanceWei: "100", chainStatus: "PENDING_FUNDING" },
+    }));
+  });
+
   test("a second delivery changes nothing", async () => {
     db.campaignFulfillment.findUnique.mockResolvedValue(
       storedFulfillment({ status: "REWARDED", rewardTransactionHash: "0xdecided" }),
@@ -357,5 +424,42 @@ describe("CampaignRewardPaid", () => {
 
     expect((await applyCampaignRewardPaid(event())).outcome).toBe("SKIPPED");
     expect(db.referralPointAllocation.upsert).not.toHaveBeenCalled();
+  });
+});
+
+describe("Direct reward balance history", () => {
+  test("projects accrual losslessly and idempotently", async () => {
+    const event = {
+      account: ALICE as `0x${string}`,
+      amount: 3_000_000_000_000_000n,
+      balance: 7_000_000_000_000_000n,
+      ...position("0xACCRUED", 20n, 2),
+    };
+    expect((await applyDirectRewardAccrued(event)).outcome).toBe("APPLIED");
+    expect(db.directRewardEvent.create).toHaveBeenCalledWith({ data: expect.objectContaining({
+      type: "ACCRUED",
+      account: ALICE.toLowerCase(),
+      amountWei: "3000000000000000",
+      balanceAfterWei: "7000000000000000",
+    }) });
+    db.directRewardEvent.findUnique.mockResolvedValue({ id: "existing" });
+    expect((await applyDirectRewardAccrued(event)).outcome).toBe("ALREADY_APPLIED");
+  });
+
+  test("projects confirmed withdrawal with its destination", async () => {
+    const event = {
+      account: ALICE as `0x${string}`,
+      destination: BOB as `0x${string}`,
+      amount: 7_000_000_000_000_000n,
+      ...position("0xWITHDRAWN", 21n, 0),
+    };
+    expect((await applyDirectRewardsWithdrawn(event)).outcome).toBe("APPLIED");
+    expect(db.directRewardEvent.create).toHaveBeenCalledWith({ data: expect.objectContaining({
+      type: "WITHDRAWN",
+      account: ALICE.toLowerCase(),
+      destination: BOB.toLowerCase(),
+      amountWei: "7000000000000000",
+      balanceAfterWei: "0",
+    }) });
   });
 });

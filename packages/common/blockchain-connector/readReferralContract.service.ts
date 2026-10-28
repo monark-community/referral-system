@@ -100,8 +100,9 @@ export type ReferralPayout = {
   directAmount: bigint;
   grandparentAmount: bigint;
   unallocatedAmount: bigint;
-  rewardType: CampaignRewardType;
-  campaignId: Hex;
+  // Optional for compatibility with deployments whose nested tuple predates these mirrors.
+  rewardType?: CampaignRewardType;
+  campaignId?: Hex;
 };
 
 export type CampaignRewardPaidEvent = ChainEventPosition & {

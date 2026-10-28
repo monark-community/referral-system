@@ -7,11 +7,13 @@
 export const BOUNTY_TASK_STRATEGY = "BOUNTY_V1" as const;
 export const OWNER_APPROVAL_STRATEGY = "OWNER_APPROVAL_V1" as const;
 export const CAMPAIGN_POINTS_STRATEGY = "CAMPAIGN_POINTS_V1" as const;
+export const CAMPAIGN_DIRECT_NATIVE_STRATEGY = "CAMPAIGN_DIRECT_NATIVE_V1" as const;
 
 // The contract's enum values for a createCampaign call
 export const CHAIN_TASK_TYPE_BOUNTY = 1;
 export const CHAIN_VERIFICATION_TYPE_MANUAL = 1;
 export const CHAIN_REWARD_TYPE_POINTS = 0;
+export const CHAIN_REWARD_TYPE_DIRECT = 1;
 
 // Social media proof is a link to the post or profile; community proof is a username or short text
 export const BOUNTY_CATEGORIES = ["SOCIAL_MEDIA", "COMMUNITY"] as const;
@@ -27,16 +29,29 @@ export const MANUAL_CAMPAIGN_LIMITS = {
 
 export type ManualCampaignStatus = "DRAFT" | "ACTIVE" | "PAUSED" | "ENDED" | "CANCELLED";
 
-export type ManualCampaignInput = {
+type ManualCampaignCommonInput = {
   title: string;
   description: string;
   instructions: string;
   category: BountyCategory;
-  completerPoints: number;
-  referralPoolPoints: number;
   maxCompletions: number;
   endsAt: Date;
 };
+
+export type PointsManualCampaignInput = ManualCampaignCommonInput & {
+  rewardType: "POINTS";
+  completerPoints: number;
+  referralPoolPoints: number;
+};
+
+export type DirectManualCampaignInput = ManualCampaignCommonInput & {
+  rewardType: "DIRECT";
+  completerRewardWei: string;
+  referralPoolWei: string;
+  initialFundingRuns: number;
+};
+
+export type ManualCampaignInput = PointsManualCampaignInput | DirectManualCampaignInput;
 
 export type ManualCampaignDefinition = ManualCampaignInput & {
   id: string;
@@ -47,8 +62,27 @@ export type ManualCampaignDefinition = ManualCampaignInput & {
   taskId: string;
   rewardPolicyId: string;
   publishedAt: Date | null;
+  chainStatus: string | null;
+  chainBalanceWei: string | null;
   createdAt: Date;
 };
+
+export const UINT256_MAX = (1n << 256n) - 1n;
+
+export function parseWei(value: unknown, field: string): string {
+  if (typeof value !== "string" || !/^(0|[1-9][0-9]*)$/.test(value)) {
+    throw new ManualCampaignValidationError(field, "must be an unsigned base-10 integer string");
+  }
+  const amount = BigInt(value);
+  if (amount > UINT256_MAX) {
+    throw new ManualCampaignValidationError(field, "must fit in uint256");
+  }
+  return amount.toString();
+}
+
+export function directRewardPerRunWei(campaign: Pick<DirectManualCampaignInput, "completerRewardWei" | "referralPoolWei">): bigint {
+  return BigInt(campaign.completerRewardWei) + BigInt(campaign.referralPoolWei);
+}
 
 export class ManualCampaignValidationError extends Error {
   constructor(
@@ -107,8 +141,13 @@ export function parseManualCampaignInput(
   { now = new Date(), current }: { now?: Date; current?: ManualCampaignInput } = {},
 ): ManualCampaignInput {
   const body = requireRecord(value, "body");
-  const field = (name: keyof ManualCampaignInput) =>
-    body[name] === undefined && current ? current[name] : body[name];
+  const previous = current as unknown as UnknownRecord | undefined;
+  const field = (name: string) => body[name] === undefined && previous ? previous[name] : body[name];
+
+  const rewardTypeValue = body.rewardType === undefined ? current?.rewardType ?? "POINTS" : body.rewardType;
+  if (rewardTypeValue !== "POINTS" && rewardTypeValue !== "DIRECT") {
+    throw new ManualCampaignValidationError("rewardType", "must be POINTS or DIRECT");
+  }
 
   const endsAtValue = field("endsAt");
   if (typeof endsAtValue !== "string" && !(endsAtValue instanceof Date)) {
@@ -122,21 +161,41 @@ export function parseManualCampaignInput(
     throw new ManualCampaignValidationError("endsAt", "must be in the future");
   }
 
-  const completerPoints = requireWholeNumber(field("completerPoints"), "completerPoints", 0);
-  const referralPoolPoints = requireWholeNumber(field("referralPoolPoints"), "referralPoolPoints", 0);
-  if (completerPoints + referralPoolPoints === 0) {
-    throw new ManualCampaignValidationError("completerPoints", "the campaign must pay at least one point");
-  }
-
-  return {
+  const common = {
     title: requireText(field("title"), "title", MANUAL_CAMPAIGN_LIMITS.title),
     description: requireText(field("description"), "description", MANUAL_CAMPAIGN_LIMITS.description, true),
     instructions: requireText(field("instructions"), "instructions", MANUAL_CAMPAIGN_LIMITS.instructions),
     category: requireCategory(field("category"), "category"),
-    completerPoints,
-    referralPoolPoints,
     maxCompletions: requireWholeNumber(field("maxCompletions"), "maxCompletions", 1),
     endsAt,
+  };
+
+  if (rewardTypeValue === "POINTS") {
+    if (body.completerRewardWei !== undefined || body.referralPoolWei !== undefined || body.initialFundingRuns !== undefined) {
+      throw new ManualCampaignValidationError("rewardType", "POINTS campaigns cannot include Direct reward fields");
+    }
+    const completerPoints = requireWholeNumber(field("completerPoints"), "completerPoints", 0);
+    const referralPoolPoints = requireWholeNumber(field("referralPoolPoints"), "referralPoolPoints", 0);
+    if (completerPoints + referralPoolPoints === 0) {
+      throw new ManualCampaignValidationError("completerPoints", "the campaign must pay at least one point");
+    }
+    return { ...common, rewardType: "POINTS", completerPoints, referralPoolPoints };
+  }
+
+  if (body.completerPoints !== undefined || body.referralPoolPoints !== undefined) {
+    throw new ManualCampaignValidationError("rewardType", "DIRECT campaigns cannot include Points reward fields");
+  }
+  const completerRewardWei = parseWei(field("completerRewardWei"), "completerRewardWei");
+  const referralPoolWei = parseWei(field("referralPoolWei"), "referralPoolWei");
+  if (BigInt(completerRewardWei) + BigInt(referralPoolWei) === 0n) {
+    throw new ManualCampaignValidationError("completerRewardWei", "the campaign must pay at least one wei");
+  }
+  return {
+    ...common,
+    rewardType: "DIRECT",
+    completerRewardWei,
+    referralPoolWei,
+    initialFundingRuns: requireWholeNumber(field("initialFundingRuns"), "initialFundingRuns", 1),
   };
 }
 
@@ -186,6 +245,8 @@ export type StoredManualCampaign = {
   maxCompletions: number | null;
   endsAt: Date | null;
   publishedAt: Date | null;
+  chainStatus?: string | null;
+  chainBalanceWei?: string | null;
   createdAt: Date;
   task: {
     id: string;
@@ -214,19 +275,11 @@ export function parseStoredManualCampaign(row: StoredManualCampaign): ManualCamp
     fail("its verification is not manual");
   }
   const reward = task.rewardPolicy ?? fail("it has no reward policy");
-  if (reward.type !== "POINTS" || reward.strategyKey !== CAMPAIGN_POINTS_STRATEGY) fail("its reward is not points");
-
   const taskConfiguration = task.configuration as UnknownRecord | null;
   const rewardConfiguration = reward.configuration as UnknownRecord | null;
   const category = taskConfiguration?.category;
   if (!BOUNTY_CATEGORIES.includes(category as BountyCategory)) fail("its task has no valid category");
-  const completerPoints = rewardConfiguration?.completerPoints;
-  const referralPoolPoints = rewardConfiguration?.referralPoolPoints;
-  if (!Number.isSafeInteger(completerPoints) || !Number.isSafeInteger(referralPoolPoints)) {
-    fail("its reward has no valid point amounts");
-  }
-
-  return {
+  const common = {
     id: row.id,
     key: row.key,
     ownerId: row.ownerId!,
@@ -236,13 +289,35 @@ export function parseStoredManualCampaign(row: StoredManualCampaign): ManualCamp
     instructions: row.instructions,
     status: row.status as ManualCampaignStatus,
     category: category as BountyCategory,
-    completerPoints: completerPoints as number,
-    referralPoolPoints: referralPoolPoints as number,
     maxCompletions: row.maxCompletions!,
     endsAt: row.endsAt!,
     taskId: task.id,
     rewardPolicyId: reward.id,
     publishedAt: row.publishedAt,
+    chainStatus: row.chainStatus ?? null,
+    chainBalanceWei: row.chainBalanceWei ?? null,
     createdAt: row.createdAt,
   };
+
+  if (reward.type === "POINTS" && reward.strategyKey === CAMPAIGN_POINTS_STRATEGY) {
+    const completerPoints = rewardConfiguration?.completerPoints;
+    const referralPoolPoints = rewardConfiguration?.referralPoolPoints;
+    if (!Number.isSafeInteger(completerPoints) || !Number.isSafeInteger(referralPoolPoints)) {
+      fail("its reward has no valid point amounts");
+    }
+    return { ...common, rewardType: "POINTS", completerPoints: completerPoints as number, referralPoolPoints: referralPoolPoints as number };
+  }
+  if (reward.type === "DIRECT" && reward.strategyKey === CAMPAIGN_DIRECT_NATIVE_STRATEGY) {
+    try {
+      const completerRewardWei = parseWei(rewardConfiguration?.completerRewardWei, "completerRewardWei");
+      const referralPoolWei = parseWei(rewardConfiguration?.referralPoolWei, "referralPoolWei");
+      const initialFundingRuns = requireWholeNumber(rewardConfiguration?.initialFundingRuns, "initialFundingRuns", 1);
+      if (BigInt(completerRewardWei) + BigInt(referralPoolWei) === 0n) fail("its Direct reward is zero");
+      return { ...common, rewardType: "DIRECT", completerRewardWei, referralPoolWei, initialFundingRuns };
+    } catch (error) {
+      if (error instanceof ManualCampaignDataError) throw error;
+      fail("its reward has invalid Direct amounts");
+    }
+  }
+  return fail("its reward type or strategy is unsupported");
 }

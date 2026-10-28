@@ -6,6 +6,8 @@ import {
   ManualCampaignDataError,
   ManualCampaignValidationError,
   parseManualCampaignInput,
+  parseWei,
+  UINT256_MAX,
   parseProof,
   parseRejectionReason,
   parseStoredManualCampaign,
@@ -45,6 +47,7 @@ describe("parseManualCampaignInput", () => {
       description: "Help us grow",
       instructions: "Follow @dave and paste the link to your profile",
       category: "SOCIAL_MEDIA",
+      rewardType: "POINTS",
       completerPoints: 30,
       referralPoolPoints: 10,
       maxCompletions: 50,
@@ -78,7 +81,8 @@ describe("parseManualCampaignInput", () => {
       "completerPoints",
     );
     // Either part alone is enough
-    expect(parseManualCampaignInput(body({ completerPoints: 0 }), { now }).referralPoolPoints).toBe(10);
+    const onePart = parseManualCampaignInput(body({ completerPoints: 0 }), { now });
+    expect(onePart.rewardType === "POINTS" && onePart.referralPoolPoints).toBe(10);
   });
 
   test("an edit keeps the stored value of every field it leaves out, then checks the whole", () => {
@@ -94,6 +98,42 @@ describe("parseManualCampaignInput", () => {
   test("rejects a body that is not an object", () => {
     expect(fieldOf(() => parseManualCampaignInput(null, { now }))).toBe("body");
     expect(fieldOf(() => parseManualCampaignInput([body()], { now }))).toBe("body");
+  });
+});
+
+describe("Direct reward input", () => {
+  const direct = (overrides: Record<string, unknown> = {}) => body({
+    rewardType: "DIRECT",
+    completerPoints: undefined,
+    referralPoolPoints: undefined,
+    completerRewardWei: "3000000000000000",
+    referralPoolWei: "1000000000000000",
+    initialFundingRuns: 10,
+    ...overrides,
+  });
+
+  test("parses lossless wei and initial run count", () => {
+    expect(parseManualCampaignInput(direct(), { now })).toEqual(expect.objectContaining({
+      rewardType: "DIRECT",
+      completerRewardWei: "3000000000000000",
+      referralPoolWei: "1000000000000000",
+      initialFundingRuns: 10,
+    }));
+  });
+
+  test.each(["", "-1", "+1", "1.2", "1e3", "0x10", "01", 1, (UINT256_MAX + 1n).toString()])(
+    "rejects invalid wei %p",
+    (value) => expect(() => parseWei(value, "amount")).toThrow(ManualCampaignValidationError),
+  );
+
+  test("requires a non-zero per-run reward and positive whole runs", () => {
+    expect(fieldOf(() => parseManualCampaignInput(direct({ completerRewardWei: "0", referralPoolWei: "0" }), { now }))).toBe("completerRewardWei");
+    expect(fieldOf(() => parseManualCampaignInput(direct({ initialFundingRuns: 0 }), { now }))).toBe("initialFundingRuns");
+  });
+
+  test("rejects fields from the other reward discriminator", () => {
+    expect(fieldOf(() => parseManualCampaignInput(direct({ completerPoints: 1 }), { now }))).toBe("rewardType");
+    expect(fieldOf(() => parseManualCampaignInput(body({ completerRewardWei: "1" }), { now }))).toBe("rewardType");
   });
 });
 

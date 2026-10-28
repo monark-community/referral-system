@@ -19,6 +19,10 @@ import {
   listJoinedManualCampaigns,
   listManualCampaignSubmissions,
   listOwnedManualCampaigns,
+  prepareDirectCampaignFunding,
+  getDirectRewardAccount,
+  prepareDirectRewardWithdrawal,
+  refreshManualCampaignFunding,
   rejectManualCampaignSubmission,
   submitFulfillmentCall,
   submitManualCampaignProof,
@@ -28,7 +32,12 @@ import {
 
 const ERROR_STATUS: Record<ManualCampaignErrorCode, number> = {
   INVALID_INPUT: 400,
+  INVALID_RUN_COUNT: 400,
+  INVALID_DESTINATION: 400,
   REWARD_ABOVE_MAXIMUM: 400,
+  WRONG_REWARD_TYPE: 409,
+  INSUFFICIENT_FUNDING: 409,
+  NO_DIRECT_REWARDS: 409,
   NOT_CAMPAIGN_OWNER: 403,
   OWN_CAMPAIGN: 403,
   CAMPAIGN_NOT_FOUND: 404,
@@ -62,6 +71,22 @@ export function handleManualCampaignError(error: unknown, res: Response, fallbac
 // ---------- Response shapes ----------
 
 export function manualCampaignSummary(campaign: ManualCampaignDefinition, spotsTaken: number) {
+  const reward = campaign.rewardType === "DIRECT"
+    ? {
+        type: "DIRECT" as const,
+        completerRewardWei: campaign.completerRewardWei,
+        referralPoolWei: campaign.referralPoolWei,
+        rewardPerRunWei: (BigInt(campaign.completerRewardWei) + BigInt(campaign.referralPoolWei)).toString(),
+        initialFundingRuns: campaign.initialFundingRuns,
+        initialFundingWei: ((BigInt(campaign.completerRewardWei) + BigInt(campaign.referralPoolWei)) * BigInt(campaign.initialFundingRuns)).toString(),
+        chainBalanceWei: campaign.chainBalanceWei,
+        chainStatus: campaign.chainStatus,
+      }
+    : {
+        type: "POINTS" as const,
+        completerPoints: campaign.completerPoints,
+        referralPoolPoints: campaign.referralPoolPoints,
+      };
   return {
     id: campaign.id,
     key: campaign.key,
@@ -74,11 +99,7 @@ export function manualCampaignSummary(campaign: ManualCampaignDefinition, spotsT
     taskType: "BOUNTY",
     category: campaign.category,
     verificationType: "MANUAL",
-    reward: {
-      type: "POINTS",
-      completerPoints: campaign.completerPoints,
-      referralPoolPoints: campaign.referralPoolPoints,
-    },
+    reward,
     maxCompletions: campaign.maxCompletions,
     spotsLeft: Math.max(0, campaign.maxCompletions - spotsTaken),
     endsAt: campaign.endsAt.toISOString(),
@@ -113,7 +134,7 @@ export function manualFulfillmentResponse(campaign: ManualCampaignDefinition, fu
     status: fulfillment.status,
     proof: fulfillment.proof,
     rejectionReason: fulfillment.rejectionReason,
-    completerReward: fulfillment.completerReward,
+    completerReward: campaign.rewardType === "DIRECT" ? fulfillment.completerRewardWei : fulfillment.completerReward,
     createdAt: fulfillment.createdAt.toISOString(),
     submittedAt: fulfillment.submittedAt?.toISOString() ?? null,
     reviewedAt: fulfillment.reviewedAt?.toISOString() ?? null,
@@ -137,6 +158,50 @@ export function manualFulfillmentResponse(campaign: ManualCampaignDefinition, fu
         ? submitFulfillmentCall(campaign.id, fulfillment.id)
         : null,
   };
+}
+
+/** POST /api/campaigns/:id/funding - Prepare a payable top-up transaction. */
+export async function prepareCampaignFunding(req: Request, res: Response): Promise<void> {
+  const userId = requireUser(req, res);
+  if (!userId) return;
+  try {
+    const result = await prepareDirectCampaignFunding(userId, param(req, "id"), req.body);
+    res.json({ funding: result.funding, chain: result.chain });
+  } catch (error) {
+    handleManualCampaignError(error, res, "Failed to prepare campaign funding");
+  }
+}
+
+/** GET /api/campaigns/rewards/direct/me - Read the caller's authoritative chain balance and history. */
+export async function getMyDirectRewards(req: Request, res: Response): Promise<void> {
+  const userId = requireUser(req, res);
+  if (!userId) return;
+  try {
+    const account = await getDirectRewardAccount(userId);
+    res.json({
+      wallet: account.wallet,
+      chainId: account.chainId,
+      balanceWei: account.balanceWei,
+      history: account.history.map((event) => ({
+        ...event,
+        blockNumber: event.blockNumber.toString(),
+        observedAt: event.observedAt.toISOString(),
+      })),
+    });
+  } catch (error) {
+    handleManualCampaignError(error, res, "Failed to get Direct rewards");
+  }
+}
+
+/** POST /api/campaigns/rewards/direct/withdraw - Prepare a full-balance withdrawal. */
+export async function prepareMyDirectRewardWithdrawal(req: Request, res: Response): Promise<void> {
+  const userId = requireUser(req, res);
+  if (!userId) return;
+  try {
+    res.json(await prepareDirectRewardWithdrawal(userId, req.body));
+  } catch (error) {
+    handleManualCampaignError(error, res, "Failed to prepare Direct reward withdrawal");
+  }
 }
 
 type ReviewedFulfillment = CampaignFulfillment & {
@@ -213,10 +278,12 @@ export async function getMyCampaigns(req: Request, res: Response): Promise<void>
   const userId = requireUser(req, res);
   if (!userId) return;
   try {
-    const [owned, joined] = await Promise.all([
+    const [ownedRaw, joinedRaw] = await Promise.all([
       listOwnedManualCampaigns(userId),
       listJoinedManualCampaigns(userId),
     ]);
+    const owned = await Promise.all(ownedRaw.map(async (item) => ({ ...item, campaign: await refreshManualCampaignFunding(item.campaign) })));
+    const joined = await Promise.all(joinedRaw.map(async (item) => ({ ...item, campaign: await refreshManualCampaignFunding(item.campaign) })));
     const joinedSpots = await countSpotsTaken(joined.map(({ campaign }) => campaign.taskId));
     res.json({
       created: owned.map(({ campaign, submissions }) => {

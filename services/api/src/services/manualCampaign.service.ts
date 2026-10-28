@@ -11,11 +11,14 @@ import { randomUUID } from "node:crypto";
 import { Prisma, type CampaignFulfillmentStatus } from "@prisma/client";
 import { createClient } from "@reffinity/blockchain-connector/clients";
 import { ReadReferralContractService } from "@reffinity/blockchain-connector/readReferralContract";
+import { getAddress, isAddress, zeroAddress, type Address, type Hex } from "viem";
 import { uuidToBytes32 } from "@reffinity/blockchain-connector/uuidBytesConverter";
 import { prisma } from "../lib/prisma.js";
 import {
   BOUNTY_TASK_STRATEGY,
+  CAMPAIGN_DIRECT_NATIVE_STRATEGY,
   CAMPAIGN_POINTS_STRATEGY,
+  CHAIN_REWARD_TYPE_DIRECT,
   CHAIN_REWARD_TYPE_POINTS,
   CHAIN_TASK_TYPE_BOUNTY,
   CHAIN_VERIFICATION_TYPE_MANUAL,
@@ -26,11 +29,17 @@ import {
   parseRejectionReason,
   parseStoredManualCampaign,
   type ManualCampaignDefinition,
+  directRewardPerRunWei,
   type ManualCampaignStatus,
 } from "../models/manualCampaign.js";
 
 export type ManualCampaignErrorCode =
   | "INVALID_INPUT"
+  | "INVALID_RUN_COUNT"
+  | "WRONG_REWARD_TYPE"
+  | "INSUFFICIENT_FUNDING"
+  | "NO_DIRECT_REWARDS"
+  | "INVALID_DESTINATION"
   | "REWARD_ABOVE_MAXIMUM"
   | "CAMPAIGN_NOT_FOUND"
   | "SUBMISSION_NOT_FOUND"
@@ -59,6 +68,16 @@ export class ManualCampaignError extends Error {
 export type ManualCampaignChain = {
   chainId: number;
   getMaxCampaignPointsPerCompletion(): Promise<bigint>;
+  getMaxCampaignDirectRewardPerCompletion(): Promise<bigint>;
+  getCampaign(campaignId: Hex): Promise<{
+    owner: Address;
+    rewardType: number;
+    status: number;
+    completerReward: bigint;
+    referralPool: bigint;
+    balance: bigint;
+  }>;
+  getDirectRewardBalance(account: Address): Promise<bigint>;
 };
 
 let defaultChain: ManualCampaignChain | undefined;
@@ -70,40 +89,60 @@ function chainFromEnvironment(): ManualCampaignChain {
     defaultChain = {
       chainId: publicClient.chain!.id,
       getMaxCampaignPointsPerCompletion: () => reader.getMaxCampaignPointsPerCompletion(),
+      getMaxCampaignDirectRewardPerCompletion: () => reader.getMaxCampaignDirectRewardPerCompletion(),
+      getCampaign: (id) => reader.getCampaign(id),
+      getDirectRewardBalance: (account) => reader.getDirectRewardBalance(account),
     };
   }
   return defaultChain;
 }
 
-// A contract call for the user's wallet to send; arguments are JSON-safe, so point amounts are numbers
-export type ChainCall = { functionName: string; args: (string | number)[] };
+const configuredChainId = () => (process.env.CHAIN_TYPE === "sepolia" ? 11155111 : 31337);
+const configuredContractAddress = (): Address => {
+  const value = process.env.REFERRAL_CONTRACT_ADDRESS ?? process.env.NEXT_PUBLIC_REFERRAL_CONTRACT_ADDRESS
+    ?? "0x5fbdb2315678afecb367f032d93f642f64180aa3";
+  if (!isAddress(value)) throw new Error("Configured referral contract address is invalid");
+  return getAddress(value);
+};
 
-export function createCampaignCall(campaign: ManualCampaignDefinition): ChainCall {
-  return {
-    functionName: "createCampaign",
-    args: [
+// A contract call for the user's wallet to send; arguments are JSON-safe, so point amounts are numbers
+export type ChainCall = {
+  chainId: number;
+  contractAddress: Address;
+  functionName: string;
+  args: (string | number)[];
+  valueWei?: string;
+};
+
+function chainCall(chainId: number, functionName: string, args: (string | number)[], valueWei?: string): ChainCall {
+  return { chainId, contractAddress: configuredContractAddress(), functionName, args, ...(valueWei ? { valueWei } : {}) };
+}
+
+export function createCampaignCall(campaign: ManualCampaignDefinition, chainId = configuredChainId()): ChainCall {
+  const direct = campaign.rewardType === "DIRECT";
+  const completer = direct ? campaign.completerRewardWei : campaign.completerPoints;
+  const pool = direct ? campaign.referralPoolWei : campaign.referralPoolPoints;
+  return chainCall(
+    chainId,
+    "createCampaign",
+    [
       uuidToBytes32(campaign.id),
       CHAIN_TASK_TYPE_BOUNTY,
       CHAIN_VERIFICATION_TYPE_MANUAL,
-      CHAIN_REWARD_TYPE_POINTS,
-      campaign.completerPoints,
-      campaign.referralPoolPoints,
+      direct ? CHAIN_REWARD_TYPE_DIRECT : CHAIN_REWARD_TYPE_POINTS,
+      completer,
+      pool,
     ],
-  };
+    direct ? (directRewardPerRunWei(campaign) * BigInt(campaign.initialFundingRuns)).toString() : undefined,
+  );
 }
 
-export function submitFulfillmentCall(campaignId: string, fulfillmentId: string): ChainCall {
-  return {
-    functionName: "submitCampaignFulfillment",
-    args: [uuidToBytes32(campaignId), uuidToBytes32(fulfillmentId)],
-  };
+export function submitFulfillmentCall(campaignId: string, fulfillmentId: string, chainId = configuredChainId()): ChainCall {
+  return chainCall(chainId, "submitCampaignFulfillment", [uuidToBytes32(campaignId), uuidToBytes32(fulfillmentId)]);
 }
 
-export function decideFulfillmentCall(decision: "approve" | "reject", fulfillmentId: string): ChainCall {
-  return {
-    functionName: decision === "approve" ? "verifyCampaignFulfillment" : "rejectCampaignFulfillment",
-    args: [uuidToBytes32(fulfillmentId)],
-  };
+export function decideFulfillmentCall(decision: "approve" | "reject", fulfillmentId: string, chainId = configuredChainId()): ChainCall {
+  return chainCall(chainId, decision === "approve" ? "verifyCampaignFulfillment" : "rejectCampaignFulfillment", [uuidToBytes32(fulfillmentId)]);
 }
 
 const campaignInclude = {
@@ -112,6 +151,15 @@ const campaignInclude = {
 } as const;
 
 const participantSelect = { id: true, name: true, walletAddress: true } as const;
+
+const CHAIN_STATUS_ACTIVE = 1;
+const CHAIN_STATUS_PENDING_FUNDING = 3;
+
+export type DirectFundingState = {
+  balanceWei: string;
+  runsRemaining: number;
+  chainStatus: "ACTIVE" | "PENDING_FUNDING";
+};
 
 function invalid(error: unknown): never {
   if (error instanceof ManualCampaignValidationError) {
@@ -147,6 +195,166 @@ async function requireOwnedCampaign(ownerId: string, campaignId: string): Promis
     throw new ManualCampaignError("NOT_CAMPAIGN_OWNER", "Only the campaign's creator can do this");
   }
   return campaign;
+}
+
+function requireDirect(campaign: ManualCampaignDefinition): asserts campaign is Extract<ManualCampaignDefinition, { rewardType: "DIRECT" }> {
+  if (campaign.rewardType !== "DIRECT") {
+    throw new ManualCampaignError("WRONG_REWARD_TYPE", "This operation is only available for Direct campaigns");
+  }
+}
+
+async function readDirectFundingState(
+  campaign: Extract<ManualCampaignDefinition, { rewardType: "DIRECT" }>,
+  chain: ManualCampaignChain,
+): Promise<DirectFundingState> {
+  let state;
+  try {
+    state = await chain.getCampaign(uuidToBytes32(campaign.id));
+  } catch (error) {
+    console.error("Could not read Direct campaign funding", error);
+    throw new ManualCampaignError("CHAIN_UNAVAILABLE", "Could not read campaign funding from the chain");
+  }
+  if (state.owner.toLowerCase() !== campaign.owner.walletAddress.toLowerCase() || state.rewardType !== CHAIN_REWARD_TYPE_DIRECT) {
+    throw new ManualCampaignError("WRONG_REWARD_TYPE", "Stored campaign does not match the on-chain Direct campaign");
+  }
+  const rewardPerRun = directRewardPerRunWei(campaign);
+  const runs = state.balance / rewardPerRun;
+  if (runs > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new ManualCampaignError("CHAIN_UNAVAILABLE", "Campaign run count exceeds the API's safe range");
+  }
+  const result: DirectFundingState = {
+    balanceWei: state.balance.toString(),
+    runsRemaining: Number(runs),
+    chainStatus: state.status === CHAIN_STATUS_ACTIVE ? "ACTIVE" : "PENDING_FUNDING",
+  };
+  await prisma.campaign.updateMany({
+    where: { id: campaign.id },
+    data: { chainBalanceWei: result.balanceWei, chainStatus: result.chainStatus },
+  });
+  return result;
+}
+
+export async function reconcileDirectCampaignFunding(
+  campaign: ManualCampaignDefinition,
+  chain: ManualCampaignChain = chainFromEnvironment(),
+): Promise<DirectFundingState | null> {
+  if (campaign.rewardType !== "DIRECT" || !campaign.publishedAt) return null;
+  return readDirectFundingState(campaign, chain);
+}
+
+export async function refreshManualCampaignFunding(
+  campaign: ManualCampaignDefinition,
+  chain: ManualCampaignChain = chainFromEnvironment(),
+): Promise<ManualCampaignDefinition> {
+  const funding = await reconcileDirectCampaignFunding(campaign, chain);
+  return funding ? { ...campaign, chainBalanceWei: funding.balanceWei, chainStatus: funding.chainStatus } : campaign;
+}
+
+/** Bounded startup reconciliation for published user campaigns; individual failures are isolated. */
+export async function reconcilePublishedDirectCampaigns(
+  chain: ManualCampaignChain = chainFromEnvironment(),
+  limit = 100,
+): Promise<{ checked: number; failed: number }> {
+  const rows = await prisma.campaign.findMany({
+    where: { isSystem: false, ownerId: { not: null }, publishedAt: { not: null }, status: { notIn: ["ENDED", "CANCELLED"] } },
+    include: campaignInclude,
+    orderBy: { updatedAt: "asc" },
+    take: limit,
+  });
+  let checked = 0;
+  let failed = 0;
+  for (const row of rows) {
+    const campaign = parseStoredManualCampaign(row);
+    if (campaign.rewardType !== "DIRECT") continue;
+    checked += 1;
+    try {
+      await reconcileDirectCampaignFunding(campaign, chain);
+    } catch (error) {
+      failed += 1;
+      console.warn("Direct campaign funding reconciliation failed", { campaignId: campaign.id, error });
+    }
+  }
+  return { checked, failed };
+}
+
+export async function prepareDirectCampaignFunding(
+  ownerId: string,
+  campaignId: string,
+  body: unknown,
+  chain: ManualCampaignChain = chainFromEnvironment(),
+) {
+  const campaign = await requireOwnedCampaign(ownerId, campaignId);
+  requireDirect(campaign);
+  if (!campaign.publishedAt || campaign.status === "ENDED" || campaign.status === "CANCELLED") {
+    throw new ManualCampaignError("NOT_ACCEPTING_SUBMISSIONS", "This campaign cannot be funded in its current state");
+  }
+  const runs = (body as Record<string, unknown> | null)?.runs;
+  if (typeof runs !== "number" || !Number.isSafeInteger(runs) || runs < 1) {
+    throw new ManualCampaignError("INVALID_RUN_COUNT", "runs must be a positive whole number", "runs");
+  }
+  const current = await readDirectFundingState(campaign, chain);
+  const value = directRewardPerRunWei(campaign) * BigInt(runs);
+  const projectedBalance = BigInt(current.balanceWei) + value;
+  const projectedRuns = projectedBalance / directRewardPerRunWei(campaign);
+  return {
+    campaign,
+    funding: {
+      requestedRuns: runs,
+      valueWei: value.toString(),
+      currentBalanceWei: current.balanceWei,
+      currentRunsRemaining: current.runsRemaining,
+      projectedBalanceWei: projectedBalance.toString(),
+      projectedRunsRemaining: Number(projectedRuns),
+    },
+    chain: chainCall(chain.chainId, "fundCampaign", [uuidToBytes32(campaign.id)], value.toString()),
+  };
+}
+
+async function walletForUser(userId: string): Promise<Address> {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { walletAddress: true } });
+  if (!user || !isAddress(user.walletAddress)) {
+    throw new ManualCampaignError("INVALID_DESTINATION", "The authenticated user has no valid wallet address");
+  }
+  return getAddress(user.walletAddress);
+}
+
+export async function getDirectRewardAccount(userId: string, chain: ManualCampaignChain = chainFromEnvironment()) {
+  const wallet = await walletForUser(userId);
+  let balance: bigint;
+  try {
+    balance = await chain.getDirectRewardBalance(wallet);
+  } catch (error) {
+    console.error("Could not read Direct reward balance", error);
+    throw new ManualCampaignError("CHAIN_UNAVAILABLE", "Could not read Direct rewards from the chain");
+  }
+  const history = await prisma.directRewardEvent.findMany({
+    where: { account: wallet.toLowerCase() },
+    orderBy: [{ blockNumber: "desc" }, { logIndex: "desc" }],
+    take: 100,
+  });
+  return { wallet, chainId: chain.chainId, balanceWei: balance.toString(), history };
+}
+
+export async function prepareDirectRewardWithdrawal(
+  userId: string,
+  body: unknown,
+  chain: ManualCampaignChain = chainFromEnvironment(),
+) {
+  const account = await getDirectRewardAccount(userId, chain);
+  if (account.balanceWei === "0") {
+    throw new ManualCampaignError("NO_DIRECT_REWARDS", "There are no Direct rewards to withdraw");
+  }
+  const requested = (body as Record<string, unknown> | null)?.destination;
+  const destination = requested === undefined ? account.wallet : requested;
+  if (typeof destination !== "string" || !isAddress(destination) || getAddress(destination) === zeroAddress) {
+    throw new ManualCampaignError("INVALID_DESTINATION", "destination must be a non-zero EVM address", "destination");
+  }
+  return {
+    wallet: account.wallet,
+    destination: getAddress(destination),
+    balanceWei: account.balanceWei,
+    chain: chainCall(chain.chainId, "withdrawDirectRewards", [getAddress(destination)]),
+  };
 }
 
 /** Submissions that hold a spot: everything except rejected ones, per task. */
@@ -217,23 +425,27 @@ export async function listJoinedManualCampaigns(userId: string) {
 // ---------- Creating and managing campaigns ----------
 
 async function requireRewardWithinMaximum(
-  completerPoints: number,
-  referralPoolPoints: number,
+  input: ManualCampaignDefinition | ReturnType<typeof parseManualCampaignInput>,
   chain: ManualCampaignChain,
 ): Promise<void> {
   let maximum: bigint;
   try {
-    maximum = await chain.getMaxCampaignPointsPerCompletion();
+    maximum = input.rewardType === "DIRECT"
+      ? await chain.getMaxCampaignDirectRewardPerCompletion()
+      : await chain.getMaxCampaignPointsPerCompletion();
   } catch (error) {
-    console.error("Could not read the campaign points maximum", error);
-    throw new ManualCampaignError("CHAIN_UNAVAILABLE", "Could not check the reward against the points maximum");
+    console.error("Could not read the campaign reward maximum", error);
+    throw new ManualCampaignError("CHAIN_UNAVAILABLE", "Could not check the reward against the chain maximum");
   }
-  const total = BigInt(completerPoints) + BigInt(referralPoolPoints);
+  const total = input.rewardType === "DIRECT"
+    ? directRewardPerRunWei(input)
+    : BigInt(input.completerPoints) + BigInt(input.referralPoolPoints);
   if (total > maximum) {
+    const unit = input.rewardType === "DIRECT" ? "wei" : "points";
     throw new ManualCampaignError(
       "REWARD_ABOVE_MAXIMUM",
-      `One completion can pay at most ${maximum} points in total; this campaign pays ${total}`,
-      "completerPoints",
+      `One completion can pay at most ${maximum} ${unit} in total; this campaign pays ${total}`,
+      input.rewardType === "DIRECT" ? "completerRewardWei" : "completerPoints",
     );
   }
 }
@@ -251,7 +463,7 @@ export async function createManualCampaignDraft(
   } catch (error) {
     invalid(error);
   }
-  await requireRewardWithinMaximum(input.completerPoints, input.referralPoolPoints, chain);
+  await requireRewardWithinMaximum(input, chain);
 
   // The id doubles as the key, and as the on-chain campaign id once converted to bytes32
   const id = randomUUID();
@@ -277,12 +489,11 @@ export async function createManualCampaignDraft(
           },
           rewardPolicy: {
             create: {
-              type: "POINTS",
-              strategyKey: CAMPAIGN_POINTS_STRATEGY,
-              configuration: {
-                completerPoints: input.completerPoints,
-                referralPoolPoints: input.referralPoolPoints,
-              },
+              type: input.rewardType,
+              strategyKey: input.rewardType === "DIRECT" ? CAMPAIGN_DIRECT_NATIVE_STRATEGY : CAMPAIGN_POINTS_STRATEGY,
+              configuration: input.rewardType === "DIRECT"
+                ? { completerRewardWei: input.completerRewardWei, referralPoolWei: input.referralPoolWei, initialFundingRuns: input.initialFundingRuns }
+                : { completerPoints: input.completerPoints, referralPoolPoints: input.referralPoolPoints },
             },
           },
         },
@@ -311,7 +522,7 @@ export async function updateManualCampaignDraft(
   } catch (error) {
     invalid(error);
   }
-  await requireRewardWithinMaximum(input.completerPoints, input.referralPoolPoints, chain);
+  await requireRewardWithinMaximum(input, chain);
 
   await prisma.$transaction(async (tx) => {
     // The listener may publish the campaign meanwhile; then the edit must not go through
@@ -333,10 +544,11 @@ export async function updateManualCampaignDraft(
     await tx.campaignRewardPolicy.update({
       where: { id: current.rewardPolicyId },
       data: {
-        configuration: {
-          completerPoints: input.completerPoints,
-          referralPoolPoints: input.referralPoolPoints,
-        },
+        type: input.rewardType,
+        strategyKey: input.rewardType === "DIRECT" ? CAMPAIGN_DIRECT_NATIVE_STRATEGY : CAMPAIGN_POINTS_STRATEGY,
+        configuration: input.rewardType === "DIRECT"
+          ? { completerRewardWei: input.completerRewardWei, referralPoolWei: input.referralPoolWei, initialFundingRuns: input.initialFundingRuns }
+          : { completerPoints: input.completerPoints, referralPoolPoints: input.referralPoolPoints },
       },
     });
   });
@@ -401,6 +613,12 @@ export async function submitManualCampaignProof(
   }
   if (campaign.status !== "ACTIVE" || campaign.endsAt.getTime() <= now.getTime()) {
     throw new ManualCampaignError("NOT_ACCEPTING_SUBMISSIONS", "This campaign is not taking submissions");
+  }
+  if (campaign.rewardType === "DIRECT") {
+    const funding = await readDirectFundingState(campaign, chain);
+    if (funding.chainStatus !== "ACTIVE" || funding.runsRemaining < 1) {
+      throw new ManualCampaignError("INSUFFICIENT_FUNDING", "This campaign does not have a funded run available");
+    }
   }
   if (await getMyManualCampaignFulfillment(userId, campaign)) {
     throw new ManualCampaignError("ALREADY_SUBMITTED", "You have already submitted to this campaign");
@@ -469,8 +687,15 @@ async function decideSubmission(
   fulfillmentId: string,
   body: unknown,
   now: Date,
+  chain?: ManualCampaignChain,
 ) {
   const campaign = await requireOwnedCampaign(ownerId, campaignId);
+  if (decision === "approve" && campaign.rewardType === "DIRECT") {
+    const funding = await readDirectFundingState(campaign, chain ?? chainFromEnvironment());
+    if (funding.chainStatus !== "ACTIVE" || funding.runsRemaining < 1) {
+      throw new ManualCampaignError("INSUFFICIENT_FUNDING", "This campaign does not have a funded run available");
+    }
+  }
   const fulfillment = await prisma.campaignFulfillment.findFirst({
     where: { id: fulfillmentId, taskId: campaign.taskId },
   });
@@ -520,8 +745,9 @@ export function approveManualCampaignSubmission(
   campaignId: string,
   fulfillmentId: string,
   now = new Date(),
+  chain?: ManualCampaignChain,
 ) {
-  return decideSubmission("approve", ownerId, campaignId, fulfillmentId, undefined, now);
+  return decideSubmission("approve", ownerId, campaignId, fulfillmentId, undefined, now, chain);
 }
 
 export function rejectManualCampaignSubmission(
@@ -530,6 +756,7 @@ export function rejectManualCampaignSubmission(
   fulfillmentId: string,
   body: unknown,
   now = new Date(),
+  chain?: ManualCampaignChain,
 ) {
-  return decideSubmission("reject", ownerId, campaignId, fulfillmentId, body, now);
+  return decideSubmission("reject", ownerId, campaignId, fulfillmentId, body, now, chain);
 }
