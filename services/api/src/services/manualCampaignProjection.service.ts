@@ -163,17 +163,24 @@ export async function applyCampaignFulfillmentVerified(
   }
 
   const position = eventPosition(event);
-  await prisma.campaignFulfillment.updateMany({
-    where: { id, verifiedAt: null },
-    data: {
-      verificationTransactionHash: position.transactionHash,
-      verificationBlockNumber: position.blockNumber,
-      verificationLogIndex: position.logIndex,
-      verifiedAt: new Date(),
-      rejectionReason: null,
-      ...(fulfillment.status === "REWARDED" ? {} : { status: "APPROVED" as const }),
-    },
-  });
+  // The payout comes from the same transaction and can be saved at any moment, so the database checks
+  // the status as it writes; the copy read above may already be out of date
+  await prisma.$transaction([
+    prisma.campaignFulfillment.updateMany({
+      where: { id, verifiedAt: null },
+      data: {
+        verificationTransactionHash: position.transactionHash,
+        verificationBlockNumber: position.blockNumber,
+        verificationLogIndex: position.logIndex,
+        verifiedAt: new Date(),
+        rejectionReason: null,
+      },
+    }),
+    prisma.campaignFulfillment.updateMany({
+      where: { id, status: { not: "REWARDED" } },
+      data: { status: "APPROVED" },
+    }),
+  ]);
   return { outcome: "APPLIED", id };
 }
 
