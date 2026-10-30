@@ -1,12 +1,16 @@
 "use client";
 
+import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
   CalendarDays,
+  Check,
   CheckCircle2,
   CircleHelp,
   Clock3,
+  Copy,
+  Lock,
   Megaphone,
   Users,
 } from "lucide-react";
@@ -21,6 +25,26 @@ export const categoryLabels = {
   SOCIAL_MEDIA: "Social media",
   COMMUNITY: "Community",
 };
+
+/** The page a private campaign's link opens. It sits outside /referrals so it works without a login. */
+export const privateCampaignPath = (code: string) =>
+  `/campaigns/private/${encodeURIComponent(code)}`;
+
+export function acceptsSubmissions(campaign: Campaign) {
+  return (
+    campaign.status === "ACTIVE" &&
+    campaign.spotsLeft > 0 &&
+    new Date(campaign.endsAt).getTime() > Date.now()
+  );
+}
+
+export function closedReason(campaign: Campaign) {
+  return campaign.status === "PAUSED"
+    ? "This campaign is paused. Check back when the creator resumes it."
+    : campaign.spotsLeft === 0
+      ? "All spots have been taken."
+      : "This campaign is no longer accepting submissions.";
+}
 
 const statusLabels: Record<string, string> = {
   DRAFT: "Draft",
@@ -62,6 +86,159 @@ export function CampaignBadge({ status }: { status: string }) {
     >
       {statusLabels[status] || status}
     </span>
+  );
+}
+
+export function PrivateTag() {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-muted-foreground">
+      <Lock aria-hidden className="h-3 w-3" />
+      Private
+    </span>
+  );
+}
+
+/** The creator's copy of a private campaign's link, the one way other people can open it. */
+export function PrivateCampaignLink({ code }: { code: string }) {
+  const [copied, setCopied] = useState(false);
+  const origin = typeof window === "undefined" ? "" : window.location.origin;
+  const link = `${origin}${privateCampaignPath(code)}`;
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* The link stays selectable in the field. */
+    }
+  }
+  return (
+    <div className="space-y-2">
+      <p className="text-sm font-medium">Private link</p>
+      <p className="text-xs leading-relaxed text-muted-foreground">
+        This campaign isn’t on the campaign board. Anyone with this link can
+        view it, and they need to log in to take part. The link never changes,
+        so share it only with people you want to invite.
+      </p>
+      <div className="flex items-center gap-2 rounded-lg border border-input bg-background p-1.5 pl-3">
+        <input
+          aria-label="Private campaign link"
+          className="min-w-0 flex-1 truncate bg-transparent font-mono text-sm outline-none"
+          value={link}
+          readOnly
+          onFocus={(e) => e.target.select()}
+        />
+        <Button variant="outline" size="sm" onClick={copy}>
+          {copied ? (
+            <Check aria-hidden className="h-4 w-4" />
+          ) : (
+            <Copy aria-hidden className="h-4 w-4" />
+          )}
+          {copied ? "Copied" : "Copy link"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+export function CampaignHeading({
+  campaign,
+  isOwner = false,
+  action,
+}: {
+  campaign: Campaign;
+  isOwner?: boolean;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="min-w-0">
+        <div className="mb-3 flex flex-wrap items-center gap-3">
+          <span className="text-xs text-muted-foreground">
+            {categoryLabels[campaign.category]}
+          </span>
+          <CampaignBadge status={campaign.status} />
+          {campaign.isPrivate && <PrivateTag />}
+        </div>
+        <h1 className="break-words text-2xl font-semibold lg:text-3xl">
+          {campaign.title}
+        </h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Created by{" "}
+          {campaign.owner.name || shortWallet(campaign.owner.walletAddress)}
+          {isOwner && " (you)"}
+        </p>
+      </div>
+      {action}
+    </div>
+  );
+}
+
+/** The task and its reward. `children` goes under the task, e.g. a note for the creator. */
+export function CampaignOverview({
+  campaign,
+  children,
+}: {
+  campaign: Campaign;
+  children?: ReactNode;
+}) {
+  return (
+    <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
+      <section className={`${campaignPanel} min-w-0 space-y-5`}>
+        {campaign.description && (
+          <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-muted-foreground">
+            {campaign.description}
+          </p>
+        )}
+        <div>
+          <h2 className="mb-3 text-lg font-semibold">What you need to do</h2>
+          {campaign.instructions === undefined ? (
+            // Your own list doesn't carry a private campaign's task; its link does
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              Open the private link the creator sent you to see the full task.
+            </p>
+          ) : (
+            <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
+              {campaign.instructions}
+            </p>
+          )}
+        </div>
+        <div className="border-t border-border pt-4 text-sm text-muted-foreground">
+          <p>Proof is checked by the campaign creator.</p>
+          <p className="mt-1">
+            {campaign.category === "SOCIAL_MEDIA"
+              ? "Submit a link to your post or profile."
+              : "Submit your community username or a short text."}
+          </p>
+        </div>
+        {children}
+      </section>
+      <aside className={`${campaignPanel} space-y-5`}>
+        <div>
+          <p className="text-xs text-muted-foreground">Completion reward</p>
+          <p className="mt-2 text-4xl font-semibold tracking-tight text-primary">
+            {campaign.reward.completerPoints.toLocaleString()}{" "}
+            <span className="text-sm font-normal text-muted-foreground">
+              points
+            </span>
+          </p>
+        </div>
+        <div className="space-y-2 border-t border-border pt-4 text-sm text-muted-foreground">
+          <p className="flex items-center gap-2">
+            <Users className="h-4 w-4" />
+            {campaign.spotsLeft} of {campaign.maxCompletions} spots left
+          </p>
+          <p className="flex items-start gap-2">
+            <CalendarDays className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>Ends {new Date(campaign.endsAt).toLocaleString()}</span>
+          </p>
+          <p className="pt-2">
+            + {campaign.reward.referralPoolPoints} referral pool points per
+            completion, shared 80/20.
+          </p>
+        </div>
+      </aside>
+    </div>
   );
 }
 
@@ -149,8 +326,9 @@ export function CampaignCard({
       )}
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-xs text-muted-foreground">
+        <span className="flex items-center gap-2 text-xs text-muted-foreground">
           {categoryLabels[campaign.category]}
+          {campaign.isPrivate && <PrivateTag />}
         </span>
         <CampaignBadge status={fulfillment?.status || campaign.status} />
       </div>

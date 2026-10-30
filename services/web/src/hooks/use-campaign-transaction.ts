@@ -85,6 +85,24 @@ export function useCampaignTransaction() {
             });
             break;
           }
+          case "createCampaignWithVisibility": {
+            const [id, task, verification, reward, points, pool, visibility] =
+              call.args;
+            hash = await writeContractAsync({
+              ...base,
+              functionName: call.functionName,
+              args: [
+                id,
+                task,
+                verification,
+                reward,
+                BigInt(points),
+                BigInt(pool),
+                visibility,
+              ],
+            });
+            break;
+          }
           case "submitCampaignFulfillment":
             hash = await writeContractAsync({
               ...base,

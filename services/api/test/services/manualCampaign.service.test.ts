@@ -192,6 +192,32 @@ describe("contract calls", () => {
     expect(createCampaignCall(campaign).valueWei).toBeUndefined();
   });
 
+  test("publishing a private campaign records it as private on chain, keeping manual review", () => {
+    const campaign = { id: CAMPAIGN_ID, completerPoints: 30, referralPoolPoints: 10, isPrivate: true } as any;
+
+    expect(createCampaignCall(campaign)).toEqual(expect.objectContaining({
+      functionName: "createCampaignWithVisibility",
+      args: [bytes32(CAMPAIGN_ID), 1, 1, 0, 30, 10, 1],
+    }));
+  });
+
+  test("a private Direct campaign still sends its initial funding", () => {
+    const call = createCampaignCall({
+      id: CAMPAIGN_ID,
+      rewardType: "DIRECT",
+      completerRewardWei: "30",
+      referralPoolWei: "10",
+      initialFundingRuns: 10,
+      isPrivate: true,
+    } as any, 31337);
+
+    expect(call).toEqual(expect.objectContaining({
+      functionName: "createCampaignWithVisibility",
+      args: [bytes32(CAMPAIGN_ID), 1, 1, 1, "30", "10", 1],
+      valueWei: "400",
+    }));
+  });
+
   test("submitting and deciding name the campaign and submission by their on-chain ids", () => {
     expect(submitFulfillmentCall(CAMPAIGN_ID, FULFILLMENT_ID)).toEqual(expect.objectContaining({
       functionName: "submitCampaignFulfillment",
@@ -464,7 +490,7 @@ describe("changeManualCampaignStatus", () => {
     ["ACTIVE", "PAUSED"],
     ["PAUSED", "ACTIVE"],
     ["ACTIVE", "ENDED"],
-    ["PAUSED", "CANCELLED"],
+    ["PAUSED", "ENDED"],
     ["DRAFT", "CANCELLED"],
   ])("a %s campaign can become %s", async (from, to) => {
     db.campaign.findFirst.mockResolvedValue(storedCampaign({ status: from }));
@@ -480,6 +506,10 @@ describe("changeManualCampaignStatus", () => {
   test.each([
     // Only the chain makes a draft active
     ["DRAFT", "ACTIVE"],
+    // Only a draft is cancelled, and only a published campaign is ended
+    ["ACTIVE", "CANCELLED"],
+    ["PAUSED", "CANCELLED"],
+    ["DRAFT", "ENDED"],
     ["ENDED", "ACTIVE"],
     ["CANCELLED", "ACTIVE"],
     ["ACTIVE", "DRAFT"],

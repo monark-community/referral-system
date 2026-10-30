@@ -13,7 +13,23 @@ import {
 } from "@/lib/api/campaigns";
 import { useAuth } from "@/contexts/auth-context";
 import { campaignError } from "@/hooks/use-campaign-transaction";
+import { cn } from "@/lib/utils";
 import { campaignField, campaignPanel, CampaignNotice } from "./campaign-ui";
+
+const visibilityOptions = [
+  {
+    id: "public",
+    isPrivate: false,
+    label: "Public",
+    help: "Listed on the campaign board for everyone.",
+  },
+  {
+    id: "private",
+    isPrivate: true,
+    label: "Private",
+    help: "Not on the board. Only people you send its link to can open it.",
+  },
+];
 
 function localDate(date: string) {
   const value = new Date(date);
@@ -48,6 +64,7 @@ export function CampaignForm({
   );
   const [spots, setSpots] = useState(String(campaign?.maxCompletions ?? 50));
   const [end, setEnd] = useState(campaign ? localDate(campaign.endsAt) : "");
+  const [isPrivate, setIsPrivate] = useState(campaign?.isPrivate ?? false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -94,6 +111,7 @@ export function CampaignForm({
         referralPoolPoints,
         maxCompletions,
         endsAt: new Date(end).toISOString(),
+        isPrivate,
       };
       const result = campaign
         ? await updateCampaign(campaign.id, input)
@@ -258,6 +276,49 @@ export function CampaignForm({
             </span>
           </label>
         </div>
+        <fieldset className="space-y-2 text-sm">
+          <legend className="mb-2">Visibility</legend>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {visibilityOptions.map((option) => (
+              <label
+                key={option.id}
+                className={cn(
+                  "flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors",
+                  isPrivate === option.isPrivate
+                    ? "border-primary bg-primary/5"
+                    : "border-input hover:bg-secondary/40",
+                )}
+              >
+                <input
+                  type="radio"
+                  name="campaign-visibility"
+                  className="mt-1 accent-orange-500"
+                  checked={isPrivate === option.isPrivate}
+                  onChange={() => setIsPrivate(option.isPrivate)}
+                  aria-labelledby={`campaign-visibility-${option.id}`}
+                  aria-describedby={`campaign-visibility-${option.id}-help`}
+                />
+                <span>
+                  <span
+                    id={`campaign-visibility-${option.id}`}
+                    className="block font-medium"
+                  >
+                    {option.label}
+                  </span>
+                  <span
+                    id={`campaign-visibility-${option.id}-help`}
+                    className="mt-0.5 block text-xs text-muted-foreground"
+                  >
+                    {option.help}
+                  </span>
+                </span>
+              </label>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            You can change this until you publish.
+          </p>
+        </fieldset>
         {error && <CampaignNotice error>{error}</CampaignNotice>}
         <div className="flex flex-wrap gap-3">
           <Button type="submit" disabled={busy}>

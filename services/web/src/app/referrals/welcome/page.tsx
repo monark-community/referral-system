@@ -1,6 +1,7 @@
 // Purpose: Welcome/landing page - first page new visitors see, with hero, feature highlights, and join/login actions
 // Notes:
-// - Authenticated users are auto-redirected to the dashboard
+// - Authenticated users are auto-redirected to the dashboard, or back to the page that sent them here
+//   to log in (e.g. a private campaign's link, see lib/return-to.ts)
 // - Login and onboarding modals are lazy-loaded via auth-modals.tsx to keep the initial bundle small
 
 "use client";
@@ -11,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Gift, Link2, Shield, Sparkles, X } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { useOnboarding } from "@/hooks/use-onboarding";
+import { returnToPath } from "@/lib/return-to";
 
 const features = [
   {
@@ -56,7 +58,7 @@ export default function WelcomePage() {
 
   useEffect(() => {
     if (!isLoading && isAuthenticated && !isOnboardingOpen) {
-      router.replace("/referrals");
+      router.replace(returnToPath());
     }
   }, [isLoading, isAuthenticated, isOnboardingOpen, router]);
 
@@ -82,7 +84,7 @@ export default function WelcomePage() {
 
   const handleReturningUser = () => {
     closeOnboarding();
-    router.push("/referrals");
+    router.push(returnToPath());
   };
 
   if (!mounted || isLoading) {

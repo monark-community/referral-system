@@ -7,6 +7,7 @@ import { CampaignForm } from "@/components/campaigns/campaign-form";
 import {
   ParticipantSubmission,
   CampaignReviewQueue,
+  CampaignStatusControls,
 } from "@/components/campaigns/campaign-actions";
 import { SafeProof } from "@/components/campaigns/campaign-ui";
 import { useAuth } from "@/contexts/auth-context";
@@ -27,6 +28,7 @@ jest.mock("@/lib/api/campaigns", () => ({
   getCampaign: jest.fn(),
   createCampaign: jest.fn(),
   updateCampaign: jest.fn(),
+  changeCampaignStatus: jest.fn(),
   getMySubmission: jest.fn(),
   submitCampaignProof: jest.fn(),
   getCampaignSubmissions: jest.fn(),
@@ -54,6 +56,7 @@ const campaign: Campaign = {
   reward: { type: "POINTS", completerPoints: 30, referralPoolPoints: 10 },
   maxCompletions: 50,
   spotsLeft: 49,
+  isPrivate: false,
   endsAt: "2099-11-01T00:00:00Z",
   publishedAt: "2026-10-01T00:00:00Z",
   createdAt: "2026-10-01T00:00:00Z",
@@ -191,6 +194,7 @@ test("saves a validated draft and navigates to its review page before publishing
         completerPoints: 30,
         referralPoolPoints: 10,
         maxCompletions: 50,
+        isPrivate: false,
       }),
     ),
   );
@@ -302,6 +306,155 @@ test("reviewers must give a rejection reason and a declined wallet leaves a retr
   );
   expect(await screen.findByText("Wallet declined")).toBeInTheDocument();
   expect(mockSend).toHaveBeenCalledWith(rejected.chain);
+});
+
+test("a draft can be made private, and keeps that choice when edited", async () => {
+  jest
+    .mocked(api.createCampaign)
+    .mockResolvedValue({ campaign: { ...campaign, status: "DRAFT" } });
+  mount(<CampaignForm />);
+  expect(screen.getByRole("radio", { name: "Public" })).toBeChecked();
+  await userEvent.type(screen.getByLabelText("Campaign title"), "Beta test");
+  await userEvent.type(
+    screen.getByLabelText("Task instructions"),
+    "Try the beta",
+  );
+  await userEvent.type(
+    screen.getByLabelText("End date and time"),
+    "2099-11-01T12:00",
+  );
+  await userEvent.click(screen.getByRole("radio", { name: "Private" }));
+  await userEvent.click(screen.getByRole("button", { name: "Save draft" }));
+  await waitFor(() =>
+    expect(api.createCampaign).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "Beta test", isPrivate: true }),
+    ),
+  );
+});
+
+test("an existing private draft opens with Private selected", () => {
+  mount(
+    <CampaignForm
+      campaign={{ ...campaign, status: "DRAFT", isPrivate: true }}
+    />,
+  );
+  expect(screen.getByRole("radio", { name: "Private" })).toBeChecked();
+});
+
+test("a published campaign can be paused or ended, but only a draft can be cancelled", async () => {
+  jest
+    .mocked(api.changeCampaignStatus)
+    .mockResolvedValue({ campaign: { ...campaign, status: "ENDED" } });
+  mount(<CampaignStatusControls campaign={campaign} />);
+  expect(
+    screen.getByRole("button", { name: "Pause campaign" }),
+  ).toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Cancel campaign" }),
+  ).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "End campaign" }));
+  expect(
+    screen.getByText(/permanently end the campaign/),
+  ).toBeInTheDocument();
+  const [, confirm] = screen.getAllByRole("button", { name: "End campaign" });
+  await userEvent.click(confirm);
+  await waitFor(() =>
+    expect(api.changeCampaignStatus).toHaveBeenCalledWith(
+      campaign.id,
+      "ENDED",
+    ),
+  );
+});
+
+test("a draft can be cancelled, but not ended", async () => {
+  mount(
+    <CampaignStatusControls
+      campaign={{ ...campaign, status: "DRAFT", publishedAt: null }}
+    />,
+  );
+  expect(
+    screen.queryByRole("button", { name: "End campaign" }),
+  ).not.toBeInTheDocument();
+  await userEvent.click(
+    screen.getByRole("button", { name: "Cancel campaign" }),
+  );
+  expect(
+    screen.getByText(/permanently cancel this draft/),
+  ).toBeInTheDocument();
+});
+
+test("the creator of a published private campaign gets its link to copy", async () => {
+  const writeText = jest.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", {
+    value: { writeText },
+    configurable: true,
+  });
+  jest.mocked(api.getMyCampaigns).mockResolvedValue({
+    created: [
+      {
+        ...campaign,
+        isPrivate: true,
+        privateCode: "secret-code",
+        chain: null,
+      },
+    ],
+    joined: [],
+  });
+  mount(<CampaignDetailPage />);
+  const field = await screen.findByLabelText("Private campaign link");
+  const link = `${window.location.origin}/campaigns/private/secret-code`;
+  expect(field).toHaveValue(link);
+  expect(screen.getByText("Private")).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "Copy link" }));
+  expect(writeText).toHaveBeenCalledWith(link);
+  expect(
+    await screen.findByRole("button", { name: "Copied" }),
+  ).toBeInTheDocument();
+});
+
+test("a private draft explains its link comes after publishing", async () => {
+  jest.mocked(api.getMyCampaigns).mockResolvedValue({
+    created: [
+      {
+        ...campaign,
+        status: "DRAFT",
+        publishedAt: null,
+        isPrivate: true,
+        privateCode: "secret-code",
+        chain: {
+          functionName: "createCampaignWithVisibility",
+          args: ["0x1234", 1, 1, 0, 30, 10, 1],
+        },
+      },
+    ],
+    joined: [],
+  });
+  mount(<CampaignDetailPage />);
+  expect(
+    await screen.findByText(/you’ll get a link to share/),
+  ).toBeInTheDocument();
+  expect(
+    screen.queryByLabelText("Private campaign link"),
+  ).not.toBeInTheDocument();
+});
+
+test("a private campaign you submitted to opens from your own list, not by its id", async () => {
+  // The joined list carries the summary: no instructions, and no code
+  const summary = { ...campaign, instructions: undefined, isPrivate: true };
+  jest.mocked(api.getMyCampaigns).mockResolvedValue({
+    created: [],
+    joined: [{ campaign: summary, fulfillment: submission }],
+  });
+  jest.mocked(api.getMySubmission).mockResolvedValue({ fulfillment: submission });
+  mount(<CampaignDetailPage />);
+  expect(
+    await screen.findByRole("heading", { name: campaign.title }),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByText(/Open the private link the creator sent you/),
+  ).toBeInTheDocument();
+  expect(await screen.findByText("Under review")).toBeInTheDocument();
+  expect(api.getCampaign).not.toHaveBeenCalled();
 });
 
 test("proof never creates a javascript link", () => {

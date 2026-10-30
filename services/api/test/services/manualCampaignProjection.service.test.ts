@@ -101,8 +101,11 @@ function storedFulfillment(overrides: Record<string, unknown> = {}) {
   };
 }
 
-// The data the one updateMany call wrote
+// The data the first updateMany call wrote
 const written = () => db.campaignFulfillment.updateMany.mock.calls[0][0].data;
+// The updateMany calls that change the status
+const statusWrites = () =>
+  db.campaignFulfillment.updateMany.mock.calls.map(([call]: any[]) => call).filter((call: any) => "status" in call.data);
 
 beforeEach(() => {
   jest.resetAllMocks();
@@ -256,17 +259,19 @@ describe("CampaignFulfillmentVerified", () => {
         verificationLogIndex: 0,
         verifiedAt: expect.any(Date),
         rejectionReason: null,
-        status: "APPROVED",
       },
     });
   });
 
-  test("keeps a submission the payout already marked rewarded", async () => {
-    db.campaignFulfillment.findUnique.mockResolvedValue(storedFulfillment({ status: "REWARDED" }));
+  test("never overwrites a payout, even one saved after this event read the submission", async () => {
+    // The read says APPROVED, but the payout event from the same transaction can be saved before the write lands
+    db.campaignFulfillment.findUnique.mockResolvedValue(storedFulfillment({ status: "APPROVED" }));
 
     await applyCampaignFulfillmentVerified(event());
 
-    expect(written()).not.toHaveProperty("status");
+    expect(statusWrites()).toEqual([
+      { where: { id: FULFILLMENT_ID, status: { not: "REWARDED" } }, data: { status: "APPROVED" } },
+    ]);
   });
 
   test("the chain's approval wins over a rejection saved in the API", async () => {
@@ -276,7 +281,8 @@ describe("CampaignFulfillmentVerified", () => {
 
     await applyCampaignFulfillmentVerified(event());
 
-    expect(written()).toEqual(expect.objectContaining({ status: "APPROVED", rejectionReason: null }));
+    expect(written()).toEqual(expect.objectContaining({ rejectionReason: null }));
+    expect(statusWrites()[0].data).toEqual({ status: "APPROVED" });
     expect(console.warn).toHaveBeenCalled();
   });
 

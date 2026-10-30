@@ -3,8 +3,8 @@
 The campaign pages use the existing endpoints documented under **User Campaigns** in
 [API.md](API.md#user-campaigns). There are no new backend endpoints or database changes.
 
-These screens create public manual campaigns. Private campaign creation and shared-link
-access from the newer private-campaign backend are outside this frontend's scope.
+These screens create public and private manual campaigns, and serve a private campaign's
+shared link.
 
 ## Pages
 
@@ -14,6 +14,9 @@ access from the newer private-campaign backend are outside this frontend's scope
   referral pool, available completions, and a local end date and time.
 - `/referrals/campaigns/:id`: task details, draft editing and publishing, campaign
   management, participant proof and progress, or the creator's review queue.
+- `/campaigns/private/:code`: a private campaign's link. Anyone with it can read the campaign
+  without logging in; a signed-in user submits proof with the link's code. It sits outside
+  `/referrals` because the campaigns layout sends logged-out visitors to the welcome page.
 
 Campaigns are linked from the desktop sidebar and the mobile dashboard menu. The built-in
 referral campaign links to the existing referral dashboard.
@@ -37,8 +40,25 @@ confirm or change until finalized on chain. A rejection reason is required, and 
 rejections do not expose a resubmission form.
 
 Drafts are loaded through `GET /campaigns/mine`; the public detail endpoint intentionally
-does not serve drafts. Pause/resume uses the existing status endpoint. End/cancel requires
-an explicit confirmation in the UI and leaves existing submissions available for review.
+does not serve drafts. Pause/resume uses the existing status endpoint. A published campaign
+can be ended, and only a draft can be cancelled; both ask for confirmation, and ending leaves
+existing submissions available for review.
+
+## Private campaigns
+
+The draft form has a Public/Private choice, which can change until the campaign is
+published. A private campaign is left off the board and doesn't open by its id. Once it is
+published, the creator's page shows its one link, built from `privateCode`, with a copy
+button.
+
+A logged-out visitor on the link page gets a log-in/join button. The page is remembered for
+the tab (`src/lib/return-to.ts`, in sessionStorage), and logging in or joining from the
+welcome page comes back to it instead of the dashboard. Only paths on this site are kept.
+
+`GET /campaigns/:id/fulfillments/me` answers 404 for a private campaign until the user has
+submitted to it, so the link page reads that as "no submission yet". A participant's own
+list (`/mine`) carries their private campaigns without the code, so the detail page shows
+those from the list, and points to the link for the full task.
 
 ## Verification
 
@@ -54,5 +74,6 @@ npm run test:e2e -- --grep '@smoke|@campaigns'
 The campaign browser journeys run against PostgreSQL, the API, the listener, and real
 Hardhat wallet transactions. They cover draft visibility and editing, publishing,
 community and social media proof, wallet rejection and retry, approval/reward, rejection
-feedback, pause/resume, creator participation restrictions, and mobile overflow. Browser screenshots are saved
+feedback, pause/resume, creator participation restrictions, private campaigns (the link,
+the logged-out view, and logging in from the link), and mobile overflow. Browser screenshots are saved
 in the normal Playwright output directory.

@@ -89,6 +89,23 @@ test("sends the API call with bigint rewards and the signed-in account, then wai
   expect(result.current.phase).toBe("syncing");
 });
 
+test("sends a private campaign with bigint rewards and its visibility", async () => {
+  const { result } = renderHook(useCampaignTransaction);
+  await act(() =>
+    result.current.send({
+      functionName: "createCampaignWithVisibility",
+      args: ["0x1234", 1, 1, 0, 30, 10, 1],
+    }),
+  );
+  expect(write).toHaveBeenCalledWith(
+    expect.objectContaining({
+      functionName: "createCampaignWithVisibility",
+      args: ["0x1234", 1, 1, 0, BigInt(30), BigInt(10), 1],
+    }),
+  );
+  expect(result.current.phase).toBe("syncing");
+});
+
 test("reuses the saved hash after remount instead of sending a duplicate transaction", async () => {
   const first = renderHook(useCampaignTransaction);
   await act(() => first.result.current.send(call));

@@ -752,10 +752,10 @@ The contract caps what one completion can pay (the completer's reward plus the p
 admin-set maximum, `maxCampaignPointsPerCompletion` (1000 in the local deployment).
 
 **Campaign states.** `DRAFT` (only state that can be edited) → `ACTIVE` once the chain has it.
-The creator can then move it between `ACTIVE` and `PAUSED`, or to `ENDED` or `CANCELLED`, which
-are final; a draft can be cancelled too. Only an `ACTIVE` campaign before its `endsAt`, with a
-spot left, takes submissions. Pausing, ending and cancelling happen in the API only; the contract
-has no such states.
+The creator can then move it between `ACTIVE` and `PAUSED`, or end it (`ENDED`, final). Only a
+draft can be cancelled (`CANCELLED`, final); a published campaign is ended instead. Only an
+`ACTIVE` campaign before its `endsAt`, with a spot left, takes submissions. Pausing, ending and
+cancelling happen in the API only; the contract has no such states.
 
 <a id="private-campaigns"></a>
 **Public and private campaigns.** A campaign is public unless the creator sends `isPrivate: true`
@@ -767,7 +767,8 @@ creator's own views include the code. The web app builds the link from it, for e
 [`GET /api/campaigns/private/:code`](#get-apicampaignsprivatecode) without logging in, and a
 signed-in user submits with the same code. The code stays the same for the campaign's life.
 "Private" covers what is in our database (title, instructions, proof). The chain is public for
-every campaign, so its id, rewards, submissions and payouts can still be seen there.
+every campaign, so its id, rewards, submissions and payouts can still be seen there. The contract
+records the campaign as private, but only as a label: the API is what checks the link's code.
 
 **Submission states.** `SUBMITTED` (proof saved) → `UNDER_REVIEW` (on chain) → `APPROVED` or
 `REJECTED` (the creator's decision) → `REWARDED` (paid on chain). Every submission except a
@@ -881,8 +882,10 @@ detail with its `privateCode` (a private campaign) and the call that publishes i
 ```
 
 The arguments are the campaign id as bytes32, `TaskType.Bounty`, `VerificationType.Manual`,
-`RewardType.Points`, the completer's reward and the pool. When the chain has it, the campaign is
-`ACTIVE` and `chain` is `null`; the chain's reward is the one paid, even if the draft changed after sending.
+`RewardType.Points`, the completer's reward and the pool. A private campaign calls
+`createCampaignWithVisibility` instead, with `CampaignVisibility.Private` (`1`) as one more argument
+at the end. When the chain has it, the campaign is `ACTIVE` and `chain` is `null`; the chain's reward
+is the one paid, even if the draft changed after sending.
 
 For a Direct campaign send `rewardType: "DIRECT"`, `completerRewardWei`, `referralPoolWei`, and
 `initialFundingRuns`. The API returns `RewardType.Direct` in `args` and
@@ -919,8 +922,9 @@ that stays private keeps its code.
 
 ### `POST /api/campaigns/:id/status`
 
-Body: `{ "status": "PAUSED" }`, or `ACTIVE`, `ENDED` or `CANCELLED`. **Auth required:** Yes
-(creator). **Response (200):** `{ "campaign": ... }`
+Body: `{ "status": "PAUSED" }`, or `ACTIVE`, `ENDED` or `CANCELLED` (`CANCELLED` only for a
+draft, `ENDED` only once published). **Auth required:** Yes (creator). **Response (200):**
+`{ "campaign": ... }`
 
 ### `GET /api/campaigns/mine`
 
