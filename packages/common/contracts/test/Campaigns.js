@@ -72,7 +72,7 @@ async function write(functionName, args) {
 
 async function createCampaign(id = campaignId) {
     // TaskType.Bounty = 1 and VerificationType.Manual = 1.
-    await write("createCampaign", [id, owner.address, 1, 1, ...pointsReward]);
+    await write("createCampaign", [id, owner.address, 1, 1, ...pointsReward, 0]);
 }
 
 async function getFulfillmentStatus(id = fulfillmentId) {
@@ -117,15 +117,25 @@ test("stores Bounty and Manual as independent campaign types", async () => {
     assert.equal(campaign.rewardType, 0);
     assert.equal(campaign.completerReward, 30n);
     assert.equal(campaign.referralPool, 10n);
+    assert.equal(campaign.visibility, 0);
 });
 
-test("admits only the implemented Bounty and Manual combination", async () => {
+test("admits the implemented Bounty verification combinations", async () => {
     assert.equal(
         await publicClient.readContract({
             address: contractAddress,
             abi,
             functionName: "isSupportedCombination",
             args: [1, 1],
+        }),
+        true,
+    );
+    assert.equal(
+        await publicClient.readContract({
+            address: contractAddress,
+            abi,
+            functionName: "isSupportedCombination",
+            args: [1, 2],
         }),
         true,
     );
@@ -152,7 +162,7 @@ test("admits only the implemented Bounty and Manual combination", async () => {
             address: contractAddress,
             abi,
             functionName: "createCampaign",
-            args: [campaignId, owner.address, 0, 1, ...pointsReward],
+            args: [campaignId, owner.address, 0, 1, ...pointsReward, 0],
         }),
     );
 });
@@ -164,7 +174,7 @@ test("rejects zero and duplicate campaign identities", async () => {
             address: contractAddress,
             abi,
             functionName: "createCampaign",
-            args: [stringToHex("", { size: 32 }), owner.address, 1, 1, ...pointsReward],
+            args: [stringToHex("", { size: 32 }), owner.address, 1, 1, ...pointsReward, 0],
         }),
     );
     await assert.rejects(
@@ -173,7 +183,7 @@ test("rejects zero and duplicate campaign identities", async () => {
             address: contractAddress,
             abi,
             functionName: "createCampaign",
-            args: [secondCampaignId, zeroAddress, 1, 1, ...pointsReward],
+            args: [secondCampaignId, zeroAddress, 1, 1, ...pointsReward, 0],
         }),
     );
 
@@ -184,7 +194,7 @@ test("rejects zero and duplicate campaign identities", async () => {
             address: contractAddress,
             abi,
             functionName: "createCampaign",
-            args: [campaignId, other.address, 1, 1, ...pointsReward],
+            args: [campaignId, other.address, 1, 1, ...pointsReward, 0],
         }),
     );
 });

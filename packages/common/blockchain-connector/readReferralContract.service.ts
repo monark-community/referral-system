@@ -15,6 +15,12 @@ export enum CampaignTaskType {
 export enum CampaignVerificationType {
   AutomaticChain,
   Manual,
+  PreVerified,
+}
+
+export enum CampaignVisibility {
+  Public,
+  Private,
 }
 
 export enum CampaignStatus {
@@ -46,6 +52,7 @@ export type Campaign = {
   completerReward: bigint;
   referralPool: bigint;
   balance: bigint;
+  visibility: CampaignVisibility;
 };
 
 export type CampaignFulfillment = {
@@ -69,6 +76,11 @@ export type CampaignCreatedEvent = ChainEventPosition & {
   rewardType: CampaignRewardType;
   completerReward: bigint;
   referralPool: bigint;
+};
+
+export type CampaignVisibilitySetEvent = ChainEventPosition & {
+  campaignId: Hex;
+  visibility: CampaignVisibility;
 };
 
 export type CampaignFulfillmentSubmittedEvent = ChainEventPosition & {
@@ -138,6 +150,7 @@ export class ReadReferralContractService {
   private unwatchInviteChangedEvent: WatchContractEventReturnType | null = null;
   private unwatchReferralPointsAllocatedEvent: WatchContractEventReturnType | null = null;
   private unwatchCampaignCreatedEvent: WatchContractEventReturnType | null = null;
+  private unwatchCampaignVisibilitySetEvent: WatchContractEventReturnType | null = null;
   private unwatchCampaignFulfillmentSubmittedEvent: WatchContractEventReturnType | null = null;
   private unwatchCampaignFulfillmentVerifiedEvent: WatchContractEventReturnType | null = null;
   private unwatchCampaignFulfillmentRejectedEvent: WatchContractEventReturnType | null = null;
@@ -342,6 +355,53 @@ export class ReadReferralContractService {
     if (this.unwatchCampaignCreatedEvent) {
       this.unwatchCampaignCreatedEvent();
       this.unwatchCampaignCreatedEvent = null;
+    }
+  }
+
+  async listenToCampaignVisibilitySetEvent(
+    callback: (eventData: CampaignVisibilitySetEvent) => void | Promise<void>,
+    pollingInterval = 10000,
+  ) {
+    this.unwatchCampaignVisibilitySetEvent =
+      this.clients.publicClient.watchContractEvent({
+        address: contracts.referral.address.local,
+        abi: contracts.referral.abi,
+        eventName: "CampaignVisibilitySet",
+        pollingInterval,
+        onLogs: async (logs: any) => {
+          for (const log of logs) {
+            if (!log.args) continue;
+            await callback({
+              ...log.args,
+              blockNumber: log.blockNumber!,
+              logIndex: log.logIndex!,
+              transactionHash: log.transactionHash!,
+            } as CampaignVisibilitySetEvent);
+          }
+        },
+      });
+  }
+
+  async getCampaignVisibilitySetEvents({
+    fromBlock,
+    toBlock,
+  }: {
+    fromBlock: bigint;
+    toBlock: bigint;
+  }) {
+    return this.clients.publicClient.getContractEvents({
+      address: contracts.referral.address.local,
+      abi: contracts.referral.abi,
+      eventName: "CampaignVisibilitySet",
+      fromBlock,
+      toBlock,
+    });
+  }
+
+  async stopListeningToCampaignVisibilitySetEvent() {
+    if (this.unwatchCampaignVisibilitySetEvent) {
+      this.unwatchCampaignVisibilitySetEvent();
+      this.unwatchCampaignVisibilitySetEvent = null;
     }
   }
 

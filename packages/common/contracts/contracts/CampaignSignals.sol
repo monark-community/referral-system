@@ -35,6 +35,12 @@ abstract contract CampaignSignals {
         CampaignTypes.FulfillmentStatus currentStatus
     );
     error UnauthorizedManualVerifier(bytes32 campaignId, address verifier);
+    error UnauthorizedPreVerifiedParticipant(
+        bytes32 fulfillmentId,
+        address caller,
+        address participant
+    );
+    error PreVerifiedCampaignMustBePrivate(bytes32 campaignId);
     error UnauthorizedUser(address user);
     error CampaignOwnerCannotParticipate(bytes32 campaignId, address owner);
     error CampaignRewardAboveMaximum(uint256 reward, uint256 maximum);
@@ -53,6 +59,11 @@ abstract contract CampaignSignals {
         CampaignTypes.RewardType rewardType,
         uint256 completerReward,
         uint256 referralPool
+    );
+
+    event CampaignVisibilitySet(
+        bytes32 indexed campaignId,
+        CampaignTypes.CampaignVisibility visibility
     );
 
     event CampaignFulfillmentSubmitted(

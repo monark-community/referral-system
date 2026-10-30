@@ -62,6 +62,14 @@ export class WriteReferralContractHelper {
     } as const;
   }
 
+  static async createCampaignWithVisibilityContext() {
+    return {
+      abi: contracts.referral.abi,
+      address: contracts.referral.address.local,
+      functionName: "createCampaignWithVisibility",
+    } as const;
+  }
+
   static async setMaxCampaignPointsPerCompletionContext() {
     return {
       abi: contracts.referral.abi,
@@ -99,6 +107,22 @@ export class WriteReferralContractHelper {
       abi: contracts.referral.abi,
       address: contracts.referral.address.local,
       functionName: "submitCampaignFulfillment",
+    } as const;
+  }
+
+  static async createPreVerifiedCampaignFulfillmentContext() {
+    return {
+      abi: contracts.referral.abi,
+      address: contracts.referral.address.local,
+      functionName: "createPreVerifiedCampaignFulfillment",
+    } as const;
+  }
+
+  static async completePreVerifiedCampaignFulfillmentContext() {
+    return {
+      abi: contracts.referral.abi,
+      address: contracts.referral.address.local,
+      functionName: "completePreVerifiedCampaignFulfillment",
     } as const;
   }
 

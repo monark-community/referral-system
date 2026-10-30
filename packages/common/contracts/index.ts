@@ -219,6 +219,17 @@ export const RefferalABI = [
         "internalType": "bytes32",
         "name": "campaignId",
         "type": "bytes32"
+      }
+    ],
+    "name": "PreVerifiedCampaignMustBePrivate",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "campaignId",
+        "type": "bytes32"
       },
       {
         "internalType": "address",
@@ -227,6 +238,27 @@ export const RefferalABI = [
       }
     ],
     "name": "UnauthorizedManualVerifier",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "fulfillmentId",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "address",
+        "name": "caller",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "participant",
+        "type": "address"
+      }
+    ],
+    "name": "UnauthorizedPreVerifiedParticipant",
     "type": "error"
   },
   {
@@ -547,6 +579,25 @@ export const RefferalABI = [
     "inputs": [
       {
         "indexed": true,
+        "internalType": "bytes32",
+        "name": "campaignId",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "enum CampaignTypes.CampaignVisibility",
+        "name": "visibility",
+        "type": "uint8"
+      }
+    ],
+    "name": "CampaignVisibilitySet",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
         "internalType": "address",
         "name": "account",
         "type": "address"
@@ -832,6 +883,47 @@ export const RefferalABI = [
     "inputs": [
       {
         "internalType": "bytes32",
+        "name": "fulfillmentId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "completePreVerifiedCampaignFulfillment",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "bytes32",
+            "name": "id",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "campaignId",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "address",
+            "name": "participant",
+            "type": "address"
+          },
+          {
+            "internalType": "enum CampaignTypes.FulfillmentStatus",
+            "name": "status",
+            "type": "uint8"
+          }
+        ],
+        "internalType": "struct CampaignTypes.Fulfillment",
+        "name": "fulfillment",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
         "name": "campaignId",
         "type": "bytes32"
       },
@@ -909,6 +1001,112 @@ export const RefferalABI = [
             "internalType": "uint256",
             "name": "balance",
             "type": "uint256"
+          },
+          {
+            "internalType": "enum CampaignTypes.CampaignVisibility",
+            "name": "visibility",
+            "type": "uint8"
+          }
+        ],
+        "internalType": "struct CampaignTypes.Campaign",
+        "name": "campaign",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "payable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "campaignId",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "enum CampaignTypes.TaskType",
+        "name": "taskType",
+        "type": "uint8"
+      },
+      {
+        "internalType": "enum CampaignTypes.VerificationType",
+        "name": "verificationType",
+        "type": "uint8"
+      },
+      {
+        "internalType": "enum CampaignTypes.RewardType",
+        "name": "rewardType",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint256",
+        "name": "completerReward",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "referralPool",
+        "type": "uint256"
+      },
+      {
+        "internalType": "enum CampaignTypes.CampaignVisibility",
+        "name": "visibility",
+        "type": "uint8"
+      }
+    ],
+    "name": "createCampaignWithVisibility",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "bytes32",
+            "name": "id",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "address",
+            "name": "owner",
+            "type": "address"
+          },
+          {
+            "internalType": "enum CampaignTypes.TaskType",
+            "name": "taskType",
+            "type": "uint8"
+          },
+          {
+            "internalType": "enum CampaignTypes.VerificationType",
+            "name": "verificationType",
+            "type": "uint8"
+          },
+          {
+            "internalType": "enum CampaignTypes.CampaignStatus",
+            "name": "status",
+            "type": "uint8"
+          },
+          {
+            "internalType": "enum CampaignTypes.RewardType",
+            "name": "rewardType",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint256",
+            "name": "completerReward",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "referralPool",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "balance",
+            "type": "uint256"
+          },
+          {
+            "internalType": "enum CampaignTypes.CampaignVisibility",
+            "name": "visibility",
+            "type": "uint8"
           }
         ],
         "internalType": "struct CampaignTypes.Campaign",
@@ -939,6 +1137,57 @@ export const RefferalABI = [
     ],
     "name": "createInvite",
     "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "campaignId",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "fulfillmentId",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "address",
+        "name": "participant",
+        "type": "address"
+      }
+    ],
+    "name": "createPreVerifiedCampaignFulfillment",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "bytes32",
+            "name": "id",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "campaignId",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "address",
+            "name": "participant",
+            "type": "address"
+          },
+          {
+            "internalType": "enum CampaignTypes.FulfillmentStatus",
+            "name": "status",
+            "type": "uint8"
+          }
+        ],
+        "internalType": "struct CampaignTypes.Fulfillment",
+        "name": "fulfillment",
+        "type": "tuple"
+      }
+    ],
     "stateMutability": "nonpayable",
     "type": "function"
   },
@@ -1049,6 +1298,11 @@ export const RefferalABI = [
             "internalType": "uint256",
             "name": "balance",
             "type": "uint256"
+          },
+          {
+            "internalType": "enum CampaignTypes.CampaignVisibility",
+            "name": "visibility",
+            "type": "uint8"
           }
         ],
         "internalType": "struct CampaignTypes.Campaign",

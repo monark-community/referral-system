@@ -14,7 +14,14 @@ library CampaignTypes {
 
     enum VerificationType {
         AutomaticChain,
-        Manual
+        Manual,
+        PreVerified
+    }
+
+    // Visibility is metadata only. Discovery and link access remain off-chain concerns.
+    enum CampaignVisibility {
+        Public,
+        Private
     }
 
     // None makes an uninitialized mapping value distinguishable from an active campaign.
@@ -51,6 +58,7 @@ library CampaignTypes {
         uint256 referralPool;
         // For bounty type campaigns the balance is how much money remains
         uint256 balance;
+        CampaignVisibility visibility;
     }
 
     struct Fulfillment {
