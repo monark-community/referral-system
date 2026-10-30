@@ -4,7 +4,7 @@ pragma solidity ^0.8.28;
 // Purpose: Stores generalized campaigns and their fulfillment lifecycle.
 // Notes:
 // - Task and verification types remain independent and are composed per campaign.
-// - Only complete vertical slices are accepted; the first is Bounty + Manual.
+// - Only complete vertical slices are accepted: Bounty + Manual and private Bounty + PreVerified.
 // - Off-chain evidence is deliberately excluded from contract storage.
 // - ReferralProgram is intended to be the public facade and passes the acting wallet explicitly.
 
@@ -33,7 +33,8 @@ contract Campaigns is AccessControl, CampaignSignals {
         CampaignTypes.VerificationType verificationType,
         CampaignTypes.RewardType rewardType,
         uint256 completerReward,
-        uint256 referralPool
+        uint256 referralPool,
+        CampaignTypes.CampaignVisibility visibility
     ) external onlyRole(ACCESS_ROLE) returns (CampaignTypes.Campaign memory) {
         if (campaignId == bytes32(0)) revert ZeroCampaignId();
         if (owner == address(0)) revert ZeroOwner();
@@ -42,6 +43,10 @@ contract Campaigns is AccessControl, CampaignSignals {
         if (!isSupportedCombination(taskType, verificationType)) {
             revert UnsupportedCampaignCombination(taskType, verificationType);
         }
+        if (
+            verificationType == CampaignTypes.VerificationType.PreVerified &&
+            visibility != CampaignTypes.CampaignVisibility.Private
+        ) revert PreVerifiedCampaignMustBePrivate(campaignId);
         if (completerReward + referralPool == 0) revert ZeroCampaignReward();
 
         campaigns[campaignId] = CampaignTypes.Campaign({
@@ -55,7 +60,8 @@ contract Campaigns is AccessControl, CampaignSignals {
             rewardType: rewardType,
             completerReward: completerReward,
             referralPool: referralPool,
-            balance: 0
+            balance: 0,
+            visibility: visibility
         });
         return campaigns[campaignId];
     }
@@ -112,15 +118,103 @@ contract Campaigns is AccessControl, CampaignSignals {
         if (participant == campaign.owner) {
             revert CampaignOwnerCannotParticipate(campaignId, participant);
         }
+        if (
+            campaign.verificationType !=
+            CampaignTypes.VerificationType.Manual
+        ) revert UnsupportedVerificationType(campaign.verificationType);
 
         _validateTaskSubmission(campaign.taskType);
 
-        bytes32 existingFulfillmentId = participantFulfillmentIds[campaignId][
+        return _createFulfillment(campaign, fulfillmentId, participant);
+    }
+
+    // The creator reserves a fulfillment for one exact wallet. No reward is paid
+    // until that wallet completes it through completePreVerifiedFulfillment.
+    function createPreVerifiedFulfillment(
+        bytes32 campaignId,
+        bytes32 fulfillmentId,
+        address participant,
+        address creator
+    )
+        external
+        onlyRole(ACCESS_ROLE)
+        returns (CampaignTypes.Fulfillment memory)
+    {
+        if (fulfillmentId == bytes32(0)) revert ZeroFulfillmentId();
+        if (participant == address(0)) revert ZeroParticipant();
+        if (
+            fulfillments[fulfillmentId].status !=
+            CampaignTypes.FulfillmentStatus.None
+        ) revert FulfillmentAlreadyExists(fulfillmentId);
+
+        CampaignTypes.Campaign storage campaign = _requireCampaign(campaignId);
+        if (campaign.status != CampaignTypes.CampaignStatus.Active) {
+            revert CampaignNotActive(campaignId);
+        }
+        if (
+            campaign.verificationType !=
+            CampaignTypes.VerificationType.PreVerified
+        ) revert UnsupportedVerificationType(campaign.verificationType);
+        if (campaign.visibility != CampaignTypes.CampaignVisibility.Private) {
+            revert PreVerifiedCampaignMustBePrivate(campaignId);
+        }
+        if (creator != campaign.owner) revert UnauthorizedUser(creator);
+        if (participant == campaign.owner) {
+            revert CampaignOwnerCannotParticipate(campaignId, participant);
+        }
+
+        _validateTaskSubmission(campaign.taskType);
+        return _createFulfillment(campaign, fulfillmentId, participant);
+    }
+
+    function completePreVerifiedFulfillment(
+        bytes32 fulfillmentId,
+        address participant
+    )
+        external
+        onlyRole(ACCESS_ROLE)
+        returns (CampaignTypes.Fulfillment memory)
+    {
+        CampaignTypes.Fulfillment storage fulfillment = _requireFulfillment(
+            fulfillmentId
+        );
+        if (fulfillment.status != CampaignTypes.FulfillmentStatus.Submitted) {
+            revert InvalidFulfillmentStatus(fulfillmentId, fulfillment.status);
+        }
+        if (participant != fulfillment.participant) {
+            revert UnauthorizedPreVerifiedParticipant(
+                fulfillmentId,
+                participant,
+                fulfillment.participant
+            );
+        }
+
+        CampaignTypes.Campaign storage campaign = _requireCampaign(
+            fulfillment.campaignId
+        );
+        if (campaign.status != CampaignTypes.CampaignStatus.Active) {
+            revert CampaignNotActive(campaign.id);
+        }
+        if (
+            campaign.verificationType !=
+            CampaignTypes.VerificationType.PreVerified
+        ) revert UnsupportedVerificationType(campaign.verificationType);
+
+        fulfillment.status = CampaignTypes.FulfillmentStatus.Verified;
+        return fulfillment;
+    }
+
+    function _createFulfillment(
+        CampaignTypes.Campaign storage campaign,
+        bytes32 fulfillmentId,
+        address participant
+    ) private returns (CampaignTypes.Fulfillment memory) {
+        bytes32 existingFulfillmentId = participantFulfillmentIds[campaign.id][
             participant
         ];
         if (existingFulfillmentId != bytes32(0)) {
             revert ParticipantAlreadySubmitted(
-                campaignId,
+                campaign.id,
                 participant,
                 existingFulfillmentId
             );
@@ -128,11 +222,11 @@ contract Campaigns is AccessControl, CampaignSignals {
 
         fulfillments[fulfillmentId] = CampaignTypes.Fulfillment({
             id: fulfillmentId,
-            campaignId: campaignId,
+            campaignId: campaign.id,
             participant: participant,
             status: CampaignTypes.FulfillmentStatus.Submitted
         });
-        participantFulfillmentIds[campaignId][participant] = fulfillmentId;
+        participantFulfillmentIds[campaign.id][participant] = fulfillmentId;
         return fulfillments[fulfillmentId];
     }
 
@@ -210,7 +304,9 @@ contract Campaigns is AccessControl, CampaignSignals {
     ) public pure returns (bool) {
         return
             taskType == CampaignTypes.TaskType.Bounty &&
-            verificationType == CampaignTypes.VerificationType.Manual;
+            (verificationType == CampaignTypes.VerificationType.Manual ||
+                verificationType ==
+                CampaignTypes.VerificationType.PreVerified);
     }
 
     // Verifying and rejecting are the creator's two decisions on a submission; each can be made once

@@ -195,6 +195,48 @@ contract ReferralProgram is AccessControl, CampaignSignals {
         uint256 completerReward,
         uint256 referralPool
     ) public payable returns (CampaignTypes.Campaign memory campaign) {
+        return
+            _createCampaign(
+                campaignId,
+                taskType,
+                verificationType,
+                rewardType,
+                completerReward,
+                referralPool,
+                CampaignTypes.CampaignVisibility.Public
+            );
+    }
+
+    function createCampaignWithVisibility(
+        bytes32 campaignId,
+        CampaignTypes.TaskType taskType,
+        CampaignTypes.VerificationType verificationType,
+        CampaignTypes.RewardType rewardType,
+        uint256 completerReward,
+        uint256 referralPool,
+        CampaignTypes.CampaignVisibility visibility
+    ) public payable returns (CampaignTypes.Campaign memory campaign) {
+        return
+            _createCampaign(
+                campaignId,
+                taskType,
+                verificationType,
+                rewardType,
+                completerReward,
+                referralPool,
+                visibility
+            );
+    }
+
+    function _createCampaign(
+        bytes32 campaignId,
+        CampaignTypes.TaskType taskType,
+        CampaignTypes.VerificationType verificationType,
+        CampaignTypes.RewardType rewardType,
+        uint256 completerReward,
+        uint256 referralPool,
+        CampaignTypes.CampaignVisibility visibility
+    ) private returns (CampaignTypes.Campaign memory campaign) {
         uint256 totalReward = completerReward + referralPool;
         if (
             rewardType == CampaignTypes.RewardType.Points && msg.value != 0
@@ -214,7 +256,8 @@ contract ReferralProgram is AccessControl, CampaignSignals {
             verificationType,
             rewardType,
             completerReward,
-            referralPool
+            referralPool,
+            visibility
         );
         emit CampaignCreated(
             campaign.id,
@@ -225,11 +268,54 @@ contract ReferralProgram is AccessControl, CampaignSignals {
             campaign.completerReward,
             campaign.referralPool
         );
+        emit CampaignVisibilitySet(campaign.id, campaign.visibility);
 
         if (rewardType == CampaignTypes.RewardType.Direct && msg.value > 0) {
             campaigns.fundCampaign(campaignId, msg.sender, msg.value);
             campaign = campaigns.getCampaign(campaignId);
         }
+    }
+
+    function createPreVerifiedCampaignFulfillment(
+        bytes32 campaignId,
+        bytes32 fulfillmentId,
+        address participant
+    ) public returns (CampaignTypes.Fulfillment memory fulfillment) {
+        CampaignTypes.Campaign memory campaign = campaigns.getCampaign(
+            campaignId
+        );
+        fulfillment = campaigns.createPreVerifiedFulfillment(
+            campaignId,
+            fulfillmentId,
+            participant,
+            msg.sender
+        );
+        emit CampaignFulfillmentSubmitted(
+            fulfillment.campaignId,
+            fulfillment.id,
+            fulfillment.participant,
+            campaign.taskType
+        );
+    }
+
+    function completePreVerifiedCampaignFulfillment(
+        bytes32 fulfillmentId
+    ) public returns (CampaignTypes.Fulfillment memory fulfillment) {
+        fulfillment = campaigns.completePreVerifiedFulfillment(
+            fulfillmentId,
+            msg.sender
+        );
+        CampaignTypes.Campaign memory campaign = campaigns.getCampaign(
+            fulfillment.campaignId
+        );
+        emit CampaignFulfillmentVerified(
+            fulfillment.campaignId,
+            fulfillment.id,
+            msg.sender,
+            fulfillment.participant,
+            campaign.verificationType
+        );
+        _payCampaignReward(campaign, fulfillment);
     }
 
     function submitCampaignFulfillment(

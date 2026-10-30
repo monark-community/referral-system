@@ -197,6 +197,8 @@ test("facade ABI exposes campaign errors, events, and object returns", () => {
         "InvalidFulfillmentStatus",
         "ParticipantAlreadySubmitted",
         "UnauthorizedManualVerifier",
+        "UnauthorizedPreVerifiedParticipant",
+        "PreVerifiedCampaignMustBePrivate",
         "UnsupportedCampaignCombination",
         "ZeroCampaignId",
         "ZeroFulfillmentId",
@@ -227,6 +229,7 @@ test("facade ABI exposes campaign errors, events, and object returns", () => {
         .filter(({ type }) => type === "event")
         .map(({ name }) => name);
     assert.ok(eventNames.includes("CampaignCreated"));
+    assert.ok(eventNames.includes("CampaignVisibilitySet"));
     assert.ok(eventNames.includes("CampaignFulfillmentSubmitted"));
     assert.ok(eventNames.includes("CampaignFulfillmentVerified"));
     assert.ok(eventNames.includes("CampaignFulfillmentRejected"));
@@ -236,6 +239,9 @@ test("facade ABI exposes campaign errors, events, and object returns", () => {
 
     for (const name of [
         "createCampaign",
+        "createCampaignWithVisibility",
+        "createPreVerifiedCampaignFulfillment",
+        "completePreVerifiedCampaignFulfillment",
         "submitCampaignFulfillment",
         "verifyCampaignFulfillment",
         "rejectCampaignFulfillment",
@@ -258,6 +264,7 @@ test("creates a campaign for the calling owner and returns its object", async ()
     assert.equal(result.rewardType, 0);
     assert.equal(result.completerReward, 30n);
     assert.equal(result.referralPool, 10n);
+    assert.equal(result.visibility, 0);
 
     const created = eventFrom(receipt, "CampaignCreated");
     assert.equal(created.args.campaignId, campaignId);
@@ -834,4 +841,129 @@ test("the owner can reject a submission, which pays nothing and is final", async
             args: [fulfillmentId],
         }),
     );
+});
+
+// ---------- Private pre-verified fulfillment ----------
+
+test("a private pre-verified campaign pays points when its assigned wallet completes", async () => {
+    // VerificationType.PreVerified = 2 and CampaignVisibility.Private = 1.
+    const { result: campaign, receipt: creationReceipt } = await writeFacade(
+        owner,
+        ownerWallet,
+        "createCampaignWithVisibility",
+        [campaignId, 1, 2, ...pointsReward, 1],
+    );
+    assert.equal(campaign.verificationType, 2);
+    assert.equal(campaign.visibility, 1);
+    assert.equal(eventFrom(creationReceipt, "CampaignVisibilitySet").args.visibility, 1);
+
+    const { result: reserved, receipt: reservationReceipt } = await writeFacade(
+        owner,
+        ownerWallet,
+        "createPreVerifiedCampaignFulfillment",
+        [campaignId, fulfillmentId, participant.address],
+    );
+    assert.equal(reserved.status, 1);
+    assert.ok(same(reserved.participant, participant.address));
+    assert.equal(eventFrom(reservationReceipt, "CampaignFulfillmentSubmitted").args.fulfillmentId, fulfillmentId);
+    assert.equal(await pointsOf(participant), 0n);
+
+    const { result: completed, receipt } = await writeFacade(
+        participant,
+        participantWallet,
+        "completePreVerifiedCampaignFulfillment",
+        [fulfillmentId],
+    );
+    assert.equal(completed.status, 2);
+    assert.equal(await pointsOf(participant), 30n);
+    assert.ok(same(eventFrom(receipt, "CampaignFulfillmentVerified").args.verifier, participant.address));
+    assert.equal(eventFrom(receipt, "CampaignRewardPaid").args.fulfillmentId, fulfillmentId);
+});
+
+test("only the creator can reserve and only the assigned wallet can complete a pre-verified fulfillment", async () => {
+    await writeFacade(
+        owner,
+        ownerWallet,
+        "createCampaignWithVisibility",
+        [campaignId, 1, 2, ...pointsReward, 1],
+    );
+
+    await assert.rejects(
+        publicClient.simulateContract({
+            account: other,
+            address: referralAddress,
+            abi: referralAbi,
+            functionName: "createPreVerifiedCampaignFulfillment",
+            args: [campaignId, fulfillmentId, participant.address],
+        }),
+    );
+    await writeFacade(
+        owner,
+        ownerWallet,
+        "createPreVerifiedCampaignFulfillment",
+        [campaignId, fulfillmentId, participant.address],
+    );
+
+    await assert.rejects(
+        publicClient.simulateContract({
+            account: other,
+            address: referralAddress,
+            abi: referralAbi,
+            functionName: "completePreVerifiedCampaignFulfillment",
+            args: [fulfillmentId],
+        }),
+    );
+    assert.equal(await pointsOf(participant), 0n);
+});
+
+test("pre-verified campaigns must be private and cannot use participant submission", async () => {
+    await assert.rejects(
+        publicClient.simulateContract({
+            account: owner,
+            address: referralAddress,
+            abi: referralAbi,
+            functionName: "createCampaignWithVisibility",
+            args: [campaignId, 1, 2, ...pointsReward, 0],
+        }),
+    );
+
+    await writeFacade(
+        owner,
+        ownerWallet,
+        "createCampaignWithVisibility",
+        [campaignId, 1, 2, ...pointsReward, 1],
+    );
+    await assert.rejects(
+        publicClient.simulateContract({
+            account: participant,
+            address: referralAddress,
+            abi: referralAbi,
+            functionName: "submitCampaignFulfillment",
+            args: [campaignId, fulfillmentId],
+        }),
+    );
+});
+
+test("a pre-verified direct reward becomes claimable on wallet completion", async () => {
+    await writeFacade(
+        owner,
+        ownerWallet,
+        "createCampaignWithVisibility",
+        [campaignId, 1, 2, 1, 30, 10, 1],
+        40n,
+    );
+    await writeFacade(
+        owner,
+        ownerWallet,
+        "createPreVerifiedCampaignFulfillment",
+        [campaignId, fulfillmentId, participant.address],
+    );
+
+    await writeFacade(
+        participant,
+        participantWallet,
+        "completePreVerifiedCampaignFulfillment",
+        [fulfillmentId],
+    );
+    assert.equal(await directRewardsOf(participant), 30n);
 });
