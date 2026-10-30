@@ -16,6 +16,7 @@ export const CHAIN_TASK_TYPE_BOUNTY = 1;
 export const CHAIN_VERIFICATION_TYPE_MANUAL = 1;
 export const CHAIN_REWARD_TYPE_POINTS = 0;
 export const CHAIN_REWARD_TYPE_DIRECT = 1;
+export const CHAIN_VISIBILITY_PRIVATE = 1;
 
 // Social media proof is a link to the post or profile; community proof is a username or short text
 export const BOUNTY_CATEGORIES = ["SOCIAL_MEDIA", "COMMUNITY"] as const;

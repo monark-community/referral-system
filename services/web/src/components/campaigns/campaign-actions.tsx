@@ -9,6 +9,7 @@ import {
 } from "@/hooks/use-campaign-transaction";
 import { useAuth } from "@/contexts/auth-context";
 import { useRefreshCampaigns } from "@/lib/api/campaign-hooks";
+import { ApiError } from "@/lib/api/client";
 import {
   changeCampaignStatus,
   getCampaignSubmissions,
@@ -21,12 +22,14 @@ import {
   type CampaignSubmission,
 } from "@/lib/api/campaigns";
 import {
+  acceptsSubmissions,
   campaignField,
   campaignPanel,
   CampaignBadge,
   CampaignEmpty,
   CampaignLoading,
   CampaignNotice,
+  closedReason,
   SafeProof,
   shortWallet,
   SubmissionProgress,
@@ -110,11 +113,12 @@ export function CampaignStatusControls({
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const refresh = useRefreshCampaigns();
+  // Cancel throws a draft away; once published, the campaign is ended instead
   const actions =
     campaign.status === "ACTIVE"
-      ? (["PAUSED", "ENDED", "CANCELLED"] as const)
+      ? (["PAUSED", "ENDED"] as const)
       : campaign.status === "PAUSED"
-        ? (["ACTIVE", "ENDED", "CANCELLED"] as const)
+        ? (["ACTIVE", "ENDED"] as const)
         : campaign.status === "DRAFT"
           ? (["CANCELLED"] as const)
           : [];
@@ -159,9 +163,9 @@ export function CampaignStatusControls({
       {target && (
         <div className="rounded-lg border border-border p-4 text-sm">
           <p>
-            This will permanently {target === "ENDED" ? "end" : "cancel"} the
-            campaign and stop new submissions. You can still review existing
-            submissions.
+            {target === "ENDED"
+              ? "This will permanently end the campaign and stop new submissions. You can still review existing submissions."
+              : "This will permanently cancel this draft. It can’t be published afterwards."}
           </p>
           <div className="mt-3 flex gap-2">
             <Button
@@ -188,14 +192,27 @@ export function CampaignStatusControls({
   );
 }
 
-export function ParticipantSubmission({ campaign }: { campaign: Campaign }) {
+/** A participant's proof and progress. `code` is the private link's code, needed to submit to a private campaign. */
+export function ParticipantSubmission({
+  campaign,
+  code,
+}: {
+  campaign: Campaign;
+  code?: string;
+}) {
   const { user } = useAuth();
   const client = useQueryClient();
   const refresh = useRefreshCampaigns();
   const queryKey = ["campaigns", user?.id, campaign.id, "submission"];
   const query = useQuery({
     queryKey,
-    queryFn: () => getMySubmission(campaign.id),
+    queryFn: () =>
+      getMySubmission(campaign.id).catch((err: unknown) => {
+        // A private campaign stays unknown to you until you submit; opened by its link, that means "nothing yet"
+        if (code && err instanceof ApiError && err.status === 404)
+          return { fulfillment: null };
+        throw err;
+      }),
     refetchInterval: 5000,
   });
   const [proof, setProof] = useState("");
@@ -205,16 +222,17 @@ export function ParticipantSubmission({ campaign }: { campaign: Campaign }) {
   useEffect(() => {
     if (fulfillment?.rewardedAt) void refresh();
   }, [fulfillment?.rewardedAt, refresh]);
-  const accepting =
-    campaign.status === "ACTIVE" &&
-    campaign.spotsLeft > 0 &&
-    new Date(campaign.endsAt).getTime() > Date.now();
+  const accepting = acceptsSubmissions(campaign);
   async function submit(event: FormEvent) {
     event.preventDefault();
     setError("");
     setBusy(true);
     try {
-      const result = await submitCampaignProof(campaign.id, proof.trim());
+      const result = await submitCampaignProof(
+        campaign.id,
+        proof.trim(),
+        code,
+      );
       client.setQueryData(queryKey, result);
       await refresh();
     } catch (err) {
@@ -339,13 +357,7 @@ export function ParticipantSubmission({ campaign }: { campaign: Campaign }) {
           </Button>
         </form>
       ) : (
-        <CampaignNotice>
-          {campaign.status === "PAUSED"
-            ? "This campaign is paused. Check back when the creator resumes it."
-            : campaign.spotsLeft === 0
-              ? "All spots have been taken."
-              : "This campaign is no longer accepting submissions."}
-        </CampaignNotice>
+        <CampaignNotice>{closedReason(campaign)}</CampaignNotice>
       )}
     </section>
   );

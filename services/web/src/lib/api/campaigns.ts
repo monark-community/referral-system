@@ -12,6 +12,10 @@ export type CampaignCall =
       functionName: "createCampaign";
       args: [Bytes32, number, number, number, number, number];
     }
+  | {
+      functionName: "createCampaignWithVisibility";
+      args: [Bytes32, number, number, number, number, number, number];
+    }
   | { functionName: "submitCampaignFulfillment"; args: [Bytes32, Bytes32] }
   | {
       functionName: "verifyCampaignFulfillment" | "rejectCampaignFulfillment";
@@ -34,6 +38,9 @@ export interface Campaign {
   };
   maxCompletions: number;
   spotsLeft: number;
+  isPrivate: boolean;
+  // Only the creator's own views carry the code for a private campaign's link
+  privateCode?: string | null;
   endsAt: string;
   publishedAt: string | null;
   createdAt: string;
@@ -86,6 +93,7 @@ export interface CampaignInput {
   referralPoolPoints: number;
   maxCompletions: number;
   endsAt: string;
+  isPrivate: boolean;
 }
 
 export interface MyCampaigns {
@@ -104,6 +112,11 @@ export const getCampaigns = () =>
 export const getMyCampaigns = () => apiClient<MyCampaigns>("/campaigns/mine");
 export const getCampaign = (id: string) =>
   apiClient<{ campaign: Campaign | SystemCampaign }>(path(id));
+// No login needed: the code from the link is what opens a private campaign
+export const getPrivateCampaign = (code: string) =>
+  apiClient<{ campaign: Campaign }>(
+    `/campaigns/private/${encodeURIComponent(code)}`,
+  );
 export const createCampaign = (input: CampaignInput) =>
   apiClient<{ campaign: Campaign }>("/campaigns", post(input));
 export const updateCampaign = (id: string, input: CampaignInput) =>
@@ -119,10 +132,11 @@ export const getMySubmission = (id: string) =>
   apiClient<{ fulfillment: CampaignSubmission | null }>(
     `${path(id)}/fulfillments/me`,
   );
-export const submitCampaignProof = (id: string, proof: string) =>
+// A private campaign also needs the code from its link
+export const submitCampaignProof = (id: string, proof: string, code?: string) =>
   apiClient<{ fulfillment: CampaignSubmission }>(
     `${path(id)}/fulfillments`,
-    post({ proof }),
+    post(code ? { proof, code } : { proof }),
   );
 export const getCampaignSubmissions = (id: string) =>
   apiClient<{ fulfillments: CampaignSubmission[] }>(`${path(id)}/fulfillments`);

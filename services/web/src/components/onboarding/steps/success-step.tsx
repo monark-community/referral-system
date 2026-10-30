@@ -1,4 +1,6 @@
 // Purpose: Onboarding step 5 - shows a success message with the user's referral code and next steps
+// Notes:
+// - Someone who started from another page, like a private campaign's link, continues back to it
 
 'use client';
 
@@ -6,6 +8,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { CheckCircle2, Sparkles } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
+import { returnToPath } from '@/lib/return-to';
 
 interface SuccessStepProps {
   onComplete: () => void;
@@ -14,10 +17,11 @@ interface SuccessStepProps {
 export function SuccessStep({ onComplete }: SuccessStepProps) {
   const router = useRouter();
   const { user } = useAuth();
+  const destination = returnToPath();
 
   const handleGoToDashboard = () => {
     onComplete();
-    router.push('/referrals');
+    router.push(destination);
   };
 
   return (
@@ -74,7 +78,7 @@ export function SuccessStep({ onComplete }: SuccessStepProps) {
 
       {/* Action */}
       <Button onClick={handleGoToDashboard} className="w-full">
-        Go to Dashboard
+        {destination === '/referrals' ? 'Go to Dashboard' : 'Continue'}
       </Button>
     </div>
   );

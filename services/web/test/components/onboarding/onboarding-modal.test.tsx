@@ -8,6 +8,7 @@ import { OnboardingModal } from "@/components/onboarding/onboarding-modal";
 import { SuccessStep } from "@/components/onboarding/steps/success-step";
 import { useAuth } from "@/contexts/auth-context";
 import type { OnboardingStep } from "@/hooks/use-onboarding";
+import { clearReturnTo, rememberReturnTo } from "@/lib/return-to";
 import { buildUser } from "../../fixtures";
 
 const mockPush = jest.fn();
@@ -113,5 +114,15 @@ describe("SuccessStep", () => {
 
     expect(onComplete).toHaveBeenCalledTimes(1);
     expect(mockPush).toHaveBeenCalledWith("/referrals");
+  });
+
+  test("someone who joined from a private campaign's link continues back to it", async () => {
+    rememberReturnTo("/campaigns/private/abc");
+    render(<SuccessStep onComplete={jest.fn()} />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    expect(mockPush).toHaveBeenCalledWith("/campaigns/private/abc");
+    clearReturnTo();
   });
 });

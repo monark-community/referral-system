@@ -21,6 +21,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Wallet } from 'lucide-react';
 import { walletAuth } from '@/lib/api/auth';
 import { useAuth } from '@/contexts/auth-context';
+import { returnToPath } from '@/lib/return-to';
 
 interface LoginModalProps {
   isOpen: boolean;
@@ -78,7 +79,7 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
 
       login(response.token, response.user);
       onClose();
-      router.push('/referrals');
+      router.push(returnToPath());
     } catch (err) {
       console.error('Login error:', err);
       if (err instanceof Error) {

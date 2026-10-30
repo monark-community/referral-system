@@ -5,7 +5,8 @@
 // - A draft becomes ACTIVE only when the chain has it, and only a draft can be edited
 // - Each user submits once per campaign, a rejection frees the spot but not the user's one try,
 //   and creators can't take part in their own campaigns
-// - Pause, end and cancel are kept here; the contract has no such states, so the API stops taking submissions
+// - Pause, end and cancel are kept here; the contract has no such states, so the API stops taking submissions.
+//   Cancelling is only for a draft; a published campaign is ended instead
 // - A private campaign is left off the board, and submitting to it needs the code from its link. The code is
 //   random rather than the campaign id, since the chain makes every campaign id public. It is set while the
 //   campaign is a draft and never changes after publishing
@@ -25,6 +26,7 @@ import {
   CHAIN_REWARD_TYPE_POINTS,
   CHAIN_TASK_TYPE_BOUNTY,
   CHAIN_VERIFICATION_TYPE_MANUAL,
+  CHAIN_VISIBILITY_PRIVATE,
   ManualCampaignValidationError,
   OWNER_APPROVAL_STRATEGY,
   parseManualCampaignInput,
@@ -125,17 +127,19 @@ export function createCampaignCall(campaign: ManualCampaignDefinition, chainId =
   const direct = campaign.rewardType === "DIRECT";
   const completer = direct ? campaign.completerRewardWei : campaign.completerPoints;
   const pool = direct ? campaign.referralPoolWei : campaign.referralPoolPoints;
+  const args = [
+    uuidToBytes32(campaign.id),
+    CHAIN_TASK_TYPE_BOUNTY,
+    CHAIN_VERIFICATION_TYPE_MANUAL,
+    direct ? CHAIN_REWARD_TYPE_DIRECT : CHAIN_REWARD_TYPE_POINTS,
+    completer,
+    pool,
+  ];
   return chainCall(
     chainId,
-    "createCampaign",
-    [
-      uuidToBytes32(campaign.id),
-      CHAIN_TASK_TYPE_BOUNTY,
-      CHAIN_VERIFICATION_TYPE_MANUAL,
-      direct ? CHAIN_REWARD_TYPE_DIRECT : CHAIN_REWARD_TYPE_POINTS,
-      completer,
-      pool,
-    ],
+    // createCampaign always records a campaign as public on chain
+    campaign.isPrivate ? "createCampaignWithVisibility" : "createCampaign",
+    campaign.isPrivate ? [...args, CHAIN_VISIBILITY_PRIVATE] : args,
     direct ? (directRewardPerRunWei(campaign) * BigInt(campaign.initialFundingRuns)).toString() : undefined,
   );
 }
@@ -582,11 +586,12 @@ export async function updateManualCampaignDraft(
   return requireManualCampaign(current.id);
 }
 
-// DRAFT becomes ACTIVE only through the chain, so it is not a target here
+// DRAFT becomes ACTIVE only through the chain, so it is not a target here.
+// Cancel throws a draft away; once published, the campaign is ended instead
 const STATUS_CHANGES: Record<ManualCampaignStatus, ManualCampaignStatus[]> = {
   DRAFT: ["CANCELLED"],
-  ACTIVE: ["PAUSED", "ENDED", "CANCELLED"],
-  PAUSED: ["ACTIVE", "ENDED", "CANCELLED"],
+  ACTIVE: ["PAUSED", "ENDED"],
+  PAUSED: ["ACTIVE", "ENDED"],
   ENDED: [],
   CANCELLED: [],
 };

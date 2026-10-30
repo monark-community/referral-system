@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, CalendarDays, Users } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { useMyCampaigns } from "@/lib/api/campaign-hooks";
 import { getCampaign } from "@/lib/api/campaigns";
 import { useAuth } from "@/contexts/auth-context";
@@ -19,11 +19,11 @@ import {
 } from "@/components/campaigns/campaign-actions";
 import {
   campaignPanel,
-  CampaignBadge,
+  CampaignHeading,
   CampaignLoading,
   CampaignNotice,
-  categoryLabels,
-  shortWallet,
+  CampaignOverview,
+  PrivateCampaignLink,
 } from "@/components/campaigns/campaign-ui";
 
 export default function CampaignDetailPage() {
@@ -36,18 +36,24 @@ export default function CampaignDetailPage() {
   const owned = mine.data?.created.find(
     (item) => item.id === id || item.key === id,
   );
+  // A private campaign doesn't open by its id, so one you submitted to comes from your own list too
+  const joinedPrivate = mine.data?.joined.find(
+    ({ campaign }) =>
+      campaign.isPrivate && (campaign.id === id || campaign.key === id),
+  )?.campaign;
+  const fromMine = owned || joinedPrivate;
   const detail = useQuery({
     queryKey: ["campaigns", user?.id, id, "detail"],
     queryFn: () => getCampaign(id),
-    enabled: !!mine.data && !owned,
+    enabled: !!mine.data && !fromMine,
     retry: (count, err) =>
       !(err instanceof ApiError && err.status === 404) && count < 2,
     refetchInterval: 5000,
   });
-  const campaign = owned || detail.data?.campaign;
-  if (mine.isPending || (!owned && detail.isPending && !mine.isError))
+  const campaign = fromMine || detail.data?.campaign;
+  if (mine.isPending || (!fromMine && detail.isPending && !mine.isError))
     return <CampaignLoading />;
-  if (mine.isError || (!owned && detail.isError))
+  if (mine.isError || (!fromMine && detail.isError))
     return (
       <div className="space-y-4">
         <Link href="/referrals/campaigns" className="text-sm text-primary">
@@ -55,7 +61,7 @@ export default function CampaignDetailPage() {
         </Link>
         <CampaignNotice error>
           {detail.error instanceof ApiError && detail.error.status === 404
-            ? "This campaign could not be found. Drafts are only visible to their creator."
+            ? "This campaign could not be found. Drafts are only visible to their creator, and private campaigns open through their link."
             : "The campaign could not be loaded."}
           <Button
             variant="link"
@@ -87,100 +93,47 @@ export default function CampaignDetailPage() {
         <ArrowLeft className="h-4 w-4" />
         All campaigns
       </Link>
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0">
-          <div className="mb-3 flex flex-wrap items-center gap-3">
-            <span className="text-xs text-muted-foreground">
-              {categoryLabels[campaign.category]}
-            </span>
-            <CampaignBadge status={campaign.status} />
-          </div>
-          <h1 className="break-words text-2xl font-semibold lg:text-3xl">
-            {campaign.title}
-          </h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Created by{" "}
-            {campaign.owner.name || shortWallet(campaign.owner.walletAddress)}
-            {isOwner && " (you)"}
-          </p>
-        </div>
-        {isOwner && campaign.status === "DRAFT" && (
-          <Button
-            variant="outline"
-            disabled={publishing}
-            onClick={() => setEditing(!editing)}
-          >
-            {editing ? "Back to campaign" : "Edit draft"}
-          </Button>
-        )}
-      </div>
+      <CampaignHeading
+        campaign={campaign}
+        isOwner={isOwner}
+        action={
+          isOwner &&
+          campaign.status === "DRAFT" && (
+            <Button
+              variant="outline"
+              disabled={publishing}
+              onClick={() => setEditing(!editing)}
+            >
+              {editing ? "Back to campaign" : "Edit draft"}
+            </Button>
+          )
+        }
+      />
       {editing && isOwner && campaign.status === "DRAFT" ? (
         <CampaignForm campaign={campaign} onSaved={() => setEditing(false)} />
       ) : (
         <>
-          <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
-            <section className={`${campaignPanel} min-w-0 space-y-5`}>
-              {campaign.description && (
-                <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-muted-foreground">
-                  {campaign.description}
-                </p>
-              )}
-              <div>
-                <h2 className="mb-3 text-lg font-semibold">
-                  What you need to do
-                </h2>
-                <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
-                  {campaign.instructions}
-                </p>
-              </div>
-              <div className="border-t border-border pt-4 text-sm text-muted-foreground">
-                <p>Proof is checked by the campaign creator.</p>
-                <p className="mt-1">
-                  {campaign.category === "SOCIAL_MEDIA"
-                    ? "Submit a link to your post or profile."
-                    : "Submit your community username or a short text."}
-                </p>
-              </div>
-              {isOwner && (
-                <CampaignNotice>
-                  {campaign.status === "DRAFT"
-                    ? "This draft is visible only to you. Publish it with your wallet when you’re ready."
-                    : "You created this campaign. Review participant submissions below. Creators cannot complete their own campaigns."}
-                </CampaignNotice>
-              )}
-            </section>
-            <aside className={`${campaignPanel} space-y-5`}>
-              <div>
-                <p className="text-xs text-muted-foreground">
-                  Completion reward
-                </p>
-                <p className="mt-2 text-4xl font-semibold tracking-tight text-primary">
-                  {campaign.reward.completerPoints.toLocaleString()}{" "}
-                  <span className="text-sm font-normal text-muted-foreground">
-                    points
-                  </span>
-                </p>
-              </div>
-              <div className="space-y-2 border-t border-border pt-4 text-sm text-muted-foreground">
-                <p className="flex items-center gap-2">
-                  <Users className="h-4 w-4" />
-                  {campaign.spotsLeft} of {campaign.maxCompletions} spots left
-                </p>
-                <p className="flex items-start gap-2">
-                  <CalendarDays className="mt-0.5 h-4 w-4 shrink-0" />
-                  <span>Ends {new Date(campaign.endsAt).toLocaleString()}</span>
-                </p>
-                <p className="pt-2">
-                  + {campaign.reward.referralPoolPoints} referral pool points
-                  per completion, shared 80/20.
-                </p>
-              </div>
-            </aside>
-          </div>
+          <CampaignOverview campaign={campaign}>
+            {isOwner && (
+              <CampaignNotice>
+                {campaign.status !== "DRAFT"
+                  ? "You created this campaign. Review participant submissions below. Creators cannot complete their own campaigns."
+                  : campaign.isPrivate
+                    ? "This draft is visible only to you. It’s private, so it won’t be on the campaign board: after you publish it with your wallet, you’ll get a link to share."
+                    : "This draft is visible only to you. Publish it with your wallet when you’re ready."}
+              </CampaignNotice>
+            )}
+          </CampaignOverview>
           {isOwner ? (
             <>
               <section className={`${campaignPanel} space-y-4`}>
                 <h2 className="text-lg font-semibold">Manage campaign</h2>
+                {campaign.isPrivate &&
+                  campaign.privateCode &&
+                  (campaign.status === "ACTIVE" ||
+                    campaign.status === "PAUSED") && (
+                    <PrivateCampaignLink code={campaign.privateCode} />
+                  )}
                 {campaign.status === "DRAFT" && campaign.chain && (
                   <CampaignTransactionButton
                     call={campaign.chain}
