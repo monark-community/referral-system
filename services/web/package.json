@@ -22,7 +22,7 @@
     "recharts": "^3.8.1",
     "tailwind-merge": "^2.6.0",
     "viem": "^2.21.54",
-    "wagmi": "^2.14.1"
+    "wagmi": "^3.7.9"
   },
   "devDependencies": {
     "@testing-library/dom": "^10.4.2",
