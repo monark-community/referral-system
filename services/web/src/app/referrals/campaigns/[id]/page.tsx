@@ -12,6 +12,7 @@ import { ApiError } from "@/lib/api/client";
 import { Button } from "@/components/ui/button";
 import { CampaignForm } from "@/components/campaigns/campaign-form";
 import {
+  CampaignFundingControls,
   CampaignReviewQueue,
   CampaignStatusControls,
   CampaignTransactionButton,
@@ -141,6 +142,7 @@ export default function CampaignDetailPage() {
                     onBusyChange={setPublishing}
                   />
                 )}
+                <CampaignFundingControls campaign={campaign} />
                 <CampaignStatusControls
                   campaign={campaign}
                   disabled={publishing}

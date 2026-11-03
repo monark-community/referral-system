@@ -5,6 +5,11 @@
 import { apiClient } from "@/lib/api/client";
 import { walletAuth, getCurrentUser, logout } from "@/lib/api/auth";
 import {
+  getMyDirectRewards,
+  prepareCampaignFunding,
+  prepareDirectRewardWithdrawal,
+} from "@/lib/api/campaigns";
+import {
   updateProfile,
   getProfile,
   sendVerificationEmail,
@@ -94,4 +99,48 @@ test("logout removes the stored token without calling the API", () => {
 
   expect(localStorage.getItem("token")).toBeNull();
   expect(mockApiClient).not.toHaveBeenCalled();
+});
+
+test("prepareCampaignFunding posts the requested run count", async () => {
+  await prepareCampaignFunding("campaign-1", 10);
+
+  expect(mockApiClient).toHaveBeenCalledWith(
+    "/campaigns/campaign-1/funding",
+    {
+      method: "POST",
+      body: JSON.stringify({ runs: 10 }),
+    },
+  );
+});
+
+test("getMyDirectRewards reads the authenticated Direct reward account", async () => {
+  await getMyDirectRewards();
+
+  expect(mockApiClient).toHaveBeenCalledWith(
+    "/campaigns/rewards/direct/me",
+  );
+});
+
+test("prepareDirectRewardWithdrawal defaults to the authenticated wallet", async () => {
+  await prepareDirectRewardWithdrawal();
+
+  expect(mockApiClient).toHaveBeenCalledWith(
+    "/campaigns/rewards/direct/withdraw",
+    {
+      method: "POST",
+      body: JSON.stringify({}),
+    },
+  );
+});
+
+test("prepareDirectRewardWithdrawal can redirect to another address", async () => {
+  await prepareDirectRewardWithdrawal("0x1234");
+
+  expect(mockApiClient).toHaveBeenCalledWith(
+    "/campaigns/rewards/direct/withdraw",
+    {
+      method: "POST",
+      body: JSON.stringify({ destination: "0x1234" }),
+    },
+  );
 });

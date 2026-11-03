@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   CircleHelp,
   Clock3,
+  Coins,
   Copy,
   Lock,
   Megaphone,
@@ -16,6 +17,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { formatNativeAmount } from "@/lib/native-amount";
 import type { Campaign, CampaignSubmission } from "@/lib/api/campaigns";
 
 export const campaignPanel = "rounded-xl bg-card/50 p-5 lg:p-6 surface-card";
@@ -30,9 +32,21 @@ export const categoryLabels = {
 export const privateCampaignPath = (code: string) =>
   `/campaigns/private/${encodeURIComponent(code)}`;
 
+export function hasFundedDirectRun(campaign: Campaign) {
+  if (campaign.reward.type !== "DIRECT") return true;
+  if (campaign.reward.chainStatus === "PENDING_FUNDING") return false;
+  if (campaign.reward.chainBalanceWei === undefined) return true;
+  return (
+    BigInt(campaign.reward.rewardPerRunWei) > BigInt(0) &&
+    BigInt(campaign.reward.chainBalanceWei) >=
+      BigInt(campaign.reward.rewardPerRunWei)
+  );
+}
+
 export function acceptsSubmissions(campaign: Campaign) {
   return (
     campaign.status === "ACTIVE" &&
+    hasFundedDirectRun(campaign) &&
     campaign.spotsLeft > 0 &&
     new Date(campaign.endsAt).getTime() > Date.now()
   );
@@ -41,6 +55,8 @@ export function acceptsSubmissions(campaign: Campaign) {
 export function closedReason(campaign: Campaign) {
   return campaign.status === "PAUSED"
     ? "This campaign is paused. Check back when the creator resumes it."
+    : campaign.status === "ACTIVE" && !hasFundedDirectRun(campaign)
+      ? "This campaign is temporarily out of funded rewards. It can accept submissions again after the creator adds funding."
     : campaign.spotsLeft === 0
       ? "All spots have been taken."
       : "This campaign is no longer accepting submissions.";
@@ -50,6 +66,7 @@ const statusLabels: Record<string, string> = {
   DRAFT: "Draft",
   ACTIVE: "Active",
   PAUSED: "Paused",
+  PENDING_FUNDING: "Needs funding",
   ENDED: "Ended",
   CANCELLED: "Cancelled",
   SUBMITTED: "Awaiting wallet confirmation",
@@ -72,6 +89,7 @@ export function CampaignBadge({ status }: { status: string }) {
             "UNDER_REVIEW",
             "APPROVED",
             "SUBMITTED",
+            "PENDING_FUNDING",
           ].includes(status),
           "bg-red-500/10 text-red-300": ["REJECTED", "CANCELLED"].includes(
             status,
@@ -96,6 +114,26 @@ export function PrivateTag() {
       Private
     </span>
   );
+}
+
+export function DirectRewardTag() {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-orange-300">
+      <Coins aria-hidden className="h-3 w-3" />
+      Direct reward
+    </span>
+  );
+}
+
+function directRunsRemaining(campaign: Campaign) {
+  if (
+    campaign.reward.type !== "DIRECT" ||
+    campaign.reward.chainBalanceWei === undefined
+  )
+    return null;
+  const perRun = BigInt(campaign.reward.rewardPerRunWei);
+  if (perRun === BigInt(0)) return null;
+  return BigInt(campaign.reward.chainBalanceWei) / perRun;
 }
 
 /** The creator's copy of a private campaign's link, the one way other people can open it. */
@@ -158,6 +196,11 @@ export function CampaignHeading({
             {categoryLabels[campaign.category]}
           </span>
           <CampaignBadge status={campaign.status} />
+          {campaign.reward.type === "DIRECT" && <DirectRewardTag />}
+          {campaign.reward.type === "DIRECT" &&
+            campaign.reward.chainStatus === "PENDING_FUNDING" && (
+              <CampaignBadge status="PENDING_FUNDING" />
+            )}
           {campaign.isPrivate && <PrivateTag />}
         </div>
         <h1 className="break-words text-2xl font-semibold lg:text-3xl">
@@ -217,9 +260,13 @@ export function CampaignOverview({
         <div>
           <p className="text-xs text-muted-foreground">Completion reward</p>
           <p className="mt-2 text-4xl font-semibold tracking-tight text-primary">
-            {campaign.reward.completerPoints.toLocaleString()}{" "}
+            {campaign.reward.type === "POINTS"
+              ? campaign.reward.completerPoints.toLocaleString()
+              : formatNativeAmount(campaign.reward.completerRewardWei)}{" "}
             <span className="text-sm font-normal text-muted-foreground">
-              points
+              {campaign.reward.type === "POINTS"
+                ? "points"
+                : "native currency"}
             </span>
           </p>
         </div>
@@ -233,9 +280,21 @@ export function CampaignOverview({
             <span>Ends {new Date(campaign.endsAt).toLocaleString()}</span>
           </p>
           <p className="pt-2">
-            + {campaign.reward.referralPoolPoints} referral pool points per
-            completion, shared 80/20.
+            +{" "}
+            {campaign.reward.type === "POINTS"
+              ? `${campaign.reward.referralPoolPoints} referral pool points`
+              : `${formatNativeAmount(campaign.reward.referralPoolWei)} native referral pool`}{" "}
+            per completion, shared 80/20.
           </p>
+          {campaign.reward.type === "DIRECT" && (
+            <p className="pt-2">
+              {campaign.reward.chainStatus === "PENDING_FUNDING"
+                ? "This campaign needs funding before it can cover another completion."
+                : campaign.publishedAt && directRunsRemaining(campaign) !== null
+                  ? `${directRunsRemaining(campaign)} funded runs remaining.`
+                  : `${campaign.reward.initialFundingRuns} runs will be funded when published.`}
+            </p>
+          )}
         </div>
       </aside>
     </div>
@@ -338,17 +397,33 @@ export function CampaignCard({
         </h2>
         <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">
           {campaign.description ||
-            "Complete the task and submit your proof to earn points."}
+            `Complete the task and submit your proof to earn ${campaign.reward.type === "POINTS" ? "points" : "a Direct native-currency reward"}.`}
         </p>
       </div>
       <div className="mt-auto flex items-baseline gap-1.5">
         <span className="text-3xl font-semibold tracking-tight tabular-nums text-orange-400">
-          {campaign.reward.completerPoints.toLocaleString()}
+          {campaign.reward.type === "POINTS"
+            ? campaign.reward.completerPoints.toLocaleString()
+            : formatNativeAmount(campaign.reward.completerRewardWei)}
         </span>
         <span className="text-sm text-muted-foreground">
-          points per completion
+          {campaign.reward.type === "POINTS"
+            ? "points per completion"
+            : "native currency per completion"}
         </span>
       </div>
+      {campaign.reward.type === "DIRECT" && (
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <DirectRewardTag />
+          {campaign.reward.chainStatus === "PENDING_FUNDING" ? (
+            <span className="text-orange-300">Awaiting more funding</span>
+          ) : campaign.publishedAt && directRunsRemaining(campaign) !== null ? (
+            <span>{directRunsRemaining(campaign)} funded runs remaining</span>
+          ) : (
+            <span>{campaign.reward.initialFundingRuns} initially funded runs</span>
+          )}
+        </div>
+      )}
       <div className="space-y-2 text-xs text-muted-foreground">
         <p className="flex items-center gap-2">
           <Users className="h-3.5 w-3.5" />
@@ -384,8 +459,10 @@ export function shortWallet(wallet: string) {
 
 export function SubmissionProgress({
   fulfillment,
+  rewardType,
 }: {
   fulfillment: CampaignSubmission;
+  rewardType: Campaign["reward"]["type"];
 }) {
   const rejected = fulfillment.status === "REJECTED";
   const steps = [
@@ -396,7 +473,15 @@ export function SubmissionProgress({
       done: !!fulfillment.decision,
     },
     ...(!rejected
-      ? [{ title: "Points rewarded", done: !!fulfillment.reward }]
+      ? [
+          {
+            title:
+              rewardType === "DIRECT"
+                ? "Direct balance credited"
+                : "Points rewarded",
+            done: !!fulfillment.reward,
+          },
+        ]
       : []),
   ];
   return (

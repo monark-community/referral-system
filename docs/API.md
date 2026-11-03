@@ -859,19 +859,37 @@ events that confirmed each step, or `null`; block numbers are strings:
 
 Save a new campaign as a `DRAFT`. **Auth required:** Yes
 
+Shared fields:
+
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `title` | string | Yes | Up to 120 characters |
 | `instructions` | string | Yes | What to do, up to 2000 characters |
 | `description` | string | No | Up to 500 characters |
 | `category` | string | Yes | `SOCIAL_MEDIA` or `COMMUNITY` |
-| `completerPoints` | integer | Yes | Paid to whoever completes it; 0 or more |
-| `referralPoolPoints` | integer | Yes | Split 80/20 between the completer's referrer and grandparent; 0 or more |
+| `rewardType` | string | Yes | `POINTS` or `DIRECT` |
 | `maxCompletions` | integer | Yes | 1 or more |
 | `endsAt` | ISO date | Yes | In the future |
 | `isPrivate` | boolean | No | `true` for a [private campaign](#private-campaigns); defaults to `false` |
 
-The campaign must pay at least one point. **Response (201):** `{ "campaign": ... }`, the campaign
+Points fields (`rewardType: "POINTS"`):
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `completerPoints` | integer | Yes | Paid to whoever completes it; 0 or more |
+| `referralPoolPoints` | integer | Yes | Split 80/20 between the completer's referrer and grandparent; 0 or more |
+
+Direct fields (`rewardType: "DIRECT"`):
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `completerRewardWei` | decimal string | Yes | Native-currency reward accrued by the completer; 0 or more |
+| `referralPoolWei` | decimal string | Yes | Native-currency pool for eligible referrers; 0 or more |
+| `initialFundingRuns` | integer | Yes | Positive whole number of complete runs funded by publication |
+
+Do not mix Points and Direct fields. The selected reward must pay at least one point or one wei,
+respectively. Human-readable native values are a frontend display/input concern; every API and
+persistence boundary uses unsigned base-10 wei strings. **Response (201):** `{ "campaign": ... }`, the campaign
 detail with its `privateCode` (a private campaign) and the call that publishes it:
 
 ```json
@@ -917,6 +935,9 @@ the chain transaction to revert and leaves the accrued balance available for ano
 
 Edit a draft. Send any of the fields above; the rest keep their value. **Auth required:** Yes
 (creator). **Response (200):** `{ "campaign": ... }` with the updated `createCampaign` call.
+Sending `rewardType` with its corresponding reward fields replaces the draft's reward
+discriminator and configuration, so a creator may switch between Points and Direct before
+publication. Published campaigns cannot change reward type.
 Making a draft private gives it a `privateCode`, and making it public again removes it; a draft
 that stays private keeps its code.
 

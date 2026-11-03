@@ -74,6 +74,8 @@ const saved: CampaignSubmission = {
   decision: null,
   reward: null,
   chain: {
+    chainId: 31337,
+    contractAddress: "0xcontract",
     functionName: "submitCampaignFulfillment",
     args: ["0xcampaign", "0xsubmission"],
   },
@@ -131,6 +133,29 @@ test("anyone with the link can read the campaign, and logging in comes back to i
   expect(returnToPath()).toBe("/campaigns/private/secret-code");
 });
 
+test("a logged-out private link presents a Direct reward and funding state", async () => {
+  jest.mocked(api.getPrivateCampaign).mockResolvedValue({
+    campaign: {
+      ...campaign,
+      reward: {
+        type: "DIRECT",
+        completerRewardWei: "3000000000000000",
+        referralPoolWei: "1000000000000000",
+        rewardPerRunWei: "4000000000000000",
+        initialFundingRuns: 10,
+        initialFundingWei: "40000000000000000",
+        chainBalanceWei: "8000000000000000",
+        chainStatus: "ACTIVE",
+      },
+    },
+  });
+  mount();
+  expect(await screen.findByText("0.003")).toBeInTheDocument();
+  expect(screen.getByText("native currency")).toBeInTheDocument();
+  expect(screen.getAllByText("Direct reward").length).toBeGreaterThan(0);
+  expect(screen.getByText("2 funded runs remaining.")).toBeInTheDocument();
+});
+
 test("a logged-out visitor sees when the campaign isn't taking proof", async () => {
   jest
     .mocked(api.getPrivateCampaign)
@@ -142,6 +167,62 @@ test("a logged-out visitor sees when the campaign isn't taking proof", async () 
   expect(
     screen.getByRole("button", { name: "Log in to see your submission" }),
   ).toBeInTheDocument();
+});
+
+test("an underfunded private campaign has no actionable form while logged out", async () => {
+  jest.mocked(api.getPrivateCampaign).mockResolvedValue({
+    campaign: {
+      ...campaign,
+      reward: {
+        type: "DIRECT",
+        completerRewardWei: "3000000000000000",
+        referralPoolWei: "1000000000000000",
+        rewardPerRunWei: "4000000000000000",
+        initialFundingRuns: 1,
+        initialFundingWei: "4000000000000000",
+        chainBalanceWei: "0",
+        chainStatus: "PENDING_FUNDING",
+      },
+    },
+  });
+  mount();
+  expect(
+    await screen.findByText(/temporarily out of funded rewards/),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "Log in to see your submission" }),
+  ).toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Log in or join to take part" }),
+  ).not.toBeInTheDocument();
+});
+
+test("an underfunded private campaign has no actionable form while signed in", async () => {
+  signedIn();
+  jest
+    .mocked(api.getMySubmission)
+    .mockRejectedValue(new ApiError("Campaign not found", 404));
+  jest.mocked(api.getPrivateCampaign).mockResolvedValue({
+    campaign: {
+      ...campaign,
+      reward: {
+        type: "DIRECT",
+        completerRewardWei: "3000000000000000",
+        referralPoolWei: "1000000000000000",
+        rewardPerRunWei: "4000000000000000",
+        initialFundingRuns: 1,
+        initialFundingWei: "4000000000000000",
+        chainBalanceWei: "0",
+        chainStatus: "PENDING_FUNDING",
+      },
+    },
+  });
+  mount();
+  expect(
+    await screen.findByText(/temporarily out of funded rewards/),
+  ).toBeInTheDocument();
+  expect(screen.queryByLabelText("Username or proof")).not.toBeInTheDocument();
+  expect(api.submitCampaignProof).not.toHaveBeenCalled();
 });
 
 test("a signed-in visitor takes part with the code from the link", async () => {
