@@ -32,7 +32,7 @@
     "@playwright/test": "1.51.1",
     "concurrently": "^8.2.2",
     "ts-node": "^10.9.2",
-    "typescript": "^5.9.3",
+    "typescript": "^7.0.2",
     "viem": "^2.21.54",
     "wait-on": "^9.0.4"
   }
