@@ -9,10 +9,15 @@ import {
   updateCampaign,
   type Campaign,
   type CampaignCategory,
+  type CampaignInput,
   type MyCampaigns,
 } from "@/lib/api/campaigns";
 import { useAuth } from "@/contexts/auth-context";
 import { campaignError } from "@/hooks/use-campaign-transaction";
+import {
+  formatNativeAmountExact,
+  parseNativeAmountToWei,
+} from "@/lib/native-amount";
 import { cn } from "@/lib/utils";
 import { campaignField, campaignPanel, CampaignNotice } from "./campaign-ui";
 
@@ -38,6 +43,19 @@ function localDate(date: string) {
     .slice(0, 16);
 }
 
+function initialFundingPreview(reward: string, pool: string, runs: string) {
+  try {
+    const count = Number(runs);
+    if (!Number.isSafeInteger(count) || count < 1) return null;
+    return formatNativeAmountExact(
+      (parseNativeAmountToWei(reward) + parseNativeAmountToWei(pool)) *
+        BigInt(count),
+    );
+  } catch {
+    return null;
+  }
+}
+
 export function CampaignForm({
   campaign,
   onSaved,
@@ -56,36 +74,57 @@ export function CampaignForm({
   const [category, setCategory] = useState<CampaignCategory>(
     campaign?.category || "SOCIAL_MEDIA",
   );
+  const [rewardType, setRewardType] = useState<"POINTS" | "DIRECT">(
+    campaign?.reward.type || "POINTS",
+  );
   const [points, setPoints] = useState(
-    String(campaign?.reward.completerPoints ?? 30),
+    String(
+      campaign?.reward.type === "POINTS"
+        ? campaign.reward.completerPoints
+        : 30,
+    ),
   );
   const [pool, setPool] = useState(
-    String(campaign?.reward.referralPoolPoints ?? 10),
+    String(
+      campaign?.reward.type === "POINTS"
+        ? campaign.reward.referralPoolPoints
+        : 10,
+    ),
+  );
+  const [directReward, setDirectReward] = useState(
+    campaign?.reward.type === "DIRECT"
+      ? formatNativeAmountExact(campaign.reward.completerRewardWei)
+      : "0.001",
+  );
+  const [directPool, setDirectPool] = useState(
+    campaign?.reward.type === "DIRECT"
+      ? formatNativeAmountExact(campaign.reward.referralPoolWei)
+      : "0",
+  );
+  const [initialFundingRuns, setInitialFundingRuns] = useState(
+    String(
+      campaign?.reward.type === "DIRECT"
+        ? campaign.reward.initialFundingRuns
+        : 1,
+    ),
   );
   const [spots, setSpots] = useState(String(campaign?.maxCompletions ?? 50));
   const [end, setEnd] = useState(campaign ? localDate(campaign.endsAt) : "");
   const [isPrivate, setIsPrivate] = useState(campaign?.isPrivate ?? false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const fundingPreview = initialFundingPreview(
+    directReward,
+    directPool,
+    initialFundingRuns,
+  );
 
   async function save(event: FormEvent) {
     event.preventDefault();
     setError("");
-    const completerPoints = Number(points),
-      referralPoolPoints = Number(pool),
-      maxCompletions = Number(spots);
-    if (
-      ![completerPoints, referralPoolPoints, maxCompletions].every(
-        Number.isSafeInteger,
-      ) ||
-      completerPoints < 0 ||
-      referralPoolPoints < 0 ||
-      maxCompletions < 1 ||
-      completerPoints + referralPoolPoints < 1
-    ) {
-      setError(
-        "Use whole numbers, at least one spot, and at least one point in the reward or referral pool.",
-      );
+    const maxCompletions = Number(spots);
+    if (!Number.isSafeInteger(maxCompletions) || maxCompletions < 1) {
+      setError("Available completions must be a whole number of at least one.");
       return;
     }
     if (!title.trim() || !instructions.trim()) {
@@ -102,17 +141,56 @@ export function CampaignForm({
     }
     setBusy(true);
     try {
-      const input = {
+      const common = {
         title: title.trim(),
         description: description.trim(),
         instructions: instructions.trim(),
         category,
-        completerPoints,
-        referralPoolPoints,
         maxCompletions,
         endsAt: new Date(end).toISOString(),
         isPrivate,
       };
+      let input: CampaignInput;
+      if (rewardType === "POINTS") {
+        const completerPoints = Number(points);
+        const referralPoolPoints = Number(pool);
+        if (
+          ![completerPoints, referralPoolPoints].every(Number.isSafeInteger) ||
+          completerPoints < 0 ||
+          referralPoolPoints < 0 ||
+          completerPoints + referralPoolPoints < 1
+        ) {
+          throw new Error(
+            "Use whole numbers and at least one point in the reward or referral pool.",
+          );
+        }
+        input = {
+          ...common,
+          rewardType: "POINTS",
+          completerPoints,
+          referralPoolPoints,
+        };
+      } else {
+        const completerRewardWei = parseNativeAmountToWei(directReward).toString();
+        const referralPoolWei = parseNativeAmountToWei(directPool).toString();
+        const runs = Number(initialFundingRuns);
+        if (
+          !Number.isSafeInteger(runs) ||
+          runs < 1 ||
+          BigInt(completerRewardWei) + BigInt(referralPoolWei) < BigInt(1)
+        ) {
+          throw new Error(
+            "Use at least one funded run and a non-zero completion reward or referral pool.",
+          );
+        }
+        input = {
+          ...common,
+          rewardType: "DIRECT",
+          completerRewardWei,
+          referralPoolWei,
+          initialFundingRuns: runs,
+        };
+      }
       const result = campaign
         ? await updateCampaign(campaign.id, input)
         : await createCampaign(input);
@@ -213,37 +291,134 @@ export function CampaignForm({
             You review each submission yourself.
           </span>
         </label>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <label className="space-y-2 text-sm">
-            <span>Completion reward (points)</span>
-            <input
-              className={campaignField}
-              type="number"
-              min="0"
-              step="1"
-              required
-              value={points}
-              onChange={(e) => setPoints(e.target.value)}
-            />
-          </label>
-          <label className="space-y-2 text-sm">
-            <span>Referral pool (points)</span>
-            <input
-              className={campaignField}
-              type="number"
-              min="0"
-              step="1"
-              required
-              value={pool}
-              onChange={(e) => setPool(e.target.value)}
-            />
-          </label>
-        </div>
-        <p className="text-xs leading-relaxed text-muted-foreground">
-          The referral pool is shared 80/20 between the participant’s referrer
-          and their referrer. The allowed reward maximum is checked when you
-          save.
-        </p>
+        <fieldset className="space-y-2 text-sm">
+          <legend className="mb-2">Reward type</legend>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {(
+              [
+                {
+                  type: "POINTS",
+                  label: "Points",
+                  help: "Reward participants with Reffinity points.",
+                },
+                {
+                  type: "DIRECT",
+                  label: "Direct",
+                  help: "Fund rewards with the chain’s native currency.",
+                },
+              ] as const
+            ).map((option) => (
+              <label
+                key={option.type}
+                className={cn(
+                  "flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors",
+                  rewardType === option.type
+                    ? "border-primary bg-primary/5"
+                    : "border-input hover:bg-secondary/40",
+                )}
+              >
+                <input
+                  type="radio"
+                  name="campaign-reward-type"
+                  className="mt-1 accent-orange-500"
+                  checked={rewardType === option.type}
+                  onChange={() => setRewardType(option.type)}
+                  aria-describedby={`campaign-reward-${option.type.toLowerCase()}-help`}
+                />
+                <span>
+                  <span className="block font-medium">{option.label}</span>
+                  <span
+                    id={`campaign-reward-${option.type.toLowerCase()}-help`}
+                    className="mt-0.5 block text-xs text-muted-foreground"
+                  >
+                    {option.help}
+                  </span>
+                </span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        {rewardType === "POINTS" ? (
+          <>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="space-y-2 text-sm">
+                <span>Completion reward (points)</span>
+                <input
+                  className={campaignField}
+                  type="number"
+                  min="0"
+                  step="1"
+                  required
+                  value={points}
+                  onChange={(e) => setPoints(e.target.value)}
+                />
+              </label>
+              <label className="space-y-2 text-sm">
+                <span>Referral pool (points)</span>
+                <input
+                  className={campaignField}
+                  type="number"
+                  min="0"
+                  step="1"
+                  required
+                  value={pool}
+                  onChange={(e) => setPool(e.target.value)}
+                />
+              </label>
+            </div>
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              The referral pool is shared 80/20 between the participant’s
+              referrer and their referrer. The allowed reward maximum is checked
+              when you save.
+            </p>
+          </>
+        ) : (
+          <>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="space-y-2 text-sm">
+                <span>Completion reward (native currency)</span>
+                <input
+                  className={campaignField}
+                  type="text"
+                  inputMode="decimal"
+                  required
+                  value={directReward}
+                  onChange={(e) => setDirectReward(e.target.value)}
+                  placeholder="0.001"
+                />
+              </label>
+              <label className="space-y-2 text-sm">
+                <span>Referral pool (native currency)</span>
+                <input
+                  className={campaignField}
+                  type="text"
+                  inputMode="decimal"
+                  required
+                  value={directPool}
+                  onChange={(e) => setDirectPool(e.target.value)}
+                  placeholder="0"
+                />
+              </label>
+            </div>
+            <label className="block space-y-2 text-sm">
+              <span>Initially funded completions</span>
+              <input
+                className={campaignField}
+                type="number"
+                min="1"
+                step="1"
+                required
+                value={initialFundingRuns}
+                onChange={(e) => setInitialFundingRuns(e.target.value)}
+              />
+            </label>
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              Publishing deposits the completion reward and referral pool for
+              each initially funded completion into the campaign contract. The
+              referral pool is shared 80/20.
+            </p>
+          </>
+        )}
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="space-y-2 text-sm">
             <span>Available completions</span>
@@ -344,15 +519,33 @@ export function CampaignForm({
         <div className="border-t border-border pt-4">
           <p className="text-xs text-muted-foreground">Reward per completion</p>
           <p className="mt-1 text-3xl font-semibold text-primary">
-            {Number(points || 0).toLocaleString()}{" "}
+            {rewardType === "POINTS"
+              ? Number(points || 0).toLocaleString()
+              : directReward || "0"}{" "}
             <span className="text-sm font-normal text-muted-foreground">
-              points
+              {rewardType === "POINTS" ? "points" : "native currency"}
             </span>
           </p>
           <p className="mt-3 text-xs text-muted-foreground">
-            + {Number(pool || 0).toLocaleString()} referral pool points
+            +{" "}
+            {rewardType === "POINTS"
+              ? `${Number(pool || 0).toLocaleString()} referral pool points`
+              : `${directPool || "0"} native referral pool`}
           </p>
         </div>
+        {rewardType === "DIRECT" && (
+          <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
+            <p className="text-xs text-muted-foreground">
+              Initial wallet funding
+            </p>
+            <p className="mt-1 break-all text-lg font-semibold text-primary">
+              {fundingPreview ?? "—"} native currency
+            </p>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              This is deposited when you publish, not when you save the draft.
+            </p>
+          </div>
+        )}
         <p className="text-xs leading-relaxed text-muted-foreground">
           You can edit a draft any time. Campaign details are fixed after
           publishing.

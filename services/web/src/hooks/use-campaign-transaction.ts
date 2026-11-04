@@ -1,17 +1,37 @@
 "use client";
 
 import { useState } from "react";
+import { waitForTransactionReceipt } from "viem/actions";
 import {
   useAccount,
   useConnect,
-  usePublicClient,
   useSwitchChain,
   useWriteContract,
 } from "wagmi";
-import { hardhat } from "wagmi/chains";
 import { WriteReferralContractHelper } from "@reffinity/blockchain-connector/writeReferralContractHelper";
 import { useAuth } from "@/contexts/auth-context";
+import { wagmiConfig } from "@/lib/wagmi/config";
 import type { CampaignCall } from "@/lib/api/campaigns";
+
+type SupportedChainId = (typeof wagmiConfig.chains)[number]["id"];
+
+function transactionKey(call: CampaignCall, userId: string) {
+  return [
+    "campaign-tx",
+    call.chainId,
+    call.contractAddress.toLowerCase(),
+    userId,
+    call.functionName,
+    ...call.args.map(String),
+    call.valueWei ?? "0",
+  ].join(":");
+}
+
+function isRepeatable(call: CampaignCall) {
+  return ["fundCampaign", "withdrawDirectRewards"].includes(
+    call.functionName,
+  );
+}
 
 export function campaignError(error: unknown): string {
   if (error instanceof Error) {
@@ -31,16 +51,25 @@ export function useCampaignTransaction() {
   const { connectAsync, connectors } = useConnect();
   const { switchChainAsync } = useSwitchChain();
   const { writeContractAsync } = useWriteContract();
-  const client = usePublicClient({ chainId: hardhat.id });
   const [phase, setPhase] = useState<
     "idle" | "wallet" | "confirming" | "syncing"
   >("idle");
 
   async function send(call: CampaignCall) {
-    if (!user || !client)
-      throw new Error("Please sign in and connect your wallet.");
+    if (!user) throw new Error("Please sign in and connect your wallet.");
+    if (!wagmiConfig.chains.some((chain) => chain.id === call.chainId)) {
+      throw new Error("This campaign uses an unsupported network.");
+    }
     const context = await WriteReferralContractHelper.createCampaignContext();
-    const storageKey = `campaign-tx:${hardhat.id}:${context.address}:${user.id}:${call.functionName}:${call.args[0]}`;
+    if (context.address.toLowerCase() !== call.contractAddress.toLowerCase()) {
+      throw new Error(
+        "The campaign contract does not match this app's configuration.",
+      );
+    }
+    const client = wagmiConfig.getClient({
+      chainId: call.chainId as SupportedChainId,
+    });
+    const storageKey = transactionKey(call, user.id);
     let hash = localStorage.getItem(storageKey) as `0x${string}` | null;
     try {
       if (!hash) {
@@ -60,14 +89,18 @@ export function useCampaignTransaction() {
             "Switch to the wallet you used to sign in, then try again.",
           );
         }
-        if (network !== hardhat.id)
-          await switchChainAsync({ chainId: hardhat.id });
+        if (network !== call.chainId)
+          await switchChainAsync({ chainId: call.chainId });
         const base = {
           abi: context.abi,
-          address: context.address,
-          chainId: hardhat.id,
+          address: call.contractAddress,
+          chainId: call.chainId,
           account: wallet,
         } as const;
+        const payable =
+          call.valueWei === undefined
+            ? {}
+            : { value: BigInt(call.valueWei) };
         switch (call.functionName) {
           case "createCampaign": {
             const [id, task, verification, reward, points, pool] = call.args;
@@ -82,6 +115,7 @@ export function useCampaignTransaction() {
                 BigInt(points),
                 BigInt(pool),
               ],
+              ...payable,
             });
             break;
           }
@@ -100,6 +134,7 @@ export function useCampaignTransaction() {
                 BigInt(pool),
                 visibility,
               ],
+              ...payable,
             });
             break;
           }
@@ -118,12 +153,27 @@ export function useCampaignTransaction() {
               args: call.args,
             });
             break;
+          case "fundCampaign":
+            hash = await writeContractAsync({
+              ...base,
+              functionName: call.functionName,
+              args: call.args,
+              ...payable,
+            });
+            break;
+          case "withdrawDirectRewards":
+            hash = await writeContractAsync({
+              ...base,
+              functionName: call.functionName,
+              args: call.args,
+            });
+            break;
         }
         localStorage.setItem(storageKey, hash);
       }
       setPhase("confirming");
       let replaced = false;
-      const receipt = await client.waitForTransactionReceipt({
+      const receipt = await waitForTransactionReceipt(client, {
         hash,
         timeout: 45_000,
         onReplaced: ({ reason, transaction }) => {
@@ -145,6 +195,7 @@ export function useCampaignTransaction() {
           "The transaction failed. Refresh the campaign and try again.",
         );
       }
+      if (isRepeatable(call)) localStorage.removeItem(storageKey);
       setPhase("syncing");
     } catch (error) {
       setPhase("idle");

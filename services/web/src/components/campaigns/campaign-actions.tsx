@@ -11,13 +11,19 @@ import { useAuth } from "@/contexts/auth-context";
 import { useRefreshCampaigns } from "@/lib/api/campaign-hooks";
 import { ApiError } from "@/lib/api/client";
 import {
+  formatNativeAmount,
+  formatNativeAmountExact,
+} from "@/lib/native-amount";
+import {
   changeCampaignStatus,
   getCampaignSubmissions,
   getMySubmission,
+  prepareCampaignFunding,
   reviewCampaignSubmission,
   submitCampaignProof,
   type Campaign,
   type CampaignCall,
+  type CampaignFunding,
   type CampaignStatus,
   type CampaignSubmission,
 } from "@/lib/api/campaigns";
@@ -41,12 +47,17 @@ export function CampaignTransactionButton({
   prepare,
   disabled = false,
   onBusyChange,
+  onConfirmed,
+  confirmedMessage =
+    "Transaction confirmed. Your campaign will update shortly. You can leave this page and return later.",
 }: {
   call?: CampaignCall;
   label: string;
   prepare?: () => Promise<CampaignCall | null>;
   disabled?: boolean;
   onBusyChange?: (busy: boolean) => void;
+  onConfirmed?: () => void;
+  confirmedMessage?: string;
 }) {
   const transaction = useCampaignTransaction();
   const refresh = useRefreshCampaigns();
@@ -69,6 +80,7 @@ export function CampaignTransactionButton({
         );
       await transaction.send(next);
       setConfirmed(true);
+      onConfirmed?.();
     } catch (err) {
       setError(campaignError(err));
     } finally {
@@ -90,11 +102,145 @@ export function CampaignTransactionButton({
                 : label}
       </Button>
       {confirmed && (
-        <CampaignNotice>
-          Transaction confirmed. Your campaign will update shortly. You can
-          leave this page and return later.
-        </CampaignNotice>
+        <CampaignNotice>{confirmedMessage}</CampaignNotice>
       )}
+      {error && <CampaignNotice error>{error}</CampaignNotice>}
+    </div>
+  );
+}
+
+export function CampaignFundingControls({ campaign }: { campaign: Campaign }) {
+  const [runs, setRuns] = useState("1");
+  const [prepared, setPrepared] = useState<{
+    funding: CampaignFunding;
+    chain: CampaignCall;
+  } | null>(null);
+  const [preparing, setPreparing] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  if (
+    campaign.reward.type !== "DIRECT" ||
+    !campaign.publishedAt ||
+    !["ACTIVE", "PAUSED"].includes(campaign.status)
+  )
+    return null;
+
+  const perRun = BigInt(campaign.reward.rewardPerRunWei);
+  const balance = BigInt(campaign.reward.chainBalanceWei ?? "0");
+  const runsRemaining = perRun > BigInt(0) ? balance / perRun : BigInt(0);
+
+  async function prepare(event: FormEvent) {
+    event.preventDefault();
+    setError("");
+    setSuccess("");
+    const count = Number(runs);
+    if (!Number.isSafeInteger(count) || count < 1) {
+      setError("Runs to add must be a positive whole number.");
+      return;
+    }
+    setPreparing(true);
+    try {
+      setPrepared(await prepareCampaignFunding(campaign.id, count));
+    } catch (err) {
+      setPrepared(null);
+      setError(campaignError(err));
+    } finally {
+      setPreparing(false);
+    }
+  }
+
+  return (
+    <div
+      id="campaign-funding"
+      className="scroll-mt-6 space-y-4 rounded-lg border border-border/60 p-4"
+    >
+      <div>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="font-medium">Direct campaign funding</h3>
+          {campaign.reward.chainStatus === "PENDING_FUNDING" && (
+            <CampaignBadge status="PENDING_FUNDING" />
+          )}
+        </div>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Contract balance: {formatNativeAmount(balance)} native currency ·{" "}
+          {runsRemaining.toString()} funded runs remaining
+        </p>
+      </div>
+      <form
+        onSubmit={prepare}
+        className="flex flex-col gap-3 sm:flex-row sm:items-end"
+      >
+        <label className="block flex-1 space-y-2 text-sm">
+          <span>Runs to add</span>
+          <input
+            className={campaignField}
+            type="number"
+            min="1"
+            step="1"
+            required
+            value={runs}
+            disabled={preparing}
+            onChange={(event) => {
+              setRuns(event.target.value);
+              setPrepared(null);
+              setSuccess("");
+            }}
+          />
+        </label>
+        <Button type="submit" variant="outline" disabled={preparing}>
+          {preparing ? "Preparing…" : "Preview funding"}
+        </Button>
+      </form>
+      {prepared && (
+        <div className="space-y-4 rounded-lg bg-secondary/40 p-4 text-sm">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <p className="text-xs text-muted-foreground">Wallet payment</p>
+              <p className="mt-1 font-medium">
+                {formatNativeAmountExact(prepared.funding.valueWei)} native
+                currency
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Funded runs</p>
+              <p className="mt-1 font-medium">
+                {prepared.funding.currentRunsRemaining} →{" "}
+                {prepared.funding.projectedRunsRemaining}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Current balance</p>
+              <p className="mt-1">
+                {formatNativeAmount(prepared.funding.currentBalanceWei)} native
+                currency
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Projected balance</p>
+              <p className="mt-1">
+                {formatNativeAmount(prepared.funding.projectedBalanceWei)} native
+                currency
+              </p>
+            </div>
+          </div>
+          <CampaignNotice>
+            Review this projection, then confirm the payable transaction in your
+            wallet.
+          </CampaignNotice>
+          <CampaignTransactionButton
+            call={prepared.chain}
+            label="Confirm funding in wallet"
+            onConfirmed={() => {
+              setPrepared(null);
+              setSuccess(
+                "Funding transaction confirmed. Balances will update after the listener synchronizes.",
+              );
+            }}
+          />
+        </div>
+      )}
+      {success && <CampaignNotice>{success}</CampaignNotice>}
       {error && <CampaignNotice error>{error}</CampaignNotice>}
     </div>
   );
@@ -262,7 +408,10 @@ export function ParticipantSubmission({
       </div>
       {fulfillment ? (
         <>
-          <SubmissionProgress fulfillment={fulfillment} />
+          <SubmissionProgress
+            fulfillment={fulfillment}
+            rewardType={campaign.reward.type}
+          />
           <div className="rounded-lg bg-secondary/40 p-4">
             <p className="mb-2 text-xs text-muted-foreground">Your proof</p>
             <SafeProof proof={fulfillment.proof} />
@@ -287,8 +436,11 @@ export function ParticipantSubmission({
           )}
           {fulfillment.status === "UNDER_REVIEW" && (
             <p className="text-sm text-muted-foreground">
-              The creator is reviewing your proof. Your reward will arrive after
-              approval.
+              The creator is reviewing your proof. Your reward will{" "}
+              {campaign.reward.type === "DIRECT"
+                ? "be credited to your withdrawable Direct balance"
+                : "arrive"}{" "}
+              after approval.
             </p>
           )}
           {fulfillment.status === "APPROVED" && (
@@ -299,8 +451,20 @@ export function ParticipantSubmission({
           )}
           {fulfillment.status === "REWARDED" && (
             <p className="text-sm text-green-400">
-              You earned {fulfillment.completerReward.toLocaleString()} points.
-              Your reward is confirmed.
+              {campaign.reward.type === "POINTS" ? (
+                <>
+                  You earned{" "}
+                  {Number(fulfillment.completerReward).toLocaleString()} points.
+                  Your reward is confirmed.
+                </>
+              ) : (
+                <>
+                  You earned{" "}
+                  {formatNativeAmount(String(fulfillment.completerReward))}{" "}
+                  native currency. It is now available in your withdrawable
+                  Direct reward balance.
+                </>
+              )}
             </p>
           )}
           {fulfillment.status === "REJECTED" && fulfillment.rejectedAt && (
@@ -379,6 +543,7 @@ function ReviewSubmission({
   const [reason, setReason] = useState(fulfillment.rejectionReason || "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [needsFunding, setNeedsFunding] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const busy = saving || transaction.busy;
   const reviewable =
@@ -398,6 +563,7 @@ function ReviewSubmission({
           : null;
   async function decide(decision?: "approve" | "reject") {
     setError("");
+    setNeedsFunding(false);
     setSaving(true);
     try {
       let call = fulfillment.chain;
@@ -427,6 +593,13 @@ function ReviewSubmission({
       await transaction.send(call);
       setConfirmed(true);
     } catch (err) {
+      setNeedsFunding(
+        err instanceof ApiError &&
+          typeof err.data === "object" &&
+          err.data !== null &&
+          "code" in err.data &&
+          err.data.code === "INSUFFICIENT_FUNDING",
+      );
       setError(campaignError(err));
     } finally {
       setSaving(false);
@@ -465,7 +638,33 @@ function ReviewSubmission({
           wallet.
         </p>
       )}
-      {error && <CampaignNotice error>{error}</CampaignNotice>}
+      {error && (
+        <CampaignNotice error>
+          {error}
+          {needsFunding && (
+            <>
+              {" "}
+              <a className="font-medium underline" href="#campaign-funding">
+                Add campaign funding, then retry approval.
+              </a>
+            </>
+          )}
+        </CampaignNotice>
+      )}
+      {campaign.reward.type === "DIRECT" && reviewable && !confirmed && (
+        <p className="text-sm text-muted-foreground">
+          Approval credits withdrawable Direct balances to the completer and
+          eligible referrers after wallet confirmation. It does not transfer
+          native currency immediately.
+        </p>
+      )}
+      {campaign.reward.type === "DIRECT" &&
+        fulfillment.status === "REWARDED" && (
+          <p className="text-sm text-green-400">
+            Direct rewards were credited to the completer and eligible
+            referrers as withdrawable balances.
+          </p>
+        )}
       {confirmed && reviewable && (
         <CampaignNotice>
           Transaction confirmed. The submission will update shortly.
@@ -526,7 +725,9 @@ function ReviewSubmission({
             <div className="flex flex-wrap items-start gap-3">
               <Button disabled={busy} onClick={() => decide("approve")}>
                 {actionLabel ||
-                  `Approve & pay ${campaign.reward.completerPoints} points`}
+                  (campaign.reward.type === "POINTS"
+                    ? `Approve & pay ${campaign.reward.completerPoints} points`
+                    : "Approve & credit Direct rewards")}
               </Button>
               <Button
                 variant="outline"

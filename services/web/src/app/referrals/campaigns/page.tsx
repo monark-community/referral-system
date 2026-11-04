@@ -15,6 +15,7 @@ import {
 } from "@/components/campaigns/campaign-ui";
 import { buttonVariants, Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { DirectRewardAccountPanel } from "@/components/campaigns/direct-reward-account";
 
 export default function CampaignsPage() {
   const board = useCampaignBoard();
@@ -55,6 +56,7 @@ export default function CampaignsPage() {
         </Link>
       </div>
       <CampaignHelp />
+      <DirectRewardAccountPanel />
       <div
         className="flex flex-wrap gap-2 border-b border-border/60"
         role="tablist"

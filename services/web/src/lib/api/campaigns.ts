@@ -6,20 +6,64 @@ export type SubmissionStatus =
   "SUBMITTED" | "UNDER_REVIEW" | "APPROVED" | "REJECTED" | "REWARDED";
 export type CampaignCategory = "SOCIAL_MEDIA" | "COMMUNITY";
 type Bytes32 = `0x${string}`;
+type Address = `0x${string}`;
+type ChainAmount = number | string;
 
-export type CampaignCall =
-  | {
+interface CampaignCallBase {
+  chainId: number;
+  contractAddress: Address;
+  valueWei?: string;
+}
+
+export type CampaignCall = CampaignCallBase &
+  (
+    | {
       functionName: "createCampaign";
-      args: [Bytes32, number, number, number, number, number];
+      args: [
+        Bytes32,
+        number,
+        number,
+        number,
+        ChainAmount,
+        ChainAmount,
+      ];
     }
-  | {
+    | {
       functionName: "createCampaignWithVisibility";
-      args: [Bytes32, number, number, number, number, number, number];
+      args: [
+        Bytes32,
+        number,
+        number,
+        number,
+        ChainAmount,
+        ChainAmount,
+        number,
+      ];
     }
-  | { functionName: "submitCampaignFulfillment"; args: [Bytes32, Bytes32] }
-  | {
+    | { functionName: "submitCampaignFulfillment"; args: [Bytes32, Bytes32] }
+    | { functionName: "fundCampaign"; args: [Bytes32] }
+    | { functionName: "withdrawDirectRewards"; args: [Address] }
+    | {
       functionName: "verifyCampaignFulfillment" | "rejectCampaignFulfillment";
       args: [Bytes32];
+    }
+  );
+
+export type CampaignReward =
+  | {
+      type: "POINTS";
+      completerPoints: number;
+      referralPoolPoints: number;
+    }
+  | {
+      type: "DIRECT";
+      completerRewardWei: string;
+      referralPoolWei: string;
+      rewardPerRunWei: string;
+      initialFundingRuns: number;
+      initialFundingWei: string;
+      chainBalanceWei?: string;
+      chainStatus?: "ACTIVE" | "PENDING_FUNDING";
     };
 
 export interface Campaign {
@@ -31,11 +75,7 @@ export interface Campaign {
   isSystem: false;
   owner: { name: string | null; walletAddress: string };
   category: CampaignCategory;
-  reward: {
-    type: "POINTS";
-    completerPoints: number;
-    referralPoolPoints: number;
-  };
+  reward: CampaignReward;
   maxCompletions: number;
   spotsLeft: number;
   isPrivate: boolean;
@@ -70,7 +110,7 @@ export interface CampaignSubmission {
   status: SubmissionStatus;
   proof: string;
   rejectionReason: string | null;
-  completerReward: number;
+  completerReward: number | string;
   createdAt: string;
   submittedAt: string | null;
   reviewedAt: string | null;
@@ -84,16 +124,57 @@ export interface CampaignSubmission {
   participant?: { id: string; name: string | null; walletAddress: string };
 }
 
-export interface CampaignInput {
+interface CampaignInputBase {
   title: string;
   description: string;
   instructions: string;
   category: CampaignCategory;
-  completerPoints: number;
-  referralPoolPoints: number;
   maxCompletions: number;
   endsAt: string;
   isPrivate: boolean;
+}
+
+export type CampaignInput =
+  | (CampaignInputBase & {
+      rewardType: "POINTS";
+      completerPoints: number;
+      referralPoolPoints: number;
+    })
+  | (CampaignInputBase & {
+      rewardType: "DIRECT";
+      completerRewardWei: string;
+      referralPoolWei: string;
+      initialFundingRuns: number;
+    });
+
+export interface CampaignFunding {
+  requestedRuns: number;
+  valueWei: string;
+  currentBalanceWei: string;
+  currentRunsRemaining: number;
+  projectedBalanceWei: string;
+  projectedRunsRemaining: number;
+}
+
+export interface DirectRewardEvent {
+  id: string;
+  chainId: number;
+  transactionHash: string;
+  logIndex: number;
+  blockNumber: string;
+  type: "ACCRUED" | "WITHDRAWN";
+  account: string;
+  destination: string | null;
+  amountWei: string;
+  balanceAfterWei: string | null;
+  observedAt: string;
+}
+
+export interface DirectRewardAccount {
+  wallet: Address;
+  chainId: number;
+  balanceWei: string;
+  history: DirectRewardEvent[];
 }
 
 export interface MyCampaigns {
@@ -149,4 +230,24 @@ export const reviewCampaignSubmission = (
   apiClient<{ fulfillment: CampaignSubmission }>(
     `${path(id)}/fulfillments/${encodeURIComponent(submissionId)}/${decision}`,
     post(decision === "reject" ? { reason } : {}),
+  );
+
+export const prepareCampaignFunding = (id: string, runs: number) =>
+  apiClient<{ funding: CampaignFunding; chain: CampaignCall }>(
+    `${path(id)}/funding`,
+    post({ runs }),
+  );
+
+export const getMyDirectRewards = () =>
+  apiClient<DirectRewardAccount>("/campaigns/rewards/direct/me");
+
+export const prepareDirectRewardWithdrawal = (destination?: Address) =>
+  apiClient<{
+    wallet: Address;
+    destination: Address;
+    balanceWei: string;
+    chain: CampaignCall;
+  }>(
+    "/campaigns/rewards/direct/withdraw",
+    post(destination ? { destination } : {}),
   );
