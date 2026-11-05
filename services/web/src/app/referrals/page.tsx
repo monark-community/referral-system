@@ -9,7 +9,7 @@
 
 import { useEffect, useState, lazy, Suspense } from "react";
 import { useRouter } from "next/navigation";
-import { Users, TrendingUp, Clock, ArrowRight, Copy, Check, Share2 } from "lucide-react";
+import { Users, TrendingUp, Clock, ArrowRight, Copy, Check, Share2, Coins } from "lucide-react";
 import dynamic from "next/dynamic";
 import { PointsCard } from "@/components/referral/points-card";
 import { ReferralLinkCard } from "@/components/referral/referral-link-card";
@@ -34,8 +34,10 @@ const PointsChart = dynamic(
 import { ResponsiveShell } from "@/components/layout/responsive-shell";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth-context";
-import { useInvites } from "@/lib/api/hooks";
+import { useInvites, useReferralRewardHistory } from "@/lib/api/hooks";
+import { useMyCampaigns, useMyDirectRewards } from "@/lib/api/campaign-hooks";
 import { formatPoints } from "@/lib/utils";
+import { formatNativeAmount } from "@/lib/native-amount";
 import type { Invite } from "@/lib/api/user";
 import { createPrivateInvite, PrivateInviteResponse } from "@/lib/api/user";
 import { Button } from "@/components/ui/button";
@@ -292,6 +294,9 @@ export default function ReferralsPage() {
   const router = useRouter();
   const { user: userData, isAuthenticated, isLoading, refreshUser } = useAuth();
   const { data: invitesData } = useInvites();
+  const { data: rewardsData } = useReferralRewardHistory();
+  const { data: campaignsData } = useMyCampaigns();
+  const { data: nativeRewardsData } = useMyDirectRewards();
   const queryClient = useQueryClient();
   const [mounted, setMounted] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
@@ -393,14 +398,17 @@ export default function ReferralsPage() {
               <PointsChart
                 earnedPoints={userData.earnedPoints}
                 pendingPoints={userData.pendingPoints}
-                createdAt={userData.createdAt}
+                referralRewards={rewardsData?.rewardHistory ?? []}
+                joinedCampaigns={campaignsData?.joined ?? []}
+                nativeRewards={nativeRewardsData?.history ?? []}
+                nativeBalanceWei={nativeRewardsData?.balanceWei ?? "0"}
               />
             </div>
             <QuickShareCard referralLink={referralLink} />
           </div>
 
           {/* Stat cards row */}
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-4 gap-4">
             <StatCard
               label="Earned Points"
               value={formatPoints(userData.earnedPoints)}
@@ -412,6 +420,12 @@ export default function ReferralsPage() {
               value={formatPoints(userData.pendingPoints)}
               icon={Clock}
               subtitle="Awaiting confirmation"
+            />
+            <StatCard
+              label="Native Rewards"
+              value={formatNativeAmount(nativeRewardsData?.balanceWei ?? "0")}
+              icon={Coins}
+              subtitle="Available on chain"
             />
             <StatCard
               label="Total Referrals"
@@ -435,6 +449,13 @@ export default function ReferralsPage() {
               <PointsCard label="Earned" points={userData.earnedPoints} variant="earned" />
               <PointsCard label="Pending" points={userData.pendingPoints} variant="pending" />
             </div>
+            <div className="rounded-xl bg-card/50 p-4 surface-card">
+              <p className="text-xs text-muted-foreground">Native rewards available</p>
+              <p className="mt-1 text-2xl font-semibold text-sky-300 tabular-nums">
+                {formatNativeAmount(nativeRewardsData?.balanceWei ?? "0")}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">Confirmed on chain</p>
+            </div>
           </section>
 
           <section>
@@ -447,7 +468,7 @@ export default function ReferralsPage() {
             <NavMenuItem label="How it Works" onClick={() => router.push("/referrals/how-it-works")} />
             <NavMenuItem label="Referrals" onClick={() => router.push("/referrals/tree")} />
             <NavMenuItem label="Campaigns" onClick={() => router.push("/referrals/campaigns")} />
-            <NavMenuItem label="Invites History" onClick={() => router.push("/referrals/history")} badge={userData.pendingPoints > 0 ? 1 : 0} />
+            <NavMenuItem label="History" onClick={() => router.push("/referrals/history")} badge={userData.pendingPoints > 0 ? 1 : 0} />
             <NavMenuItem label="Preferences" onClick={() => router.push("/referrals/preferences")} />
             <NavMenuItem label="Rewards" onClick={() => router.push("/referrals/rewards")} />
             <NavMenuItem label="Terms & Conditions" onClick={() => setShowTerms(true)} />
