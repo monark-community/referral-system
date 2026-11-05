@@ -1,12 +1,10 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { useAuth } from "@/contexts/auth-context";
 import {
-  getMyDirectRewards,
   prepareDirectRewardWithdrawal,
   type DirectRewardEvent,
 } from "@/lib/api/campaigns";
+import { useMyDirectRewards } from "@/lib/api/campaign-hooks";
 import { formatNativeAmount } from "@/lib/native-amount";
 import { Button } from "@/components/ui/button";
 import { CampaignTransactionButton } from "./campaign-actions";
@@ -23,13 +21,7 @@ function historyLabel(event: DirectRewardEvent) {
 }
 
 export function DirectRewardAccountPanel() {
-  const { user } = useAuth();
-  const query = useQuery({
-    queryKey: ["campaigns", user?.id, "direct-rewards"],
-    queryFn: getMyDirectRewards,
-    enabled: !!user,
-    refetchInterval: 5000,
-  });
+  const query = useMyDirectRewards();
 
   if (query.isPending) return <CampaignLoading />;
   if (query.isError)

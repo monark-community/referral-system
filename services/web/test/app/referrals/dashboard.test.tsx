@@ -9,7 +9,8 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import ReferralsPage from "@/app/referrals/page";
 import { useAuth } from "@/contexts/auth-context";
-import { useInvites } from "@/lib/api/hooks";
+import { useInvites, useReferralRewardHistory } from "@/lib/api/hooks";
+import { useMyCampaigns, useMyDirectRewards } from "@/lib/api/campaign-hooks";
 import type { User } from "@/lib/api/auth";
 import type { Invite } from "@/lib/api/user";
 import { buildInvite, buildUser } from "../../fixtures";
@@ -19,7 +20,14 @@ const mockRefreshUser = jest.fn();
 
 jest.mock("next/navigation", () => ({ useRouter: () => ({ push: mockPush }) }));
 jest.mock("@/contexts/auth-context", () => ({ useAuth: jest.fn() }));
-jest.mock("@/lib/api/hooks", () => ({ useInvites: jest.fn() }));
+jest.mock("@/lib/api/hooks", () => ({
+  useInvites: jest.fn(),
+  useReferralRewardHistory: jest.fn(),
+}));
+jest.mock("@/lib/api/campaign-hooks", () => ({
+  useMyCampaigns: jest.fn(),
+  useMyDirectRewards: jest.fn(),
+}));
 jest.mock("@/lib/api/user", () => ({
   createPrivateInvite: jest.fn(),
   getProfile: jest.fn().mockResolvedValue({}),
@@ -56,6 +64,20 @@ function renderPage({
     refreshUser: mockRefreshUser,
   } as unknown as ReturnType<typeof useAuth>);
   jest.mocked(useInvites).mockReturnValue({ data: { invites } } as unknown as ReturnType<typeof useInvites>);
+  jest.mocked(useReferralRewardHistory).mockReturnValue({
+    data: { rewardHistory: [] },
+  } as unknown as ReturnType<typeof useReferralRewardHistory>);
+  jest.mocked(useMyCampaigns).mockReturnValue({
+    data: { created: [], joined: [] },
+  } as unknown as ReturnType<typeof useMyCampaigns>);
+  jest.mocked(useMyDirectRewards).mockReturnValue({
+    data: {
+      wallet: "0x1111111111111111111111111111111111111111",
+      chainId: 31337,
+      balanceWei: "1250000000000000000",
+      history: [],
+    },
+  } as unknown as ReturnType<typeof useMyDirectRewards>);
   const queryClient = new QueryClient();
   jest.spyOn(queryClient, "prefetchQuery");
   render(
@@ -106,6 +128,7 @@ test("shows earned and pending points and the referral link", () => {
 
   expect(statCard("Earned Points")).toHaveTextContent("1,500");
   expect(statCard("Pending Points")).toHaveTextContent("200");
+  expect(statCard("Native Rewards")).toHaveTextContent("1.25");
   expect(screen.getByText(/\/invite\/ALICE12345$/)).toBeInTheDocument();
 });
 

@@ -8,6 +8,8 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import InvitesHistoryPage from "@/app/referrals/history/page";
 import { useInvites, useReferralRewardHistory } from "@/lib/api/hooks";
+import { useMyCampaigns, useMyDirectRewards } from "@/lib/api/campaign-hooks";
+import type { DirectRewardEvent, MyCampaigns } from "@/lib/api/campaigns";
 import type { Invite, ReferralReward } from "@/lib/api/user";
 import { buildInvite, buildReward, buildUser } from "../../fixtures";
 
@@ -19,6 +21,10 @@ jest.mock("@/lib/api/hooks", () => ({
   useInvites: jest.fn(),
   useReferralRewardHistory: jest.fn(),
 }));
+jest.mock("@/lib/api/campaign-hooks", () => ({
+  useMyCampaigns: jest.fn(),
+  useMyDirectRewards: jest.fn(),
+}));
 
 const PENDING = 0;
 const ACCEPTED = 1;
@@ -26,11 +32,79 @@ const ACCEPTED = 1;
 const carol = buildUser({ id: "user-3", name: "Carol", walletAddress: "0x3333333333333333333333333333333333333333" });
 const dave = buildUser({ id: "user-4", name: "Dave", walletAddress: "0x4444444444444444444444444444444444444444" });
 
+function campaignReward(
+  reward: { type: "POINTS"; completerPoints: number; referralPoolPoints: number } | { type: "DIRECT"; completerRewardWei: string; referralPoolWei: string; rewardPerRunWei: string; initialFundingRuns: number; initialFundingWei: string },
+  transactionHash = "0xcampaign",
+): MyCampaigns["joined"][number] {
+  return {
+    campaign: {
+      id: "campaign-1",
+      key: "campaign-1",
+      title: "Community launch",
+      description: "Launch campaign",
+      status: "ACTIVE",
+      isSystem: false,
+      owner: { name: "Owner", walletAddress: "0xowner" },
+      category: "COMMUNITY",
+      reward,
+      maxCompletions: 10,
+      spotsLeft: 4,
+      isPrivate: false,
+      endsAt: "2026-12-01T00:00:00.000Z",
+      publishedAt: "2026-10-01T00:00:00.000Z",
+      createdAt: "2026-10-01T00:00:00.000Z",
+    },
+    fulfillment: {
+      id: "fulfillment-1",
+      campaignId: "campaign-1",
+      status: "REWARDED",
+      proof: "proof",
+      rejectionReason: null,
+      completerReward: reward.type === "POINTS" ? reward.completerPoints : reward.completerRewardWei,
+      createdAt: "2026-10-30T00:00:00.000Z",
+      submittedAt: "2026-10-30T00:00:00.000Z",
+      reviewedAt: "2026-10-31T00:00:00.000Z",
+      verifiedAt: "2026-10-31T00:00:00.000Z",
+      rejectedAt: null,
+      rewardedAt: "2026-11-01T00:00:00.000Z",
+      submission: null,
+      decision: null,
+      reward: { transactionHash, blockNumber: "100", logIndex: 2 },
+      chain: null,
+    },
+  };
+}
+
+function nativeReward(overrides: Partial<DirectRewardEvent> = {}): DirectRewardEvent {
+  return {
+    id: "native-1",
+    chainId: 31337,
+    transactionHash: "0xnative",
+    logIndex: 3,
+    blockNumber: "101",
+    type: "ACCRUED",
+    account: "0x1111111111111111111111111111111111111111",
+    destination: null,
+    amountWei: "1500000000000000000",
+    balanceAfterWei: "1500000000000000000",
+    observedAt: "2026-11-02T00:00:00.000Z",
+    ...overrides,
+  };
+}
+
 function renderPage({
   invites = [],
   rewards = [],
+  campaigns = [],
+  nativeRewards = [],
   loading = false,
-}: { invites?: Invite[]; rewards?: ReferralReward[]; loading?: boolean } = {}) {
+}: {
+  invites?: Invite[];
+  rewards?: ReferralReward[];
+  campaigns?: MyCampaigns["joined"];
+  nativeRewards?: DirectRewardEvent[];
+  loading?: boolean;
+} = {}) {
   jest.mocked(useInvites).mockReturnValue({
     data: loading ? undefined : { invites },
     isLoading: loading,
@@ -39,6 +113,19 @@ function renderPage({
     data: loading ? undefined : { rewardHistory: rewards },
     isLoading: loading,
   } as unknown as ReturnType<typeof useReferralRewardHistory>);
+  jest.mocked(useMyCampaigns).mockReturnValue({
+    data: loading ? undefined : { created: [], joined: campaigns },
+    isLoading: loading,
+  } as unknown as ReturnType<typeof useMyCampaigns>);
+  jest.mocked(useMyDirectRewards).mockReturnValue({
+    data: loading ? undefined : {
+      wallet: "0x1111111111111111111111111111111111111111",
+      chainId: 31337,
+      balanceWei: "0",
+      history: nativeRewards,
+    },
+    isLoading: loading,
+  } as unknown as ReturnType<typeof useMyDirectRewards>);
   render(<InvitesHistoryPage />);
 }
 
@@ -55,13 +142,13 @@ function row(sectionName: string, text: string) {
 test("shows the empty state when there is no history", () => {
   renderPage();
 
-  expect(screen.getByText("No invites found")).toBeInTheDocument();
+  expect(screen.getByText("No history found")).toBeInTheDocument();
 });
 
 test("does not show the empty state while loading", () => {
   renderPage({ loading: true });
 
-  expect(screen.queryByText("No invites found")).not.toBeInTheDocument();
+  expect(screen.queryByText("No history found")).not.toBeInTheDocument();
 });
 
 test("groups verified invites into Pending and Earned and hides unverified ones", () => {
@@ -124,6 +211,34 @@ test("does not repeat an accepted invite that already has a direct reward row", 
   expect(row("Earned", "Carol")).toHaveTextContent("100 Points Earned");
 });
 
+test("shows campaign point rewards and native-chain rewards", () => {
+  renderPage({
+    campaigns: [campaignReward({ type: "POINTS", completerPoints: 250, referralPoolPoints: 50 })],
+    nativeRewards: [nativeReward()],
+  });
+
+  expect(row("Earned", "Community launch")).toHaveTextContent("250 Points Earned");
+  expect(row("Earned", "Native-chain reward")).toHaveTextContent("1.5 Native Earned");
+});
+
+test("does not duplicate a direct campaign reward's matching native accrual", () => {
+  renderPage({
+    campaigns: [campaignReward({
+      type: "DIRECT",
+      completerRewardWei: "1000000000000000000",
+      referralPoolWei: "0",
+      rewardPerRunWei: "1000000000000000000",
+      initialFundingRuns: 1,
+      initialFundingWei: "1000000000000000000",
+    })],
+    nativeRewards: [nativeReward({ transactionHash: "0xcampaign", amountWei: "1000000000000000000" })],
+  });
+
+  const earned = section("Earned");
+  expect(within(earned).getByText("Community launch")).toBeInTheDocument();
+  expect(within(earned).queryByText("Native-chain reward")).not.toBeInTheDocument();
+});
+
 test("search matches rewards by name or wallet and invites by referee name", async () => {
   renderPage({
     invites: [buildInvite({ id: "i1", status: PENDING, referee: carol })],
@@ -132,7 +247,7 @@ test("search matches rewards by name or wallet and invites by referee name", asy
       buildReward({ id: "r2", logIndex: 1, participant: { name: null, walletAddress: "0x9999999999999999999999999999999999999999" } }),
     ],
   });
-  const search = screen.getByPlaceholderText("Search invites...");
+  const search = screen.getByPlaceholderText("Search history...");
 
   await userEvent.type(search, "bob");
   expect(screen.getByText("Bob")).toBeInTheDocument();
