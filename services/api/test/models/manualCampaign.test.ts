@@ -6,6 +6,7 @@ import {
   ManualCampaignDataError,
   ManualCampaignValidationError,
   parseManualCampaignInput,
+  parsePreVerifiedWinners,
   parseWei,
   UINT256_MAX,
   parseProof,
@@ -53,6 +54,7 @@ describe("parseManualCampaignInput", () => {
       maxCompletions: 50,
       endsAt: new Date("2026-11-01T00:00:00.000Z"),
       isPrivate: false,
+      verificationType: "MANUAL",
     });
   });
 
@@ -259,5 +261,118 @@ describe("parseStoredManualCampaign", () => {
     expect(() =>
       parseStoredManualCampaign({ ...stored, task: { ...stored.task!, ...(taskOverrides as object) } }),
     ).toThrow(ManualCampaignDataError);
+  });
+
+  const preVerifiedPolicy = { type: "PRE_VERIFIED", strategyKey: "CREATOR_WINNER_LIST_V1" };
+
+  test("reads a manual campaign as MANUAL and a private pre-verified one as PRE_VERIFIED", () => {
+    expect(parseStoredManualCampaign(row()).verificationType).toBe("MANUAL");
+    const stored = row({ isPrivate: true, privateCode: "secret-code" });
+    expect(
+      parseStoredManualCampaign({ ...stored, task: { ...stored.task!, verificationPolicy: preVerifiedPolicy } }).verificationType,
+    ).toBe("PRE_VERIFIED");
+  });
+
+  test("refuses a public pre-verified campaign, which the contract can't have", () => {
+    const stored = row();
+    expect(() =>
+      parseStoredManualCampaign({ ...stored, task: { ...stored.task!, verificationPolicy: preVerifiedPolicy } }),
+    ).toThrow(ManualCampaignDataError);
+  });
+
+  test("refuses pre-verified verification with another strategy", () => {
+    const stored = row({ isPrivate: true, privateCode: "secret-code" });
+    expect(() =>
+      parseStoredManualCampaign({
+        ...stored,
+        task: { ...stored.task!, verificationPolicy: { type: "PRE_VERIFIED", strategyKey: "OWNER_APPROVAL_V1" } },
+      }),
+    ).toThrow(ManualCampaignDataError);
+  });
+});
+
+describe("pre-verified campaign input", () => {
+  const preVerified = (overrides: Record<string, unknown> = {}) =>
+    body({ verificationType: "PRE_VERIFIED", isPrivate: true, maxCompletions: undefined, ...overrides });
+
+  test("a campaign is MANUAL unless the creator picks PRE_VERIFIED", () => {
+    expect(parseManualCampaignInput(body(), { now }).verificationType).toBe("MANUAL");
+    expect(fieldOf(() => parseManualCampaignInput(body({ verificationType: "AUTOMATIC_CHAIN" }), { now }))).toBe(
+      "verificationType",
+    );
+  });
+
+  test("a pre-verified campaign has one spot per listed wallet", () => {
+    expect(parseManualCampaignInput(preVerified(), { now, winnerCount: 3 })).toEqual(
+      expect.objectContaining({ verificationType: "PRE_VERIFIED", isPrivate: true, maxCompletions: 3 }),
+    );
+  });
+
+  test("a pre-verified campaign takes no spot count from the creator", () => {
+    expect(fieldOf(() => parseManualCampaignInput(preVerified({ maxCompletions: 5 }), { now, winnerCount: 3 }))).toBe(
+      "maxCompletions",
+    );
+  });
+
+  test("a pre-verified campaign needs at least one listed wallet", () => {
+    expect(fieldOf(() => parseManualCampaignInput(preVerified(), { now }))).toBe("winners");
+    expect(fieldOf(() => parseManualCampaignInput(preVerified(), { now, winnerCount: 0 }))).toBe("winners");
+  });
+
+  test("a pre-verified campaign must be private, as the contract requires", () => {
+    expect(fieldOf(() => parseManualCampaignInput(preVerified({ isPrivate: false }), { now, winnerCount: 1 }))).toBe(
+      "isPrivate",
+    );
+  });
+
+  test("an edit that leaves the verification type out keeps the stored one", () => {
+    const current = parseManualCampaignInput(preVerified(), { now, winnerCount: 2 });
+    expect(parseManualCampaignInput({ title: "New title" }, { now, current, winnerCount: 2 }).verificationType).toBe(
+      "PRE_VERIFIED",
+    );
+  });
+});
+
+describe("parsePreVerifiedWinners", () => {
+  // Hardhat's test wallets #1-#3; #0 plays the creator
+  const OWNER = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
+  const ALICE = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8";
+  const BOB = "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC";
+  const parse = (value: unknown) => parsePreVerifiedWinners(value, { ownerWallet: OWNER.toLowerCase() });
+  const winnerFieldOf = (value: unknown) => fieldOf(() => parse(value));
+
+  test("reads each wallet checksummed, with its optional label trimmed", () => {
+    expect(parse([{ walletAddress: ALICE.toLowerCase(), label: "  Contest winner  " }, { walletAddress: BOB }])).toEqual([
+      { walletAddress: ALICE, label: "Contest winner" },
+      { walletAddress: BOB, label: null },
+    ]);
+  });
+
+  test("an empty label counts as none", () => {
+    expect(parse([{ walletAddress: ALICE, label: "   " }])[0].label).toBeNull();
+  });
+
+  test.each([
+    ["no list", undefined, "winners"],
+    ["an empty list", [], "winners"],
+    ["a list that isn't an array", { walletAddress: ALICE }, "winners"],
+    ["an entry that isn't an object", [ALICE], "winners[0]"],
+    ["a missing wallet", [{ label: "Alice" }], "winners[0].walletAddress"],
+    ["a short address", [{ walletAddress: "0x1234" }], "winners[0].walletAddress"],
+    ["a mixed-case address with a bad checksum", [{ walletAddress: ALICE.replace("C51812", "c51812") }], "winners[0].walletAddress"],
+    ["the zero address", [{ walletAddress: "0x0000000000000000000000000000000000000000" }], "winners[0].walletAddress"],
+    ["the creator's own wallet", [{ walletAddress: OWNER }], "winners[0].walletAddress"],
+    ["the same wallet twice, in any case", [{ walletAddress: ALICE }, { walletAddress: ALICE.toLowerCase() }], "winners[1].walletAddress"],
+    ["a label that's too long", [{ walletAddress: ALICE, label: "x".repeat(61) }], "winners[0].label"],
+  ])("refuses %s", (_case, value, field) => {
+    expect(winnerFieldOf(value)).toBe(field);
+  });
+
+  test("refuses more than 100 wallets", () => {
+    const many = Array.from({ length: 101 }, (_, index) => ({
+      walletAddress: `0x${(index + 1).toString(16).padStart(40, "0")}`,
+    }));
+    expect(winnerFieldOf(many)).toBe("winners");
+    expect(parse(many.slice(0, 100))).toHaveLength(100);
   });
 });

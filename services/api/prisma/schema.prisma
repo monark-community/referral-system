@@ -35,8 +35,23 @@ enum CampaignVerificationType {
   AUTOMATIC_CHAIN
   // The campaign's creator approves or rejects each submission
   MANUAL
+  // The creator lists the winners' wallets beforehand, and only those wallets can claim
+  PRE_VERIFIED
 
   @@map("campaign_verification_type")
+}
+
+// A pre-verified campaign's listed wallet is LISTED when the creator saves it, RESERVED once the
+// creator's wallet puts it on chain, CLAIMED when the winner claims, and REWARDED when the chain pays.
+// REMOVED is a listed wallet the creator took off the list before it went on chain
+enum CampaignWinnerStatus {
+  LISTED
+  RESERVED
+  CLAIMED
+  REWARDED
+  REMOVED
+
+  @@map("campaign_winner_status")
 }
 
 enum CampaignRewardType {
@@ -224,8 +239,9 @@ model Campaign {
   isPrivate              Boolean   @default(false) @map("is_private")
   privateCode            String?   @unique @map("private_code")
 
-  owner User?         @relation("CampaignOwner", fields: [ownerId], references: [id], onDelete: Restrict)
-  task  CampaignTask?
+  owner   User?            @relation("CampaignOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  task    CampaignTask?
+  winners CampaignWinner[]
 
   @@index([status, isSystem])
   @@index([ownerId])
@@ -331,11 +347,56 @@ model CampaignFulfillment {
   @@map("campaign_fulfillments")
 }
 
+// One wallet on a pre-verified campaign's list. Wallet-based, so the winner needs no account; the id is
+// also the fulfillment id on chain. Each event's columns follow the same pattern as CampaignFulfillment
+model CampaignWinner {
+  id            String               @id @default(uuid())
+  campaignId    String               @map("campaign_id")
+  // Lowercase; the chain allows one fulfillment per wallet per campaign
+  walletAddress String               @map("wallet_address")
+  // The creator's own note for who this is; only the creator sees it
+  label         String?
+  status        CampaignWinnerStatus @default(LISTED)
+  chainId       Int                  @map("chain_id")
+  createdAt     DateTime             @default(now()) @map("created_at")
+  updatedAt     DateTime             @updatedAt @map("updated_at")
+
+  // The creator's createPreVerifiedCampaignFulfillment, seen as CampaignFulfillmentSubmitted
+  reservationTransactionHash String?   @map("reservation_transaction_hash")
+  reservationBlockNumber     BigInt?   @map("reservation_block_number")
+  reservationLogIndex        Int?      @map("reservation_log_index")
+  reservedAt                 DateTime? @map("reserved_at")
+  // The winner's completePreVerifiedCampaignFulfillment, seen as CampaignFulfillmentVerified
+  claimTransactionHash       String?   @map("claim_transaction_hash")
+  claimBlockNumber           BigInt?   @map("claim_block_number")
+  claimLogIndex              Int?      @map("claim_log_index")
+  claimedAt                  DateTime? @map("claimed_at")
+  // The CampaignRewardPaid event from the same claim
+  rewardTransactionHash      String?   @map("reward_transaction_hash")
+  rewardBlockNumber          BigInt?   @map("reward_block_number")
+  rewardLogIndex             Int?      @map("reward_log_index")
+  rewardedAt                 DateTime? @map("rewarded_at")
+  completerReward            Int?      @map("completer_reward")
+  completerRewardWei         String?   @map("completer_reward_wei")
+
+  campaign         Campaign                  @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+  directSettlement DirectCampaignSettlement?
+
+  @@unique([campaignId, walletAddress])
+  @@unique([chainId, reservationTransactionHash, reservationLogIndex], map: "campaign_winners_reservation_event_key")
+  @@unique([chainId, claimTransactionHash, claimLogIndex], map: "campaign_winners_claim_event_key")
+  @@unique([chainId, rewardTransactionHash, rewardLogIndex], map: "campaign_winners_reward_event_key")
+  @@index([walletAddress, status])
+  @@map("campaign_winners")
+}
+
 // Immutable projection of a Direct CampaignRewardPaid event. All amounts are
 // unsigned base-10 wei strings so they never pass through a bounded SQL/JS integer.
+// It belongs to exactly one of a manual submission or a pre-verified winner
 model DirectCampaignSettlement {
   id                                String   @id @default(uuid())
-  fulfillmentId                     String   @unique @map("fulfillment_id")
+  fulfillmentId                     String?  @unique @map("fulfillment_id")
+  winnerId                          String?  @unique @map("winner_id")
   chainId                           Int      @map("chain_id")
   transactionHash                   String   @map("transaction_hash")
   logIndex                          Int      @map("log_index")
@@ -350,7 +411,8 @@ model DirectCampaignSettlement {
   unallocatedAmountWei              String   @map("unallocated_amount_wei")
   observedAt                        DateTime @default(now()) @map("observed_at")
 
-  fulfillment CampaignFulfillment @relation(fields: [fulfillmentId], references: [id], onDelete: Restrict)
+  fulfillment CampaignFulfillment? @relation(fields: [fulfillmentId], references: [id], onDelete: Restrict)
+  winner      CampaignWinner?      @relation(fields: [winnerId], references: [id], onDelete: Restrict)
 
   @@unique([chainId, transactionHash, logIndex])
   @@index([participantWalletAddress])

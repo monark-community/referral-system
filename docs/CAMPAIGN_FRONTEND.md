@@ -4,7 +4,8 @@ The campaign pages use the Points and Direct endpoints documented under **User C
 [API.md](API.md#user-campaigns).
 
 These screens create public and private manual campaigns, and serve a private campaign's
-shared link.
+shared link. Pre-verified campaigns have an API but no screens yet; see
+[Pre-verified campaigns](#pre-verified-campaigns-api-ready-screens-to-build).
 
 ## Pages
 
@@ -94,6 +95,64 @@ welcome page comes back to it instead of the dashboard. Only paths on this site 
 submitted to it, so the link page reads that as "no submission yet". A participant's own
 list (`/mine`) carries their private campaigns without the code, so the detail page shows
 those from the list, and points to the link for the full task.
+
+## Pre-verified campaigns (API ready, screens to build)
+
+The API for [pre-verified campaigns](API.md#pre-verified-campaigns) is done; these screens are
+not built yet. A pre-verified campaign is private. Its creator lists the winners' wallets with the
+draft, nobody submits proof, and only the listed wallets can claim. A winner needs no account
+beforehand: signing in with the listed wallet creates one. Public campaigns and manual private
+campaigns work as before, so nothing above changes.
+
+To build:
+
+1. **Draft form** (`/referrals/campaigns/new` and draft editing). When Private is chosen, ask
+   "How are winners picked?": "People submit proof and I approve them" (`MANUAL`, the default)
+   or "I pick the winners myself" (`PRE_VERIFIED`). For `PRE_VERIFIED`, show a table of wallet
+   address plus optional name, and send `verificationType: "PRE_VERIFIED"` and
+   `winners: [{ walletAddress, label }]`. Leave `maxCompletions` out: the API sets it to the
+   number of wallets, and sending it is a 400. Field errors come back as, for example,
+   `winners[1].walletAddress`. Switching back to manual sends `verificationType: "MANUAL"`.
+2. **Wallet calls** (`src/hooks/use-campaign-transaction.ts` and the `CampaignCall` type in
+   `src/lib/api/campaigns.ts`). Add two cases, neither payable:
+   `createPreVerifiedCampaignFulfillment` with args `[campaignId, winnerId, walletAddress]`, and
+   `completePreVerifiedCampaignFulfillment` with args `[winnerId]`. Publishing needs no change:
+   it is still `createCampaignWithVisibility`, with `2` as the verification type.
+3. **Creator's campaign page** (`/referrals/campaigns/:id`). For a pre-verified campaign, show a
+   Winners section from `GET /api/campaigns/:id/winners` instead of the review queue: each
+   wallet, its name and its `state`. A wallet in `READY_TO_PUT_ON_CHAIN` gets a button that sends
+   its `chain` call, one MetaMask confirmation per wallet. Add wallets with
+   `POST /api/campaigns/:id/winners`, and remove a `LISTED` one with
+   `DELETE /api/campaigns/:id/winners/:winnerId`. When `funding.runsShort` is above 0, show
+   "N winners are waiting for funds" and open the existing funding panel with
+   `runs = runsShort`.
+4. **Private link page** (`/campaigns/private/:code`). When `verificationType` is `PRE_VERIFIED`,
+   hide the proof form. For a signed-in user, call `GET /api/campaigns/:id/winners/me`. A 404
+   means they aren't listed ("The creator picks the winners for this campaign"); otherwise show
+   their `state`, with a Claim button that sends `chain` when it is `CLAIMABLE`.
+5. **Dashboard** (`/referrals`). Add a "Rewards to claim" card from
+   `GET /api/campaigns/rewards/pre-verified/me`, with the same Claim button. A claimed Direct
+   reward then shows in the existing Direct reward account, ready to withdraw.
+
+Suggested wording for a winner's `state`:
+
+| `state` | Text |
+|---------|------|
+| `NOT_ON_CHAIN_YET` | You're on the list. The creator still has to confirm it. |
+| `CLAIMABLE` | Claim button |
+| `WAITING_FOR_FUNDS` | Waiting for the creator to add funds |
+| `PAUSED` | The creator paused this campaign |
+| `CLAIMED` | Claimed |
+
+Notes:
+
+- The wallet's name (`label`) is the creator's own note. The API never sends it to the winner.
+- `spotsLeft` means nothing for a pre-verified campaign (it is just the number of wallets), so
+  don't show it there.
+- Statuses change when the listener sees each transaction, so keep the five-second polling used
+  elsewhere after a receipt.
+- The `@api` end-to-end test `e2e/tests/pre-verified-campaign-api.spec.ts` runs the whole flow on
+  the real contract, and shows each call in order.
 
 ## Verification
 

@@ -19,6 +19,7 @@ jest.mock("@/lib/prisma", () => ({
     campaign: { findUnique: jest.fn(), updateMany: jest.fn() },
     campaignRewardPolicy: { update: jest.fn() },
     campaignFulfillment: { findUnique: jest.fn(), updateMany: jest.fn() },
+    campaignWinner: { findUnique: jest.fn(), updateMany: jest.fn() },
     referralPointAllocation: { upsert: jest.fn() },
     directCampaignSettlement: { upsert: jest.fn() },
     directRewardEvent: { findUnique: jest.fn(), create: jest.fn() },
@@ -474,5 +475,198 @@ describe("Direct reward balance history", () => {
       amountWei: "7000000000000000",
       balanceAfterWei: "0",
     }) });
+  });
+});
+
+describe("pre-verified campaigns", () => {
+  const WINNER_ID = "44444444-4444-4444-8444-444444444444";
+  // The creator's reservation, as CampaignFulfillmentSubmitted; overrides can move its position
+  const winnerEvent = (overrides = {}) => ({
+    ...submissionEvent({ fulfillmentId: bytes32(WINNER_ID) }),
+    taskType: 1,
+    ...position("0xRESERVED", 11n, 2),
+    ...overrides,
+  });
+  const paidEvent = (overrides = {}) => ({
+    ...winnerEvent(),
+    rewardType: 0,
+    completerReward: 30n,
+    referralPool: 10n,
+    referralPayout: {
+      directRecipient: BOB as `0x${string}`,
+      grandparentRecipient: CAROL as `0x${string}`,
+      directAmount: 8n,
+      grandparentAmount: 2n,
+      unallocatedAmount: 0n,
+    },
+    ...position("0xCLAIMED", 13n, 5),
+    ...overrides,
+  });
+
+  function storedWinner(overrides: Record<string, unknown> = {}) {
+    return {
+      id: WINNER_ID,
+      campaignId: CAMPAIGN_ID,
+      walletAddress: ALICE.toLowerCase(),
+      status: "LISTED",
+      reservationTransactionHash: null,
+      claimTransactionHash: null,
+      rewardTransactionHash: null,
+      campaign: { task: { rewardPolicy: { type: "POINTS" } } },
+      ...overrides,
+    };
+  }
+  const winnerWrites = () => db.campaignWinner.updateMany.mock.calls.map(([call]: any[]) => call);
+
+  beforeEach(() => {
+    // No submission has a listed winner's id
+    db.campaignFulfillment.findUnique.mockResolvedValue(null);
+    db.campaignWinner.findUnique.mockResolvedValue(storedWinner());
+    db.campaignWinner.updateMany.mockResolvedValue({ count: 1 });
+  });
+
+  test("publishing a pre-verified draft needs the chain's PreVerified verification type", async () => {
+    const preVerifiedCampaign = storedCampaign({
+      task: { ...storedCampaign().task, verificationPolicy: { type: "PRE_VERIFIED" } },
+    });
+    db.campaign.findUnique.mockResolvedValue(preVerifiedCampaign);
+    expect(await applyCampaignCreated(createdEvent({ verificationType: 1 }))).toEqual({
+      outcome: "SKIPPED",
+      id: CAMPAIGN_ID,
+      reason: "chain verification type does not match the saved draft",
+    });
+    expect(await applyCampaignCreated(createdEvent({ verificationType: 2 }))).toEqual({ outcome: "APPLIED", id: CAMPAIGN_ID });
+  });
+
+  test("a manual draft published as pre-verified is skipped", async () => {
+    db.campaign.findUnique.mockResolvedValue(storedCampaign());
+    expect(await applyCampaignCreated(createdEvent({ verificationType: 2 }))).toEqual(
+      expect.objectContaining({ outcome: "SKIPPED" }),
+    );
+  });
+
+  test("Submitted for a listed wallet: the creator put it on chain", async () => {
+    expect(await applyCampaignFulfillmentSubmitted(winnerEvent(position("0xRESERVED", 11n, 2)))).toEqual({
+      outcome: "APPLIED",
+      id: WINNER_ID,
+    });
+    expect(winnerWrites()).toEqual([
+      {
+        where: { id: WINNER_ID, reservationTransactionHash: null },
+        data: { reservationTransactionHash: "0xreserved", reservationBlockNumber: 11n, reservationLogIndex: 2, reservedAt: expect.any(Date) },
+      },
+      // A claim saved first is never undone
+      { where: { id: WINNER_ID, status: { in: ["LISTED", "REMOVED"] } }, data: { status: "RESERVED" } },
+    ]);
+    expect(db.campaignFulfillment.updateMany).not.toHaveBeenCalled();
+  });
+
+  test("a wallet taken off the list that still went on chain is put back, since the chain's decision stands", async () => {
+    db.campaignWinner.findUnique.mockResolvedValue(storedWinner({ status: "REMOVED" }));
+    expect(await applyCampaignFulfillmentSubmitted(winnerEvent(position("0xRESERVED", 11n, 2)))).toEqual(
+      expect.objectContaining({ outcome: "APPLIED" }),
+    );
+    expect(console.warn).toHaveBeenCalled();
+  });
+
+  test("the same Submitted event twice is applied once", async () => {
+    db.campaignWinner.findUnique.mockResolvedValue(storedWinner({ status: "RESERVED", reservationTransactionHash: "0xreserved" }));
+    expect(await applyCampaignFulfillmentSubmitted(winnerEvent())).toEqual({ outcome: "ALREADY_APPLIED", id: WINNER_ID });
+    expect(db.campaignWinner.updateMany).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ["a different wallet", { participant: BOB }, "names a different wallet than the listed winner's"],
+    ["a different campaign", { campaignId: bytes32(OTHER_ID) }, "names a different campaign than the listed winner's"],
+  ])("skips an event naming %s", async (_case, overrides, reason) => {
+    expect(await applyCampaignFulfillmentSubmitted(winnerEvent(overrides))).toEqual({ outcome: "SKIPPED", id: WINNER_ID, reason });
+    expect(db.campaignWinner.updateMany).not.toHaveBeenCalled();
+  });
+
+  test("an id that is neither a submission nor a listed wallet keeps the usual reason", async () => {
+    db.campaignWinner.findUnique.mockResolvedValue(null);
+    expect(await applyCampaignFulfillmentSubmitted(winnerEvent())).toEqual({
+      outcome: "SKIPPED",
+      id: WINNER_ID,
+      reason: "not a submission the API saved",
+    });
+  });
+
+  test("Verified for a listed wallet: the winner claimed, and a payout saved first stays", async () => {
+    db.campaignWinner.findUnique.mockResolvedValue(storedWinner({ status: "RESERVED" }));
+    expect(await applyCampaignFulfillmentVerified({
+      ...winnerEvent(),
+      verifier: ALICE as `0x${string}`,
+      verificationType: 2,
+      ...position("0xCLAIMED", 13n, 3),
+    })).toEqual({ outcome: "APPLIED", id: WINNER_ID });
+    expect(winnerWrites()).toEqual([
+      {
+        where: { id: WINNER_ID, claimTransactionHash: null },
+        data: { claimTransactionHash: "0xclaimed", claimBlockNumber: 13n, claimLogIndex: 3, claimedAt: expect.any(Date) },
+      },
+      { where: { id: WINNER_ID, status: { not: "REWARDED" } }, data: { status: "CLAIMED" } },
+    ]);
+  });
+
+  test("RewardPaid for a listed wallet: it is REWARDED and the referral pool is stored as a campaign payout", async () => {
+    db.campaignWinner.findUnique.mockResolvedValue(storedWinner({ status: "CLAIMED" }));
+    expect(await applyCampaignRewardPaid(paidEvent())).toEqual({ outcome: "APPLIED", id: WINNER_ID });
+
+    expect(db.campaignWinner.updateMany).toHaveBeenCalledWith({
+      where: { id: WINNER_ID, rewardTransactionHash: null },
+      data: {
+        rewardTransactionHash: "0xclaimed",
+        rewardBlockNumber: 13n,
+        rewardLogIndex: 5,
+        rewardedAt: expect.any(Date),
+        completerReward: 30,
+        status: "REWARDED",
+      },
+    });
+    expect(db.referralPointAllocation.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      create: expect.objectContaining({ participantWalletAddress: ALICE.toLowerCase(), pool: 10, directAmount: 8, source: "campaign" }),
+    }));
+    expect(db.directCampaignSettlement.upsert).not.toHaveBeenCalled();
+  });
+
+  test("a Direct payout to a listed wallet stores its settlement under the winner and refreshes the funding", async () => {
+    db.campaignWinner.findUnique.mockResolvedValue(storedWinner({
+      status: "CLAIMED",
+      campaign: { task: { rewardPolicy: { type: "DIRECT" } } },
+    }));
+    const chain = { getCampaign: jest.fn().mockResolvedValue({ balance: 0n, status: 3 }) };
+
+    expect(await applyCampaignRewardPaid(paidEvent({ rewardType: 1, completerReward: 300n, referralPool: 100n }), chain)).toEqual({
+      outcome: "APPLIED",
+      id: WINNER_ID,
+    });
+    expect(db.campaignWinner.updateMany.mock.calls[0][0].data).toEqual(
+      expect.objectContaining({ completerRewardWei: "300", status: "REWARDED" }),
+    );
+    expect(db.directCampaignSettlement.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      create: expect.objectContaining({ winnerId: WINNER_ID, completerAmountWei: "300", referralPoolWei: "100" }),
+    }));
+    expect(db.directCampaignSettlement.upsert.mock.calls[0][0].create).not.toHaveProperty("fulfillmentId");
+    expect(db.campaign.updateMany).toHaveBeenCalledWith({
+      where: { id: CAMPAIGN_ID },
+      data: { chainBalanceWei: "0", chainStatus: "PENDING_FUNDING" },
+    });
+    expect(db.referralPointAllocation.upsert).not.toHaveBeenCalled();
+  });
+
+  test("a payout whose reward type doesn't match the campaign is skipped", async () => {
+    expect(await applyCampaignRewardPaid(paidEvent({ rewardType: 1 }))).toEqual({
+      outcome: "SKIPPED",
+      id: WINNER_ID,
+      reason: "reward event type does not match the saved campaign",
+    });
+    expect(db.campaignWinner.updateMany).not.toHaveBeenCalled();
+  });
+
+  test("the same payout twice is applied once", async () => {
+    db.campaignWinner.findUnique.mockResolvedValue(storedWinner({ status: "REWARDED", rewardTransactionHash: "0xclaimed" }));
+    expect(await applyCampaignRewardPaid(paidEvent())).toEqual({ outcome: "ALREADY_APPLIED", id: WINNER_ID });
+    expect(db.referralPointAllocation.upsert).not.toHaveBeenCalled();
   });
 });

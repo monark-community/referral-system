@@ -10,6 +10,8 @@
 // - A private campaign is left off the board, and submitting to it needs the code from its link. The code is
 //   random rather than the campaign id, since the chain makes every campaign id public. It is set while the
 //   campaign is a draft and never changes after publishing
+// - A pre-verified campaign takes no proof: its creator lists the winners' wallets with the draft, and
+//   preVerifiedCampaign.service.ts handles that list after publishing
 
 import { randomBytes, randomUUID } from "node:crypto";
 import { Prisma, type CampaignFulfillmentStatus } from "@prisma/client";
@@ -27,14 +29,20 @@ import {
   CHAIN_REWARD_TYPE_POINTS,
   CHAIN_TASK_TYPE_BOUNTY,
   CHAIN_VERIFICATION_TYPE_MANUAL,
+  CHAIN_VERIFICATION_TYPE_PRE_VERIFIED,
   CHAIN_VISIBILITY_PRIVATE,
   ManualCampaignValidationError,
   OWNER_APPROVAL_STRATEGY,
+  PRE_VERIFIED_LIST_STRATEGY,
   parseManualCampaignInput,
+  parsePreVerifiedWinners,
   parseProof,
   parseRejectionReason,
   parseStoredManualCampaign,
+  parseVerificationType,
   type ManualCampaignDefinition,
+  type ManualCampaignVerificationType,
+  type PreVerifiedWinnerInput,
   directRewardPerRunWei,
   type ManualCampaignStatus,
 } from "../models/manualCampaign.js";
@@ -57,7 +65,13 @@ export type ManualCampaignErrorCode =
   | "CAMPAIGN_FULL"
   | "ALREADY_SUBMITTED"
   | "NOT_REVIEWABLE"
-  | "CHAIN_UNAVAILABLE";
+  | "CHAIN_UNAVAILABLE"
+  // Pre-verified campaigns' winners lists
+  | "NOT_PRE_VERIFIED"
+  | "WINNER_NOT_FOUND"
+  | "ALREADY_LISTED"
+  | "NOT_REMOVABLE"
+  | "LIST_CLOSED";
 
 export class ManualCampaignError extends Error {
   constructor(
@@ -88,7 +102,7 @@ export type ManualCampaignChain = {
 
 let defaultChain: ManualCampaignChain | undefined;
 
-function chainFromEnvironment(): ManualCampaignChain {
+export function chainFromEnvironment(): ManualCampaignChain {
   if (!defaultChain) {
     const config = getApiBlockchainConfig();
     const { publicClient } = createClient(config.network, config.rpcUrl);
@@ -104,7 +118,7 @@ function chainFromEnvironment(): ManualCampaignChain {
   return defaultChain;
 }
 
-const configuredChainId = () => getApiBlockchainConfig().chainId;
+export const configuredChainId = () => getApiBlockchainConfig().chainId;
 const configuredContractAddress = (): Address =>
   getApiBlockchainConfig().contractAddress;
 
@@ -117,7 +131,7 @@ export type ChainCall = {
   valueWei?: string;
 };
 
-function chainCall(chainId: number, functionName: string, args: (string | number)[], valueWei?: string): ChainCall {
+export function chainCall(chainId: number, functionName: string, args: (string | number)[], valueWei?: string): ChainCall {
   return { chainId, contractAddress: configuredContractAddress(), functionName, args, ...(valueWei ? { valueWei } : {}) };
 }
 
@@ -128,7 +142,7 @@ export function createCampaignCall(campaign: ManualCampaignDefinition, chainId =
   const args = [
     uuidToBytes32(campaign.id),
     CHAIN_TASK_TYPE_BOUNTY,
-    CHAIN_VERIFICATION_TYPE_MANUAL,
+    campaign.verificationType === "PRE_VERIFIED" ? CHAIN_VERIFICATION_TYPE_PRE_VERIFIED : CHAIN_VERIFICATION_TYPE_MANUAL,
     direct ? CHAIN_REWARD_TYPE_DIRECT : CHAIN_REWARD_TYPE_POINTS,
     completer,
     pool,
@@ -150,7 +164,7 @@ export function decideFulfillmentCall(decision: "approve" | "reject", fulfillmen
   return chainCall(chainId, decision === "approve" ? "verifyCampaignFulfillment" : "rejectCampaignFulfillment", [uuidToBytes32(fulfillmentId)]);
 }
 
-const campaignInclude = {
+export const campaignInclude = {
   owner: { select: { name: true, walletAddress: true } },
   task: { include: { verificationPolicy: true, rewardPolicy: true } },
 } as const;
@@ -166,14 +180,14 @@ export type DirectFundingState = {
   chainStatus: "ACTIVE" | "PENDING_FUNDING";
 };
 
-function invalid(error: unknown): never {
+export function invalid(error: unknown): never {
   if (error instanceof ManualCampaignValidationError) {
     throw new ManualCampaignError("INVALID_INPUT", error.message, error.field);
   }
   throw error;
 }
 
-function isUniqueViolation(error: unknown): boolean {
+export function isUniqueViolation(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
 }
 
@@ -208,13 +222,13 @@ export async function findPrivateManualCampaign(code: string): Promise<ManualCam
   return row ? parseStoredManualCampaign(row) : null;
 }
 
-async function requireManualCampaign(campaignId: string): Promise<ManualCampaignDefinition> {
+export async function requireManualCampaign(campaignId: string): Promise<ManualCampaignDefinition> {
   const campaign = await findManualCampaign(campaignId);
   if (!campaign) throw new ManualCampaignError("CAMPAIGN_NOT_FOUND", "Campaign not found");
   return campaign;
 }
 
-async function requireOwnedCampaign(ownerId: string, campaignId: string): Promise<ManualCampaignDefinition> {
+export async function requireOwnedCampaign(ownerId: string, campaignId: string): Promise<ManualCampaignDefinition> {
   const campaign = await requireManualCampaign(campaignId);
   if (campaign.ownerId !== ownerId) {
     throw new ManualCampaignError("NOT_CAMPAIGN_OWNER", "Only the campaign's creator can do this");
@@ -228,7 +242,7 @@ function requireDirect(campaign: ManualCampaignDefinition): asserts campaign is 
   }
 }
 
-async function readDirectFundingState(
+export async function readDirectFundingState(
   campaign: Extract<ManualCampaignDefinition, { rewardType: "DIRECT" }>,
   chain: ManualCampaignChain,
 ): Promise<DirectFundingState> {
@@ -310,7 +324,9 @@ export async function prepareDirectCampaignFunding(
 ) {
   const campaign = await requireOwnedCampaign(ownerId, campaignId);
   requireDirect(campaign);
-  if (!campaign.publishedAt || campaign.status === "ENDED" || campaign.status === "CANCELLED") {
+  // A pre-verified campaign's listed winners can still claim after it ends, so it can still be topped up
+  const ended = campaign.status === "ENDED" && campaign.verificationType !== "PRE_VERIFIED";
+  if (!campaign.publishedAt || ended || campaign.status === "CANCELLED") {
     throw new ManualCampaignError("NOT_ACCEPTING_SUBMISSIONS", "This campaign cannot be funded in its current state");
   }
   const runs = (body as Record<string, unknown> | null)?.runs;
@@ -475,19 +491,68 @@ async function requireRewardWithinMaximum(
   }
 }
 
-/** Saves a new campaign as a DRAFT owned by the user. */
+function verificationPolicyFor(verificationType: ManualCampaignVerificationType) {
+  return verificationType === "PRE_VERIFIED"
+    ? { type: "PRE_VERIFIED" as const, strategyKey: PRE_VERIFIED_LIST_STRATEGY }
+    : { type: "MANUAL" as const, strategyKey: OWNER_APPROVAL_STRATEGY };
+}
+
+// A listed winner's row; its id is also its fulfillment id on chain
+function winnerRow(winner: PreVerifiedWinnerInput, chainId: number) {
+  return { id: randomUUID(), walletAddress: winner.walletAddress.toLowerCase(), label: winner.label, chainId };
+}
+
+/** How many wallets a pre-verified campaign lists, leaving out removed ones. */
+export async function countListedWinners(campaignId: string): Promise<number> {
+  return prisma.campaignWinner.count({ where: { campaignId, status: { not: "REMOVED" } } });
+}
+
+/**
+ * Validates a draft's body together with its winners list. A PRE_VERIFIED draft needs `winners` when it is
+ * created or switched to pre-verified; an edit that leaves `winners` out keeps the saved list.
+ */
+async function parseDraft(
+  body: unknown,
+  ownerWallet: string,
+  now: Date,
+  current?: ManualCampaignDefinition,
+): Promise<{ input: ReturnType<typeof parseManualCampaignInput>; winners?: PreVerifiedWinnerInput[] }> {
+  const fields = typeof body === "object" && body !== null ? (body as Record<string, unknown>) : {};
+  try {
+    const verificationType = parseVerificationType(fields.verificationType, current?.verificationType);
+    if (verificationType !== "PRE_VERIFIED") {
+      if (fields.winners !== undefined) {
+        throw new ManualCampaignValidationError("winners", "only a PRE_VERIFIED campaign takes a winners list");
+      }
+      return { input: parseManualCampaignInput(body, { now, current }) };
+    }
+    if (fields.winners === undefined && current?.verificationType === "PRE_VERIFIED") {
+      const winnerCount = await countListedWinners(current.id);
+      return { input: parseManualCampaignInput(body, { now, current, winnerCount }) };
+    }
+    const winners = parsePreVerifiedWinners(fields.winners, { ownerWallet });
+    return { input: parseManualCampaignInput(body, { now, current, winnerCount: winners.length }), winners };
+  } catch (error) {
+    invalid(error);
+  }
+}
+
+async function ownerWalletFor(ownerId: string): Promise<string> {
+  const owner = await prisma.user.findUnique({ where: { id: ownerId }, select: { walletAddress: true } });
+  if (!owner) throw new ManualCampaignError("NOT_CAMPAIGN_OWNER", "The campaign's creator was not found");
+  return owner.walletAddress;
+}
+
+/** Saves a new campaign as a DRAFT owned by the user. A PRE_VERIFIED one saves its winners list with it. */
 export async function createManualCampaignDraft(
   ownerId: string,
   body: unknown,
   chain: ManualCampaignChain = chainFromEnvironment(),
   now = new Date(),
 ): Promise<ManualCampaignDefinition> {
-  let input;
-  try {
-    input = parseManualCampaignInput(body, { now });
-  } catch (error) {
-    invalid(error);
-  }
+  const preVerified = (body as Record<string, unknown> | null)?.verificationType === "PRE_VERIFIED";
+  // Only a winners list needs the creator's wallet, to keep it off the list
+  const { input, winners } = await parseDraft(body, preVerified ? await ownerWalletFor(ownerId) : "", now);
   await requireRewardWithinMaximum(input, chain);
 
   // The id doubles as the key, and as the on-chain campaign id once converted to bytes32
@@ -506,13 +571,14 @@ export async function createManualCampaignDraft(
       endsAt: input.endsAt,
       isPrivate: input.isPrivate,
       privateCode: privateCodeFor(input.isPrivate),
+      ...(winners ? { winners: { create: winners.map((winner) => winnerRow(winner, chain.chainId)) } } : {}),
       task: {
         create: {
           type: "BOUNTY",
           strategyKey: BOUNTY_TASK_STRATEGY,
           configuration: { category: input.category },
           verificationPolicy: {
-            create: { type: "MANUAL", strategyKey: OWNER_APPROVAL_STRATEGY, configuration: {} },
+            create: { ...verificationPolicyFor(input.verificationType), configuration: {} },
           },
           rewardPolicy: {
             create: {
@@ -543,12 +609,7 @@ export async function updateManualCampaignDraft(
   if (current.status !== "DRAFT") {
     throw new ManualCampaignError("NOT_EDITABLE", "Only a draft can be edited");
   }
-  let input;
-  try {
-    input = parseManualCampaignInput(body, { now, current });
-  } catch (error) {
-    invalid(error);
-  }
+  const { input, winners } = await parseDraft(body, current.owner.walletAddress, now, current);
   await requireRewardWithinMaximum(input, chain);
 
   await prisma.$transaction(async (tx) => {
@@ -580,6 +641,21 @@ export async function updateManualCampaignDraft(
           : { completerPoints: input.completerPoints, referralPoolPoints: input.referralPoolPoints },
       },
     });
+    if (input.verificationType !== current.verificationType) {
+      await tx.campaignVerificationPolicy.update({
+        where: { taskId: current.taskId },
+        data: verificationPolicyFor(input.verificationType),
+      });
+    }
+    // A draft's list is not on chain yet, so it can be replaced outright; a draft switched back to MANUAL drops it
+    if (winners || (current.verificationType === "PRE_VERIFIED" && input.verificationType !== "PRE_VERIFIED")) {
+      await tx.campaignWinner.deleteMany({ where: { campaignId: current.id } });
+    }
+    if (winners) {
+      await tx.campaignWinner.createMany({
+        data: winners.map((winner) => ({ ...winnerRow(winner, chain.chainId), campaignId: current.id })),
+      });
+    }
   });
   return requireManualCampaign(current.id);
 }
@@ -644,6 +720,12 @@ export async function submitManualCampaignProof(
   const fields = body as Record<string, unknown> | null;
   if (campaign.isPrivate && fields?.code !== campaign.privateCode) {
     throw new ManualCampaignError("CAMPAIGN_NOT_FOUND", "Campaign not found");
+  }
+  if (campaign.verificationType === "PRE_VERIFIED") {
+    throw new ManualCampaignError(
+      "NOT_ACCEPTING_SUBMISSIONS",
+      "This campaign's creator listed its winners beforehand, so it takes no proof",
+    );
   }
   if (campaign.ownerId === userId) {
     throw new ManualCampaignError("OWN_CAMPAIGN", "Creators can't complete their own campaigns");

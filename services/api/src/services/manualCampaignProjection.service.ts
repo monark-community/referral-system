@@ -4,6 +4,9 @@
 // - The chain is the record: an event for a campaign or submission the API doesn't know, or from the
 //   wrong wallet, is skipped; a decision the chain made wins over a different one saved in the API
 // - A campaign payout is stored with the sign-up payouts (source "campaign"), but never touches invite points
+// - A pre-verified campaign's listed wallets use the same three events: Submitted when the creator puts the
+//   wallet on chain, Verified when the winner claims, and RewardPaid for the payout. An event whose fulfillment
+//   id is not a saved submission is matched against the listed winners instead
 
 import type {
   CampaignCreatedEvent,
@@ -42,7 +45,10 @@ export async function applyCampaignCreated(
   const id = bytes32ToUuid(event.campaignId);
   const campaign = await prisma.campaign.findUnique({
     where: { id },
-    include: { owner: { select: { walletAddress: true } }, task: { include: { rewardPolicy: true } } },
+    include: {
+      owner: { select: { walletAddress: true } },
+      task: { include: { rewardPolicy: true, verificationPolicy: true } },
+    },
   });
   if (!campaign || campaign.isSystem || !campaign.owner || !campaign.task?.rewardPolicy) {
     return { outcome: "SKIPPED", id, reason: "not a user campaign the API created" };
@@ -56,6 +62,11 @@ export async function applyCampaignCreated(
   const eventDirect = event.rewardType === 1;
   if (expectedDirect !== eventDirect) {
     return { outcome: "SKIPPED", id, reason: "chain reward type does not match the saved draft" };
+  }
+  // The contract's PreVerified is 2; a pre-verified draft published as manual would take proof instead
+  const expectedPreVerified = campaign.task.verificationPolicy?.type === "PRE_VERIFIED";
+  if (expectedPreVerified !== (event.verificationType === 2)) {
+    return { outcome: "SKIPPED", id, reason: "chain verification type does not match the saved draft" };
   }
 
   // The chain pays what it stores, so its amounts replace the draft's if the creator edited it after sending
@@ -104,9 +115,10 @@ async function findSubmission(id: string) {
   });
 }
 
+// `missing` means no submission has the event's id, so it may name a pre-verified campaign's listed winner
 type FoundSubmission =
   | { found: true; id: string; fulfillment: NonNullable<Awaited<ReturnType<typeof findSubmission>>> }
-  | { found: false; result: ProjectionResult };
+  | { found: false; missing: boolean; result: ProjectionResult };
 
 // Finds the submission an event names and checks the event matches it
 async function submissionFor(event: {
@@ -115,9 +127,13 @@ async function submissionFor(event: {
   participant: string;
 }): Promise<FoundSubmission> {
   const id = bytes32ToUuid(event.fulfillmentId);
-  const skip = (reason: string): FoundSubmission => ({ found: false, result: { outcome: "SKIPPED", id, reason } });
+  const skip = (reason: string, missing = false): FoundSubmission => ({
+    found: false,
+    missing,
+    result: { outcome: "SKIPPED", id, reason },
+  });
   const fulfillment = await findSubmission(id);
-  if (!fulfillment) return skip("not a submission the API saved");
+  if (!fulfillment) return skip("not a submission the API saved", true);
   if (fulfillment.task.campaignId !== bytes32ToUuid(event.campaignId)) {
     return skip("names a different campaign than the submission's");
   }
@@ -132,7 +148,7 @@ export async function applyCampaignFulfillmentSubmitted(
   event: CampaignFulfillmentSubmittedEvent,
 ): Promise<ProjectionResult> {
   const found = await submissionFor(event);
-  if (!found.found) return found.result;
+  if (!found.found) return found.missing ? applyWinnerReserved(event, found.result) : found.result;
   const { id, fulfillment } = found;
   if (fulfillment.submissionTransactionHash) return { outcome: "ALREADY_APPLIED", id };
 
@@ -156,7 +172,7 @@ export async function applyCampaignFulfillmentVerified(
   event: CampaignFulfillmentVerifiedEvent,
 ): Promise<ProjectionResult> {
   const found = await submissionFor(event);
-  if (!found.found) return found.result;
+  if (!found.found) return found.missing ? applyWinnerClaimed(event, found.result) : found.result;
   const { id, fulfillment } = found;
   if (fulfillment.verifiedAt) return { outcome: "ALREADY_APPLIED", id };
   if (fulfillment.status === "REJECTED") {
@@ -211,18 +227,82 @@ export async function applyCampaignFulfillmentRejected(
   return { outcome: "APPLIED", id };
 }
 
+// A Direct payout's settlement row, for either a submission or a listed winner
+function directSettlementUpsert(event: CampaignRewardPaidEvent, owner: { fulfillmentId: string } | { winnerId: string }) {
+  const position = eventPosition(event);
+  const payout = event.referralPayout;
+  return prisma.directCampaignSettlement.upsert({
+    where: { chainId_transactionHash_logIndex: { chainId: projectionChainId(), transactionHash: position.transactionHash, logIndex: position.logIndex } },
+    update: {},
+    create: {
+      ...owner,
+      chainId: projectionChainId(),
+      transactionHash: position.transactionHash,
+      logIndex: position.logIndex,
+      blockNumber: position.blockNumber,
+      participantWalletAddress: lower(event.participant),
+      completerAmountWei: event.completerReward.toString(),
+      referralPoolWei: event.referralPool.toString(),
+      directRecipientWalletAddress: lower(payout.directRecipient),
+      directAmountWei: payout.directAmount.toString(),
+      grandparentRecipientWalletAddress: lower(payout.grandparentRecipient),
+      grandparentAmountWei: payout.grandparentAmount.toString(),
+      unallocatedAmountWei: payout.unallocatedAmount.toString(),
+    },
+  });
+}
+
+// A points payout's referral pool split, stored with the sign-up payouts
+function pointAllocationUpsert(event: CampaignRewardPaidEvent) {
+  const position = eventPosition(event);
+  const payout = event.referralPayout;
+  const allocation = {
+    chainId: projectionChainId(),
+    transactionHash: position.transactionHash,
+    logIndex: position.logIndex,
+    blockNumber: position.blockNumber,
+    participantWalletAddress: lower(event.participant),
+    pool: Number(event.referralPool),
+    directRecipientWalletAddress: lower(payout.directRecipient),
+    directAmount: Number(payout.directAmount),
+    grandparentRecipientWalletAddress: lower(payout.grandparentRecipient),
+    grandparentAmount: Number(payout.grandparentAmount),
+    unallocatedAmount: Number(payout.unallocatedAmount),
+    source: "campaign",
+  };
+  return prisma.referralPointAllocation.upsert({
+    where: {
+      chainId_transactionHash_logIndex: {
+        chainId: allocation.chainId,
+        transactionHash: allocation.transactionHash,
+        logIndex: allocation.logIndex,
+      },
+    },
+    update: allocation,
+    create: allocation,
+  });
+}
+
+// The campaign's cached Direct funding, as the chain has it after a payout. Not async, so the update
+// it returns runs inside the caller's transaction
+function campaignFundingUpdate(campaignId: string, state: { balance: bigint; status: number }) {
+  return prisma.campaign.updateMany({
+    where: { id: campaignId },
+    data: { chainBalanceWei: state.balance.toString(), chainStatus: state.status === 1 ? "ACTIVE" : "PENDING_FUNDING" },
+  });
+}
+
 /** CampaignRewardPaid: the completer and their referrers were paid, so the submission is REWARDED. */
 export async function applyCampaignRewardPaid(
   event: CampaignRewardPaidEvent,
   chain?: CampaignProjectionChain,
 ): Promise<ProjectionResult> {
   const found = await submissionFor(event);
-  if (!found.found) return found.result;
+  if (!found.found) return found.missing ? applyWinnerRewarded(event, found.result, chain) : found.result;
   const { id, fulfillment } = found;
   if (fulfillment.rewardTransactionHash) return { outcome: "ALREADY_APPLIED", id };
 
   const position = eventPosition(event);
-  const payout = event.referralPayout;
   const direct = fulfillment.task.rewardPolicy?.type === "DIRECT";
   if (direct !== (event.rewardType === 1)) {
     return { outcome: "SKIPPED", id, reason: "reward event type does not match the saved campaign" };
@@ -243,49 +323,14 @@ export async function applyCampaignRewardPaid(
           status: "REWARDED",
         },
       }),
-      prisma.directCampaignSettlement.upsert({
-        where: { chainId_transactionHash_logIndex: { chainId: projectionChainId(), transactionHash: position.transactionHash, logIndex: position.logIndex } },
-        update: {},
-        create: {
-          fulfillmentId: id,
-          chainId: projectionChainId(),
-          transactionHash: position.transactionHash,
-          logIndex: position.logIndex,
-          blockNumber: position.blockNumber,
-          participantWalletAddress: lower(event.participant),
-          completerAmountWei: event.completerReward.toString(),
-          referralPoolWei: event.referralPool.toString(),
-          directRecipientWalletAddress: lower(payout.directRecipient),
-          directAmountWei: payout.directAmount.toString(),
-          grandparentRecipientWalletAddress: lower(payout.grandparentRecipient),
-          grandparentAmountWei: payout.grandparentAmount.toString(),
-          unallocatedAmountWei: payout.unallocatedAmount.toString(),
-        },
-      }),
-      prisma.campaign.updateMany({
-        where: { id: fulfillment.task.campaignId },
-        data: { chainBalanceWei: state.balance.toString(), chainStatus: state.status === 1 ? "ACTIVE" : "PENDING_FUNDING" },
-      }),
+      directSettlementUpsert(event, { fulfillmentId: id }),
+      campaignFundingUpdate(fulfillment.task.campaignId, state),
     ]);
     if (fulfillment.status === "REJECTED") {
       console.warn("A submission rejected in the API was paid on chain; the chain's decision stands", { id });
     }
     return { outcome: "APPLIED", id };
   }
-  const allocation = {
-    chainId: projectionChainId(),
-    transactionHash: position.transactionHash,
-    logIndex: position.logIndex,
-    blockNumber: position.blockNumber,
-    participantWalletAddress: lower(event.participant),
-    pool: Number(event.referralPool),
-    directRecipientWalletAddress: lower(payout.directRecipient),
-    directAmount: Number(payout.directAmount),
-    grandparentRecipientWalletAddress: lower(payout.grandparentRecipient),
-    grandparentAmount: Number(payout.grandparentAmount),
-    unallocatedAmount: Number(payout.unallocatedAmount),
-    source: "campaign",
-  };
 
   await prisma.$transaction([
     prisma.campaignFulfillment.updateMany({
@@ -300,20 +345,145 @@ export async function applyCampaignRewardPaid(
         status: "REWARDED",
       },
     }),
-    prisma.referralPointAllocation.upsert({
-      where: {
-        chainId_transactionHash_logIndex: {
-          chainId: allocation.chainId,
-          transactionHash: allocation.transactionHash,
-          logIndex: allocation.logIndex,
-        },
-      },
-      update: allocation,
-      create: allocation,
-    }),
+    pointAllocationUpsert(event),
   ]);
   if (fulfillment.status === "REJECTED") {
     console.warn("A submission rejected in the API was paid on chain; the chain's decision stands", { id });
+  }
+  return { outcome: "APPLIED", id };
+}
+
+// ---------- Pre-verified campaigns' listed winners ----------
+
+async function findWinner(id: string) {
+  return prisma.campaignWinner.findUnique({
+    where: { id },
+    include: { campaign: { select: { task: { select: { rewardPolicy: { select: { type: true } } } } } } },
+  });
+}
+
+type FoundWinner =
+  | { found: true; id: string; winner: NonNullable<Awaited<ReturnType<typeof findWinner>>> }
+  | { found: false; result: ProjectionResult };
+
+// Finds the listed winner an event names and checks the event matches it. With no such winner, the
+// submission lookup's result stands
+async function winnerFor(
+  event: { campaignId: `0x${string}`; fulfillmentId: `0x${string}`; participant: string },
+  notASubmission: ProjectionResult,
+): Promise<FoundWinner> {
+  const id = bytes32ToUuid(event.fulfillmentId);
+  const winner = await findWinner(id);
+  if (!winner) return { found: false, result: notASubmission };
+  const skip = (reason: string): FoundWinner => ({ found: false, result: { outcome: "SKIPPED", id, reason } });
+  if (winner.campaignId !== bytes32ToUuid(event.campaignId)) return skip("names a different campaign than the listed winner's");
+  if (lower(winner.walletAddress) !== lower(event.participant)) return skip("names a different wallet than the listed winner's");
+  return { found: true, id, winner };
+}
+
+/** Submitted, for a listed winner: the creator put the wallet on chain, so it can claim. */
+async function applyWinnerReserved(
+  event: CampaignFulfillmentSubmittedEvent,
+  notASubmission: ProjectionResult,
+): Promise<ProjectionResult> {
+  const found = await winnerFor(event, notASubmission);
+  if (!found.found) return found.result;
+  const { id, winner } = found;
+  if (winner.reservationTransactionHash) return { outcome: "ALREADY_APPLIED", id };
+  if (winner.status === "REMOVED") {
+    console.warn("A wallet taken off the list was put on chain; the chain's decision stands", { id });
+  }
+
+  const position = eventPosition(event);
+  await prisma.$transaction([
+    prisma.campaignWinner.updateMany({
+      where: { id, reservationTransactionHash: null },
+      data: {
+        reservationTransactionHash: position.transactionHash,
+        reservationBlockNumber: position.blockNumber,
+        reservationLogIndex: position.logIndex,
+        reservedAt: new Date(),
+      },
+    }),
+    // The claim may have been saved first; it is never undone
+    prisma.campaignWinner.updateMany({
+      where: { id, status: { in: ["LISTED", "REMOVED"] } },
+      data: { status: "RESERVED" },
+    }),
+  ]);
+  return { outcome: "APPLIED", id };
+}
+
+/** Verified, for a listed winner: the winner claimed. The payout follows in CampaignRewardPaid. */
+async function applyWinnerClaimed(
+  event: CampaignFulfillmentVerifiedEvent,
+  notASubmission: ProjectionResult,
+): Promise<ProjectionResult> {
+  const found = await winnerFor(event, notASubmission);
+  if (!found.found) return found.result;
+  const { id, winner } = found;
+  if (winner.claimTransactionHash) return { outcome: "ALREADY_APPLIED", id };
+
+  const position = eventPosition(event);
+  // The payout comes from the same transaction and can be saved at any moment, so the status is
+  // checked as it is written
+  await prisma.$transaction([
+    prisma.campaignWinner.updateMany({
+      where: { id, claimTransactionHash: null },
+      data: {
+        claimTransactionHash: position.transactionHash,
+        claimBlockNumber: position.blockNumber,
+        claimLogIndex: position.logIndex,
+        claimedAt: new Date(),
+      },
+    }),
+    prisma.campaignWinner.updateMany({
+      where: { id, status: { not: "REWARDED" } },
+      data: { status: "CLAIMED" },
+    }),
+  ]);
+  return { outcome: "APPLIED", id };
+}
+
+/** RewardPaid, for a listed winner: the winner and their referrers were paid, so it is REWARDED. */
+async function applyWinnerRewarded(
+  event: CampaignRewardPaidEvent,
+  notASubmission: ProjectionResult,
+  chain?: CampaignProjectionChain,
+): Promise<ProjectionResult> {
+  const found = await winnerFor(event, notASubmission);
+  if (!found.found) return found.result;
+  const { id, winner } = found;
+  if (winner.rewardTransactionHash) return { outcome: "ALREADY_APPLIED", id };
+
+  const direct = winner.campaign.task?.rewardPolicy?.type === "DIRECT";
+  if (direct !== (event.rewardType === 1)) {
+    return { outcome: "SKIPPED", id, reason: "reward event type does not match the saved campaign" };
+  }
+  const position = eventPosition(event);
+  const rewarded = prisma.campaignWinner.updateMany({
+    where: { id, rewardTransactionHash: null },
+    data: {
+      rewardTransactionHash: position.transactionHash,
+      rewardBlockNumber: position.blockNumber,
+      rewardLogIndex: position.logIndex,
+      rewardedAt: new Date(),
+      ...(direct
+        ? { completerRewardWei: event.completerReward.toString() }
+        : { completerReward: Number(event.completerReward) }),
+      status: "REWARDED",
+    },
+  });
+  if (direct) {
+    if (!chain) throw new Error("Direct CampaignRewardPaid projection requires a chain reader");
+    const state = await chain.getCampaign(event.campaignId);
+    await prisma.$transaction([
+      rewarded,
+      directSettlementUpsert(event, { winnerId: id }),
+      campaignFundingUpdate(winner.campaignId, state),
+    ]);
+  } else {
+    await prisma.$transaction([rewarded, pointAllocationUpsert(event)]);
   }
   return { outcome: "APPLIED", id };
 }

@@ -166,6 +166,7 @@ async function performReset(): Promise<E2EResetResult> {
       prisma.$executeRaw`
         TRUNCATE TABLE
           "campaign_fulfillments",
+          "campaign_winners",
           "direct_campaign_settlements",
           "direct_reward_events",
           "referral_point_allocations",
