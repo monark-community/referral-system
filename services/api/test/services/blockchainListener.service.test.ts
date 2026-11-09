@@ -27,7 +27,15 @@ import {
 const mockPublicClient = {
   getChainId: jest.fn(),
   getBlockNumber: jest.fn(),
+  getBytecode: jest.fn(),
 };
+const chainSyncWhere = {
+  chainId_contractAddress: {
+    chainId: 31337,
+    contractAddress: "0x5fbdb2315678afecb367f032d93f642f64180aa3",
+  },
+};
+const chainSyncIdentity = chainSyncWhere.chainId_contractAddress;
 const mockReadService = {
   listenToPointsAddedEvent: jest.fn(),
   listenToInviteChangedEvent: jest.fn(),
@@ -177,6 +185,32 @@ async function startListener() {
 }
 
 describe("BlockchainListenerService", () => {
+  describe("startup blockchain identity", () => {
+    test("accepts the configured chain when contract bytecode exists", async () => {
+      mockPublicClient.getChainId.mockResolvedValue(31337);
+      mockPublicClient.getBytecode.mockResolvedValue("0x6000");
+
+      await expect(new BlockchainListenerService().verifyConnection()).resolves.toBeUndefined();
+    });
+
+    test("rejects an RPC connected to the wrong chain", async () => {
+      mockPublicClient.getChainId.mockResolvedValue(11155111);
+
+      await expect(new BlockchainListenerService().verifyConnection()).rejects.toThrow(
+        "Blockchain RPC chain mismatch",
+      );
+    });
+
+    test("rejects an address without deployed bytecode", async () => {
+      mockPublicClient.getChainId.mockResolvedValue(31337);
+      mockPublicClient.getBytecode.mockResolvedValue("0x");
+
+      await expect(new BlockchainListenerService().verifyConnection()).rejects.toThrow(
+        "No contract bytecode found",
+      );
+    });
+  });
+
   const consoleLog = jest.spyOn(console, "log").mockImplementation(() => {});
   const consoleWarn = jest.spyOn(console, "warn").mockImplementation(() => {});
   const consoleError = jest.spyOn(console, "error").mockImplementation(() => {});
@@ -565,6 +599,7 @@ describe("BlockchainListenerService", () => {
       await onReferralPointsAllocated(allocationEvent);
 
       const data = {
+        chainId: 31337,
         transactionHash: "0xabcdef",
         logIndex: 4,
         blockNumber: 103n,
@@ -578,7 +613,8 @@ describe("BlockchainListenerService", () => {
       };
       expect(db.referralPointAllocation.upsert).toHaveBeenCalledWith({
         where: {
-          transactionHash_logIndex: {
+          chainId_transactionHash_logIndex: {
+            chainId: 31337,
             transactionHash: "0xabcdef",
             logIndex: 4,
           },
@@ -597,13 +633,13 @@ describe("BlockchainListenerService", () => {
         mockProjectBuiltinReferralFulfillment.mock.invocationCallOrder[0],
       );
       expect(db.chainSyncState.upsert).toHaveBeenCalledWith({
-        where: { id: 1 },
+        where: chainSyncWhere,
         update: {
           lastReferralAllocationBlock: 103n,
           lastReferralAllocationLogIndex: 4,
         },
         create: {
-          id: 1,
+          ...chainSyncIdentity,
           lastProcessedBlock: 0n,
           lastProcessedLogIndex: 0,
           lastReferralAllocationBlock: 103n,
@@ -687,9 +723,9 @@ describe("BlockchainListenerService", () => {
       });
       expect(mockProjectBuiltinReferralFulfillment).not.toHaveBeenCalled();
       expect(db.chainSyncState.upsert).toHaveBeenCalledWith({
-        where: { id: 1 },
+        where: chainSyncWhere,
         update: { lastProcessedBlock: 101n, lastProcessedLogIndex: 3 },
-        create: { id: 1, lastProcessedBlock: 101n, lastProcessedLogIndex: 3 },
+        create: { ...chainSyncIdentity, lastProcessedBlock: 101n, lastProcessedLogIndex: 3 },
       });
     });
 
@@ -770,9 +806,9 @@ describe("BlockchainListenerService", () => {
       expect(mockProjectBuiltinReferralFulfillment).not.toHaveBeenCalled();
       expect(mockReadService.getReferralPointPool).not.toHaveBeenCalled();
       expect(db.chainSyncState.upsert).toHaveBeenCalledWith({
-        where: { id: 1 },
+        where: chainSyncWhere,
         update: { lastProcessedBlock: 102n, lastProcessedLogIndex: 0 },
-        create: { id: 1, lastProcessedBlock: 102n, lastProcessedLogIndex: 0 },
+        create: { ...chainSyncIdentity, lastProcessedBlock: 102n, lastProcessedLogIndex: 0 },
       });
     });
 
@@ -862,9 +898,9 @@ describe("BlockchainListenerService", () => {
       expect(mockReadService.getInviteChangedEvents).toHaveBeenCalledWith({ fromBlock: 0n, toBlock: 20n });
       expect(mockReadService.getReferralPointsAllocatedEvents).toHaveBeenCalledWith({ fromBlock: 0n, toBlock: 20n });
       expect(db.chainSyncState.upsert).toHaveBeenCalledWith({
-        where: { id: 1 },
+        where: chainSyncWhere,
         update: { lastProcessedBlock: 0n, lastProcessedLogIndex: 0 },
-        create: { id: 1, lastProcessedBlock: 0n, lastProcessedLogIndex: 0 },
+        create: { ...chainSyncIdentity, lastProcessedBlock: 0n, lastProcessedLogIndex: 0 },
       });
     });
 
@@ -910,7 +946,8 @@ describe("BlockchainListenerService", () => {
       expect(db.referralPointAllocation.upsert).toHaveBeenCalledWith(
         expect.objectContaining({
           where: {
-            transactionHash_logIndex: {
+            chainId_transactionHash_logIndex: {
+              chainId: 31337,
               transactionHash: "0xcatchup",
               logIndex: 2,
             },
@@ -984,9 +1021,9 @@ describe("BlockchainListenerService", () => {
         db.user.update.mock.invocationCallOrder[0],
       );
       expect(db.chainSyncState.upsert).toHaveBeenCalledWith({
-        where: { id: 1 },
+        where: chainSyncWhere,
         update: { lastProcessedBlock: 12n, lastProcessedLogIndex: 4 },
-        create: { id: 1, lastProcessedBlock: 12n, lastProcessedLogIndex: 4 },
+        create: { ...chainSyncIdentity, lastProcessedBlock: 12n, lastProcessedLogIndex: 4 },
       });
     });
 

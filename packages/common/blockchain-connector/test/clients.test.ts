@@ -48,17 +48,31 @@ describe("testing clients files", () => {
       process.env = originalEnv;
     });
 
-    test("createClient throws when RPC_URL is not set", () => {
+    test("createClient keeps the local RPC default when RPC_URL is not set", () => {
       delete process.env.RPC_URL;
 
-      expect(() => createClient("localhost")).toThrow("RPC_URL is not defined");
+      expect(createClient("localhost").publicClient.chain?.id).toBe(31337);
     });
 
-    test("createWebSocketClient throws when RPC_WEBSOCKET_URL is not set", () => {
+    test("createWebSocketClient keeps the local WebSocket default when its URL is not set", () => {
       delete process.env.RPC_WEBSOCKET_URL;
 
-      expect(() => createWebSocketClient("localhost")).toThrow(
-        "RPC_WEBSOCKET_URL is not defined",
+      expect(createWebSocketClient("localhost").publicClient.chain?.id).toBe(31337);
+    });
+
+    test("Sepolia requires an explicit HTTP RPC URL", () => {
+      delete process.env.RPC_URL;
+
+      expect(() => createClient("sepolia")).toThrow(
+        "RPC_URL is required for blockchain network sepolia",
+      );
+    });
+
+    test("Sepolia requires an explicit WebSocket RPC URL", () => {
+      delete process.env.RPC_WEBSOCKET_URL;
+
+      expect(() => createWebSocketClient("sepolia")).toThrow(
+        "RPC_WEBSOCKET_URL is required for blockchain network sepolia",
       );
     });
   });

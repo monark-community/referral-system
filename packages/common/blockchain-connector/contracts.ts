@@ -4,17 +4,24 @@
 
 import { RefferalABI } from "@reffinity/common-contracts";
 import { getAddress, isAddress, type Address } from "viem";
+import { getConfiguredBlockchainNetwork } from "./networks.js";
 
 const DEFAULT_LOCAL_REFERRAL_CONTRACT_ADDRESS =
   "0x5fbdb2315678afecb367f032d93f642f64180aa3";
 
-export function configuredLocalReferralAddress(): Address {
+export function configuredReferralAddress(): Address {
+  const network = getConfiguredBlockchainNetwork();
   const configuredAddress =
     process.env.NEXT_PUBLIC_REFERRAL_CONTRACT_ADDRESS ??
     process.env.REFERRAL_CONTRACT_ADDRESS;
 
   if (!configuredAddress) {
-    return DEFAULT_LOCAL_REFERRAL_CONTRACT_ADDRESS as Address;
+    if (network === "localhost") {
+      return DEFAULT_LOCAL_REFERRAL_CONTRACT_ADDRESS as Address;
+    }
+    throw new Error(
+      `REFERRAL_CONTRACT_ADDRESS is required for blockchain network ${network}`,
+    );
   }
 
   if (!isAddress(configuredAddress)) {
@@ -27,9 +34,9 @@ export function configuredLocalReferralAddress(): Address {
 export const contracts = {
   referral: {
     abi: RefferalABI,
-    address: {
-      local: configuredLocalReferralAddress(),
-      testnet: "", // No Testnet Address as of yet - will not work
-    },
+    address: configuredReferralAddress(),
   },
 };
+
+/** @deprecated Use configuredReferralAddress. */
+export const configuredLocalReferralAddress = configuredReferralAddress;

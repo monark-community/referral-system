@@ -6,35 +6,52 @@
 
 import { createPublicClient, http, webSocket } from "viem";
 import type { PublicClient } from "viem";
-import { hardhat, sepolia } from "viem/chains";
+import {
+  getBlockchainNetworkDefinition,
+  getConfiguredBlockchainNetwork,
+  type BlockchainNetwork,
+} from "./networks.js";
 
-export function createClient(network: "localhost" | "sepolia") {
-  const chain = network === "localhost" ? hardhat : sepolia;
-
-  if (!process.env.RPC_URL) {
-    throw new Error("RPC_URL is not defined");
+function configuredRpcUrl(network: BlockchainNetwork, rpcUrl?: string): string {
+  const definition = getBlockchainNetworkDefinition(network);
+  const configured = rpcUrl ?? process.env.RPC_URL ?? definition.defaultRpcUrl;
+  if (!configured) {
+    throw new Error(`RPC_URL is required for blockchain network ${network}`);
   }
+  return configured;
+}
 
+export function createClient(
+  network: BlockchainNetwork = getConfiguredBlockchainNetwork(),
+  rpcUrl?: string,
+) {
+  const chain = getBlockchainNetworkDefinition(network).chain;
   const publicClient = createPublicClient({
-    chain: chain,
-    transport: http(process.env.RPC_URL),
+    chain,
+    transport: http(configuredRpcUrl(network, rpcUrl)),
   });
 
   return { publicClient };
 }
 
-export function createWebSocketClient(network: "localhost" | "sepolia"): {
+export function createWebSocketClient(
+  network: BlockchainNetwork = getConfiguredBlockchainNetwork(),
+  rpcUrl?: string,
+): {
   publicClient: PublicClient;
 } {
-  const chain = network === "localhost" ? hardhat : sepolia;
-
-  if (!process.env.RPC_WEBSOCKET_URL) {
-    throw new Error("RPC_WEBSOCKET_URL is not defined");
+  const definition = getBlockchainNetworkDefinition(network);
+  const configured =
+    rpcUrl ?? process.env.RPC_WEBSOCKET_URL ?? definition.defaultWebSocketUrl;
+  if (!configured) {
+    throw new Error(
+      `RPC_WEBSOCKET_URL is required for blockchain network ${network}`,
+    );
   }
 
   const publicClient = createPublicClient({
-    chain: chain,
-    transport: webSocket(process.env.RPC_WEBSOCKET_URL),
+    chain: definition.chain,
+    transport: webSocket(configured),
   });
 
   return { publicClient };

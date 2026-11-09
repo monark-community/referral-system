@@ -7,12 +7,23 @@ import { createConfig, http } from "wagmi";
 import { mainnet, sepolia, hardhat } from "wagmi/chains";
 import { injected, metaMask } from "wagmi/connectors";
 import { getE2EProvider } from "./e2e-provider";
+import { blockchainNetwork } from "./network";
 
-// Hardhat local chain first so it's the default during development
-const chains = [hardhat, sepolia, mainnet] as const;
+const chains =
+  blockchainNetwork === "sepolia"
+    ? ([sepolia, hardhat, mainnet] as const)
+    : ([hardhat, sepolia, mainnet] as const);
 
-const rpcURL = process.env.NEXT_PUBLIC_RPC_URL || "http://127.0.0.1:8545";
+const rpcURL =
+  process.env.NEXT_PUBLIC_RPC_URL ||
+  (blockchainNetwork === "localhost" ? "http://127.0.0.1:8545" : undefined);
+if (!rpcURL) {
+  throw new Error("NEXT_PUBLIC_RPC_URL is required for Sepolia");
+}
 const e2eWalletEnabled = process.env.NEXT_PUBLIC_E2E_WALLET_ENABLED === "true";
+if (e2eWalletEnabled && blockchainNetwork !== "localhost") {
+  throw new Error("The deterministic E2E wallet can only run on localhost");
+}
 
 const connectors = e2eWalletEnabled
   ? [
@@ -41,11 +52,12 @@ export const wagmiConfig = createConfig({
   chains,
   connectors,
   transports: {
-    [hardhat.id]: http(rpcURL),
+    [hardhat.id]: http(blockchainNetwork === "localhost" ? rpcURL : undefined),
     [mainnet.id]: http(),
-    [sepolia.id]: http(),
+    [sepolia.id]: http(blockchainNetwork === "sepolia" ? rpcURL : undefined),
   },
 });
 
 // Re-export chains for use in components
 export { hardhat, sepolia, mainnet };
+export { activeChain, activeChainId, blockchainNetwork } from "./network";

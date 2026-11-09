@@ -592,6 +592,7 @@ describe("User Controller test", () => {
 
     expect(prisma.referralPointAllocation.findMany).toHaveBeenCalledWith({
       where: {
+        chainId: 31337,
         OR: [
           {
             directRecipientWalletAddress: "0xgrandparent",
@@ -695,6 +696,7 @@ describe("User Controller test", () => {
       }));
       expect(prisma.referralPointAllocation.findMany).toHaveBeenCalledWith(expect.objectContaining({
         where: {
+          chainId: 31337,
           OR: [
             { directRecipientWalletAddress: "0xme" },
             { grandparentRecipientWalletAddress: "0xme" },

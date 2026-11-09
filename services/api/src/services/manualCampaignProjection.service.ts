@@ -16,6 +16,7 @@ import type {
 } from "@reffinity/blockchain-connector/readReferralContract";
 import { bytes32ToUuid } from "@reffinity/blockchain-connector/uuidBytesConverter";
 import { prisma } from "../lib/prisma.js";
+import { getApiBlockchainConfig } from "../config/blockchain.js";
 
 export type ProjectionResult =
   | { outcome: "APPLIED"; id: string }
@@ -23,7 +24,7 @@ export type ProjectionResult =
   | { outcome: "SKIPPED"; id: string; reason: string };
 
 const lower = (value: string) => value.toLowerCase();
-const projectionChainId = () => (process.env.CHAIN_TYPE === "sepolia" ? 11155111 : 31337);
+const projectionChainId = () => getApiBlockchainConfig().chainId;
 
 const eventPosition = (event: { transactionHash: string; blockNumber: bigint; logIndex: number }) => ({
   transactionHash: lower(event.transactionHash),
@@ -272,6 +273,7 @@ export async function applyCampaignRewardPaid(
     return { outcome: "APPLIED", id };
   }
   const allocation = {
+    chainId: projectionChainId(),
     transactionHash: position.transactionHash,
     logIndex: position.logIndex,
     blockNumber: position.blockNumber,
@@ -300,7 +302,11 @@ export async function applyCampaignRewardPaid(
     }),
     prisma.referralPointAllocation.upsert({
       where: {
-        transactionHash_logIndex: { transactionHash: allocation.transactionHash, logIndex: allocation.logIndex },
+        chainId_transactionHash_logIndex: {
+          chainId: allocation.chainId,
+          transactionHash: allocation.transactionHash,
+          logIndex: allocation.logIndex,
+        },
       },
       update: allocation,
       create: allocation,

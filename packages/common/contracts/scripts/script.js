@@ -13,17 +13,18 @@ import artifact from "../artifacts/contracts/ReferralProgram.sol/ReferralProgram
 
 async function main() {
   // Hardhat local private key (account #0)
-  const account = privateKeyToAccount(
-    "0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6"
-  );
+  const rpcUrl = process.env.RPC_URL || "http://127.0.0.1:8545";
+  const privateKey = process.env.HARDHAT_DEFAULT_PRIVATE_KEY ||
+    "0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6";
+  const account = privateKeyToAccount(privateKey);
 
   const publicClient = createPublicClient({
-    transport: http("http://127.0.0.1:8545"),
+    transport: http(rpcUrl),
   });
 
   const walletClient = createWalletClient({
     account,
-    transport: http("http://127.0.0.1:8545"),
+    transport: http(rpcUrl),
   });
 
   const receipt = await publicClient.getBalance({

@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 import { createPrivateInvite, PrivateInviteResponse } from "@/lib/api/user";
 import { WriteReferralContractHelper } from "@reffinity/blockchain-connector/writeReferralContractHelper";
 import { useWriteContract } from "wagmi";
-import { hardhat } from "wagmi/chains";
+import { activeChainId } from "@/lib/wagmi/network";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth-context";
 
@@ -76,7 +76,7 @@ export function ReferralLinkCard({ referralLink, onShare }: ReferralLinkCardProp
         const ctx = await WriteReferralContractHelper.createInviteContext();
         await writeContractAsync({
           ...ctx,
-          chainId: hardhat.id,
+          chainId: activeChainId,
           args: [
             privateInvite?.bytesinviteId as `0x${string}`,
             privateInvite?.referrerWallet as `0x${string}`,

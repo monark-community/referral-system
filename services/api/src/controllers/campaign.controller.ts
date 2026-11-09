@@ -8,6 +8,7 @@
 
 import type { Request, Response } from "express";
 import { createClient } from "@reffinity/blockchain-connector/clients";
+import { getApiBlockchainConfig } from "../config/blockchain.js";
 import type { BuiltinReferralCampaignDefinition } from "../models/campaign.js";
 import {
   CampaignServiceError,
@@ -205,8 +206,10 @@ export async function getMyCampaignFulfillment(
     );
     if (fulfillment?.status === "VERIFIED") {
       try {
+        const config = getApiBlockchainConfig();
         const client = createClient(
-          process.env.CHAIN_TYPE as "localhost" | "sepolia",
+          config.network,
+          config.rpcUrl,
         ).publicClient as unknown as CampaignFulfillmentReadClient;
         fulfillment = await refreshCurrentBuiltinReferralFulfillment(
           client,

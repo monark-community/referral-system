@@ -162,7 +162,7 @@ export class ReadReferralContractService {
 
   async getReferrals(userAddress: string) {
     return this.clients.publicClient.readContract({
-      address: contracts.referral.address.local,
+      address: contracts.referral.address,
       abi: contracts.referral.abi,
       functionName: "viewReferrals",
       args: [userAddress],
@@ -171,7 +171,7 @@ export class ReadReferralContractService {
 
   async getAllReferrals(userAddress: string) {
     return this.clients.publicClient.readContract({
-      address: contracts.referral.address.local,
+      address: contracts.referral.address,
       abi: contracts.referral.abi,
       functionName: "viewAllReferrals",
       args: [userAddress],
@@ -180,7 +180,7 @@ export class ReadReferralContractService {
 
   async getReferrers(userAddress: string) {
     return this.clients.publicClient.readContract({
-      address: contracts.referral.address.local,
+      address: contracts.referral.address,
       abi: contracts.referral.abi,
       functionName: "viewReferrer",
       args: [userAddress],
@@ -189,7 +189,7 @@ export class ReadReferralContractService {
 
   async getAncestors(userAddress: string): Promise<ReferralAncestors> {
     const ancestors = await this.clients.publicClient.readContract({
-      address: contracts.referral.address.local,
+      address: contracts.referral.address,
       abi: contracts.referral.abi,
       functionName: "viewAncestors",
       args: [userAddress],
@@ -200,7 +200,7 @@ export class ReadReferralContractService {
 
   async getUserCurrentPoints(userAddress: string) {
     return this.clients.publicClient.readContract({
-      address: contracts.referral.address.local,
+      address: contracts.referral.address,
       abi: contracts.referral.abi,
       functionName: "viewPoints",
       args: [userAddress],
@@ -209,7 +209,7 @@ export class ReadReferralContractService {
 
   async getReferralPointPool() {
     return this.clients.publicClient.readContract({
-      address: contracts.referral.address.local,
+      address: contracts.referral.address,
       abi: contracts.referral.abi,
       functionName: "viewReferralPointPool",
     });
@@ -217,7 +217,7 @@ export class ReadReferralContractService {
 
   async getDirectReferralBps() {
     return this.clients.publicClient.readContract({
-      address: contracts.referral.address.local,
+      address: contracts.referral.address,
       abi: contracts.referral.abi,
       functionName: "directReferralBps",
     });
@@ -225,7 +225,7 @@ export class ReadReferralContractService {
 
   async getGrandparentReferralBps() {
     return this.clients.publicClient.readContract({
-      address: contracts.referral.address.local,
+      address: contracts.referral.address,
       abi: contracts.referral.abi,
       functionName: "grandparentReferralBps",
     });
@@ -236,7 +236,7 @@ export class ReadReferralContractService {
     pointPool: bigint,
   ) {
     return this.clients.publicClient.readContract({
-      address: contracts.referral.address.local,
+      address: contracts.referral.address,
       abi: contracts.referral.abi,
       functionName: "previewReferralPointAllocation",
       args: [userAddress, pointPool],
@@ -245,7 +245,7 @@ export class ReadReferralContractService {
 
   async getUserCurrentMilestone(userAddress: string) {
     return this.clients.publicClient.readContract({
-      address: contracts.referral.address.local,
+      address: contracts.referral.address,
       abi: contracts.referral.abi,
       functionName: "getCurrentUserMilestone",
       args: [userAddress],
@@ -255,7 +255,7 @@ export class ReadReferralContractService {
   // The most points one campaign completion may pay, set by an admin
   async getMaxCampaignPointsPerCompletion(): Promise<bigint> {
     return (await this.clients.publicClient.readContract({
-      address: contracts.referral.address.local,
+      address: contracts.referral.address,
       abi: contracts.referral.abi,
       functionName: "maxCampaignPointsPerCompletion",
     })) as bigint;
@@ -264,7 +264,7 @@ export class ReadReferralContractService {
   // The most wei one direct-payment campaign completion may pay, set by an admin
   async getMaxCampaignDirectRewardPerCompletion(): Promise<bigint> {
     return (await this.clients.publicClient.readContract({
-      address: contracts.referral.address.local,
+      address: contracts.referral.address,
       abi: contracts.referral.abi,
       functionName: "maxCampaignDirectRewardPerCompletion",
     })) as bigint;
@@ -272,7 +272,7 @@ export class ReadReferralContractService {
 
   async getDirectRewardBalance(account: Address): Promise<bigint> {
     return (await this.clients.publicClient.readContract({
-      address: contracts.referral.address.local,
+      address: contracts.referral.address,
       abi: contracts.referral.abi,
       functionName: "directRewardBalances",
       args: [account],
@@ -281,7 +281,7 @@ export class ReadReferralContractService {
 
   async getCampaign(campaignId: Hex): Promise<Campaign> {
     return (await this.clients.publicClient.readContract({
-      address: contracts.referral.address.local,
+      address: contracts.referral.address,
       abi: contracts.referral.abi,
       functionName: "getCampaign",
       args: [campaignId],
@@ -292,7 +292,7 @@ export class ReadReferralContractService {
     fulfillmentId: Hex,
   ): Promise<CampaignFulfillment> {
     return (await this.clients.publicClient.readContract({
-      address: contracts.referral.address.local,
+      address: contracts.referral.address,
       abi: contracts.referral.abi,
       functionName: "getCampaignFulfillment",
       args: [fulfillmentId],
@@ -304,7 +304,7 @@ export class ReadReferralContractService {
     participant: Address,
   ): Promise<CampaignFulfillment> {
     return (await this.clients.publicClient.readContract({
-      address: contracts.referral.address.local,
+      address: contracts.referral.address,
       abi: contracts.referral.abi,
       functionName: "getParticipantCampaignFulfillment",
       args: [campaignId, participant],
@@ -317,7 +317,7 @@ export class ReadReferralContractService {
   ) {
     this.unwatchCampaignCreatedEvent =
       this.clients.publicClient.watchContractEvent({
-        address: contracts.referral.address.local,
+      address: contracts.referral.address,
         abi: contracts.referral.abi,
         eventName: "CampaignCreated",
         pollingInterval,
@@ -343,7 +343,7 @@ export class ReadReferralContractService {
     toBlock: bigint;
   }) {
     return this.clients.publicClient.getContractEvents({
-      address: contracts.referral.address.local,
+      address: contracts.referral.address,
       abi: contracts.referral.abi,
       eventName: "CampaignCreated",
       fromBlock,
@@ -364,7 +364,7 @@ export class ReadReferralContractService {
   ) {
     this.unwatchCampaignVisibilitySetEvent =
       this.clients.publicClient.watchContractEvent({
-        address: contracts.referral.address.local,
+      address: contracts.referral.address,
         abi: contracts.referral.abi,
         eventName: "CampaignVisibilitySet",
         pollingInterval,
@@ -390,7 +390,7 @@ export class ReadReferralContractService {
     toBlock: bigint;
   }) {
     return this.clients.publicClient.getContractEvents({
-      address: contracts.referral.address.local,
+      address: contracts.referral.address,
       abi: contracts.referral.abi,
       eventName: "CampaignVisibilitySet",
       fromBlock,
@@ -413,7 +413,7 @@ export class ReadReferralContractService {
   ) {
     this.unwatchCampaignFulfillmentSubmittedEvent =
       this.clients.publicClient.watchContractEvent({
-        address: contracts.referral.address.local,
+      address: contracts.referral.address,
         abi: contracts.referral.abi,
         eventName: "CampaignFulfillmentSubmitted",
         pollingInterval,
@@ -439,7 +439,7 @@ export class ReadReferralContractService {
     toBlock: bigint;
   }) {
     return this.clients.publicClient.getContractEvents({
-      address: contracts.referral.address.local,
+      address: contracts.referral.address,
       abi: contracts.referral.abi,
       eventName: "CampaignFulfillmentSubmitted",
       fromBlock,
@@ -462,7 +462,7 @@ export class ReadReferralContractService {
   ) {
     this.unwatchCampaignFulfillmentVerifiedEvent =
       this.clients.publicClient.watchContractEvent({
-        address: contracts.referral.address.local,
+      address: contracts.referral.address,
         abi: contracts.referral.abi,
         eventName: "CampaignFulfillmentVerified",
         pollingInterval,
@@ -488,7 +488,7 @@ export class ReadReferralContractService {
     toBlock: bigint;
   }) {
     return this.clients.publicClient.getContractEvents({
-      address: contracts.referral.address.local,
+      address: contracts.referral.address,
       abi: contracts.referral.abi,
       eventName: "CampaignFulfillmentVerified",
       fromBlock,
@@ -511,7 +511,7 @@ export class ReadReferralContractService {
   ) {
     this.unwatchCampaignFulfillmentRejectedEvent =
       this.clients.publicClient.watchContractEvent({
-        address: contracts.referral.address.local,
+      address: contracts.referral.address,
         abi: contracts.referral.abi,
         eventName: "CampaignFulfillmentRejected",
         pollingInterval,
@@ -537,7 +537,7 @@ export class ReadReferralContractService {
     toBlock: bigint;
   }) {
     return this.clients.publicClient.getContractEvents({
-      address: contracts.referral.address.local,
+      address: contracts.referral.address,
       abi: contracts.referral.abi,
       eventName: "CampaignFulfillmentRejected",
       fromBlock,
@@ -558,7 +558,7 @@ export class ReadReferralContractService {
   ) {
     this.unwatchCampaignRewardPaidEvent =
       this.clients.publicClient.watchContractEvent({
-        address: contracts.referral.address.local,
+      address: contracts.referral.address,
         abi: contracts.referral.abi,
         eventName: "CampaignRewardPaid",
         pollingInterval,
@@ -584,7 +584,7 @@ export class ReadReferralContractService {
     toBlock: bigint;
   }) {
     return this.clients.publicClient.getContractEvents({
-      address: contracts.referral.address.local,
+      address: contracts.referral.address,
       abi: contracts.referral.abi,
       eventName: "CampaignRewardPaid",
       fromBlock,
@@ -605,7 +605,7 @@ export class ReadReferralContractService {
   ) {
     this.unwatchDirectRewardAccruedEvent =
       this.clients.publicClient.watchContractEvent({
-        address: contracts.referral.address.local,
+      address: contracts.referral.address,
         abi: contracts.referral.abi,
         eventName: "DirectRewardAccrued",
         pollingInterval,
@@ -631,7 +631,7 @@ export class ReadReferralContractService {
     toBlock: bigint;
   }) {
     return this.clients.publicClient.getContractEvents({
-      address: contracts.referral.address.local,
+      address: contracts.referral.address,
       abi: contracts.referral.abi,
       eventName: "DirectRewardAccrued",
       fromBlock,
@@ -652,7 +652,7 @@ export class ReadReferralContractService {
   ) {
     this.unwatchDirectRewardsWithdrawnEvent =
       this.clients.publicClient.watchContractEvent({
-        address: contracts.referral.address.local,
+      address: contracts.referral.address,
         abi: contracts.referral.abi,
         eventName: "DirectRewardsWithdrawn",
         pollingInterval,
@@ -678,7 +678,7 @@ export class ReadReferralContractService {
     toBlock: bigint;
   }) {
     return this.clients.publicClient.getContractEvents({
-      address: contracts.referral.address.local,
+      address: contracts.referral.address,
       abi: contracts.referral.abi,
       eventName: "DirectRewardsWithdrawn",
       fromBlock,
@@ -705,7 +705,7 @@ export class ReadReferralContractService {
     pollingInterval?: number,
   ) {
     const unwatch = this.clients.publicClient.watchContractEvent({
-      address: contracts.referral.address.local,
+      address: contracts.referral.address,
       abi: contracts.referral.abi,
       eventName: "PointsAdded",
       pollingInterval: pollingInterval ? pollingInterval : 10000,
@@ -741,7 +741,7 @@ export class ReadReferralContractService {
     toBlock: bigint;
   }) {
     return await this.clients.publicClient.getContractEvents({
-      address: contracts.referral.address.local,
+      address: contracts.referral.address,
       abi: contracts.referral.abi,
       eventName: "PointsAdded",
       fromBlock,
@@ -772,7 +772,7 @@ export class ReadReferralContractService {
     pollingInterval?: number,
   ) {
     const unwatch = this.clients.publicClient.watchContractEvent({
-      address: contracts.referral.address.local,
+      address: contracts.referral.address,
       abi: contracts.referral.abi,
       eventName: "ReferralPointsAllocated",
       pollingInterval: pollingInterval ? pollingInterval : 10000,
@@ -825,7 +825,7 @@ export class ReadReferralContractService {
     toBlock: bigint;
   }) {
     return this.clients.publicClient.getContractEvents({
-      address: contracts.referral.address.local,
+      address: contracts.referral.address,
       abi: contracts.referral.abi,
       eventName: "ReferralPointsAllocated",
       fromBlock,
@@ -853,7 +853,7 @@ export class ReadReferralContractService {
     pollingInterval?: number,
   ) {
     const unwatch = this.clients.publicClient.watchContractEvent({
-      address: contracts.referral.address.local,
+      address: contracts.referral.address,
       abi: contracts.referral.abi,
       eventName: "InviteChanged",
       pollingInterval: pollingInterval ? pollingInterval : 10000,
@@ -887,7 +887,7 @@ export class ReadReferralContractService {
     toBlock: bigint;
   }) {
     return await this.clients.publicClient.getContractEvents({
-      address: contracts.referral.address.local,
+      address: contracts.referral.address,
       abi: contracts.referral.abi,
       eventName: "InviteChanged",
       fromBlock,

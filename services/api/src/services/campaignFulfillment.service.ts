@@ -8,6 +8,7 @@ import { RefferalABI } from "@reffinity/common-contracts";
 import { bytes32ToUuid } from "@reffinity/blockchain-connector/uuidBytesConverter";
 import { decodeEventLog, type Address, type Hash, type Hex } from "viem";
 import { prisma } from "../lib/prisma.js";
+import { getApiBlockchainConfig } from "../config/blockchain.js";
 import { getBuiltinReferralCampaign } from "./campaign.service.js";
 
 const INVITE_ACCEPTED = 1;
@@ -541,6 +542,7 @@ export async function reconcileBuiltinReferralFulfillments(
 
   while (true) {
     const allocations = await prisma.referralPointAllocation.findMany({
+      where: { chainId: getApiBlockchainConfig().chainId },
       orderBy: { id: "asc" },
       take: batchSize,
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),

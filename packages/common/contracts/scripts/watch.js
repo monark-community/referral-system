@@ -3,17 +3,21 @@
 // - Current events are 'InviteChanged' and 'PointsAdded'
 
 
-import { createPublicClient, webSocket, parseAbi } from 'viem'
-import { hardhat } from 'viem/chains'
+import { createPublicClient, webSocket, parseAbi, getAddress } from 'viem'
+import { hardhat, sepolia } from 'viem/chains'
 
-const CONTRACT_ADDRESS = '0x5fbdb2315678afecb367f032d93f642f64180aa3'
+const network = process.env.BLOCKCHAIN_NETWORK || 'localhost'
+const chain = network === 'sepolia' ? sepolia : hardhat
+const rpcUrl = process.env.RPC_WEBSOCKET_URL || (network === 'localhost' ? 'ws://127.0.0.1:8545' : undefined)
+const CONTRACT_ADDRESS = getAddress(process.env.REFERRAL_CONTRACT_ADDRESS || '0x5fbdb2315678afecb367f032d93f642f64180aa3')
 
 async function main() {
   console.log("Starting watcher...")
+  if (!rpcUrl) throw new Error(`RPC_WEBSOCKET_URL is required for ${network}`)
 
   const client = createPublicClient({
-    chain: hardhat,
-    transport: webSocket('ws://127.0.0.1:8545'),
+    chain,
+    transport: webSocket(rpcUrl),
   })
 
   const chainId = await client.getChainId()

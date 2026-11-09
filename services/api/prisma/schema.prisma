@@ -148,7 +148,9 @@ model Referral {
 
 //Used for the listener service to determine the last block updated_at
 model ChainSyncState {
-  id                             Int    @id @default(1)
+  id                             Int    @id @default(autoincrement())
+  chainId                        Int
+  contractAddress                String
   lastProcessedBlock             BigInt
   lastProcessedLogIndex          Int
   lastReferralAllocationBlock    BigInt @default(0)
@@ -156,12 +158,15 @@ model ChainSyncState {
   // How far catch-up has read the user campaign events
   lastCampaignEventBlock         BigInt @default(0)
   lastCampaignEventLogIndex      Int    @default(-1)
+
+  @@unique([chainId, contractAddress])
 }
 
 // Immutable projection of ReferralPointsAllocated events. Addresses are kept as
 // chain identifiers so event history can be recorded even before a User row exists.
 model ReferralPointAllocation {
   id                                String   @id @default(uuid())
+  chainId                           Int      @map("chain_id")
   transactionHash                   String   @map("transaction_hash")
   logIndex                          Int      @map("log_index")
   blockNumber                       BigInt   @map("block_number")
@@ -176,7 +181,7 @@ model ReferralPointAllocation {
   source                            String   @default("signup")
   observedAt                        DateTime @default(now()) @map("observed_at")
 
-  @@unique([transactionHash, logIndex])
+  @@unique([chainId, transactionHash, logIndex])
   @@index([participantWalletAddress])
   @@index([directRecipientWalletAddress])
   @@index([grandparentRecipientWalletAddress])

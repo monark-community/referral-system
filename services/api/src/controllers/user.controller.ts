@@ -10,6 +10,7 @@ import {
   generateInviteCode,
 } from "../services/auth.service.js";
 import { uuidToBytes32 } from "@reffinity/blockchain-connector/uuidBytesConverter";
+import { getApiBlockchainConfig } from "../config/blockchain.js";
 
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
 
@@ -423,6 +424,7 @@ export async function getReferralRewardHistory(
     const walletAddress = req.user.walletAddress.toLowerCase();
     const allocations = await prisma.referralPointAllocation.findMany({
       where: {
+        chainId: getApiBlockchainConfig().chainId,
         OR: [
           {
             directRecipientWalletAddress: walletAddress,
@@ -561,6 +563,7 @@ export async function getReferralNetwork(
     // and the grandparent share for people their referrals referred
     const allocations = await prisma.referralPointAllocation.findMany({
       where: {
+        chainId: getApiBlockchainConfig().chainId,
         OR: [
           { directRecipientWalletAddress: walletAddress },
           { grandparentRecipientWalletAddress: walletAddress },

@@ -436,6 +436,7 @@ describe("built-in fulfillment recovery", () => {
     });
     expect(db.referralPointAllocation.findMany).toHaveBeenNthCalledWith(2, {
       orderBy: { id: "asc" },
+      where: { chainId: 31337 },
       take: 2,
       cursor: { id: "allocation-2" },
       skip: 1,

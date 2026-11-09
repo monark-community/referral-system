@@ -27,6 +27,10 @@
     "./contracts": {
       "import": "./dist/contracts.js",
       "types": "./dist/contracts.d.ts"
+    },
+    "./networks": {
+      "import": "./dist/networks.js",
+      "types": "./dist/networks.d.ts"
     }
   },
   "scripts": {

@@ -27,7 +27,7 @@ describe("WriteReferralContractHelper", () => {
 
     expect(context).toEqual({
       abi: contracts.referral.abi,
-      address: contracts.referral.address.local,
+      address: contracts.referral.address,
       functionName,
     });
   });

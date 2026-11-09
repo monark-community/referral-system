@@ -19,7 +19,8 @@ const server = app.listen(PORT, () => {
 // Blockchain listener service. Readiness is published only after database catch-up and
 // all event subscriptions have initialized.
 const blockchainListener = new BlockchainListenerService();
-blockchainListener.initialize()
+blockchainListener.verifyConnection()
+  .then(() => blockchainListener.initialize())
   .then(async () => {
     await initializeE2EReset(blockchainListener);
     markReady();

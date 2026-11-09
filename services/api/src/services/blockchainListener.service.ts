@@ -41,6 +41,7 @@ import {
   type ProjectionResult,
 } from "./manualCampaignProjection.service.js";
 import { reconcilePublishedDirectCampaigns } from "./manualCampaign.service.js";
+import { getApiBlockchainConfig } from "../config/blockchain.js";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 const BASIS_POINTS = 10_000n;
@@ -48,6 +49,17 @@ const BASIS_POINTS = 10_000n;
 const INVITE_PENDING = 0;
 
 export class BlockchainListenerService {
+  private blockchainConfig = getApiBlockchainConfig();
+  private chainSyncWhere = {
+    chainId_contractAddress: {
+      chainId: this.blockchainConfig.chainId,
+      contractAddress: this.blockchainConfig.contractAddress.toLowerCase(),
+    },
+  };
+  private chainSyncIdentity = {
+    chainId: this.blockchainConfig.chainId,
+    contractAddress: this.blockchainConfig.contractAddress.toLowerCase(),
+  };
   private isListeningToPointsAdded: boolean = false;
   private isListeningToInviteChanged: boolean = false;
   private isListeningToReferralPointsAllocated: boolean = false;
@@ -59,11 +71,30 @@ export class BlockchainListenerService {
   private isListeningToDirectRewardAccrued: boolean = false;
   private isListeningToDirectRewardsWithdrawn: boolean = false;
   private publicClient: any = createClient(
-    process.env.CHAIN_TYPE as "localhost" | "sepolia",
+    this.blockchainConfig.network,
+    this.blockchainConfig.rpcUrl,
   ).publicClient;
   private readReferralContractService = new ReadReferralContractService({
     publicClient: this.publicClient,
   });
+
+  async verifyConnection(): Promise<void> {
+    const actualChainId = await this.publicClient.getChainId();
+    if (actualChainId !== this.blockchainConfig.chainId) {
+      throw new Error(
+        `Blockchain RPC chain mismatch: expected ${this.blockchainConfig.chainId} for ${this.blockchainConfig.network}, received ${actualChainId}`,
+      );
+    }
+
+    const bytecode = await this.publicClient.getBytecode({
+      address: this.blockchainConfig.contractAddress,
+    });
+    if (!bytecode || bytecode === "0x") {
+      throw new Error(
+        `No contract bytecode found at ${this.blockchainConfig.contractAddress} on chain ${actualChainId}`,
+      );
+    }
+  }
 
   async initialize(): Promise<void> {
     try {
@@ -106,6 +137,7 @@ export class BlockchainListenerService {
     transactionHash: Hash;
   }): Promise<void> {
     const data = {
+      chainId: this.blockchainConfig.chainId,
       transactionHash: event.transactionHash.toLowerCase(),
       logIndex: event.logIndex,
       blockNumber: event.blockNumber,
@@ -121,7 +153,8 @@ export class BlockchainListenerService {
 
     await prisma.referralPointAllocation.upsert({
       where: {
-        transactionHash_logIndex: {
+        chainId_transactionHash_logIndex: {
+          chainId: data.chainId,
           transactionHash: data.transactionHash,
           logIndex: data.logIndex,
         },
@@ -263,13 +296,13 @@ export class BlockchainListenerService {
           await this.persistReferralPointAllocation(event);
           await this.projectCampaignFulfillment(event, "live");
           await prisma.chainSyncState.upsert({
-            where: { id: 1 },
+            where: this.chainSyncWhere,
             update: {
               lastReferralAllocationBlock: event.blockNumber,
               lastReferralAllocationLogIndex: event.logIndex,
             },
             create: {
-              id: 1,
+              ...this.chainSyncIdentity,
               lastProcessedBlock: 0n,
               lastProcessedLogIndex: 0,
               lastReferralAllocationBlock: event.blockNumber,
@@ -335,13 +368,13 @@ export class BlockchainListenerService {
           }
           // Save new last processed block
           await prisma.chainSyncState.upsert({
-            where: { id: 1 },
+            where: this.chainSyncWhere,
             update: {
               lastProcessedBlock: blockNumber,
               lastProcessedLogIndex: logIndex,
             },
             create: {
-              id: 1,
+              ...this.chainSyncIdentity,
               lastProcessedBlock: blockNumber,
               lastProcessedLogIndex: logIndex,
             },
@@ -388,13 +421,13 @@ export class BlockchainListenerService {
 
           // Save new last processed block
           await prisma.chainSyncState.upsert({
-            where: { id: 1 },
+            where: this.chainSyncWhere,
             update: {
               lastProcessedBlock: blockNumber,
               lastProcessedLogIndex: logIndex,
             },
             create: {
-              id: 1,
+              ...this.chainSyncIdentity,
               lastProcessedBlock: blockNumber,
               lastProcessedLogIndex: logIndex,
             },
@@ -600,7 +633,7 @@ export class BlockchainListenerService {
     console.log("Synchronising the DB to the chain state...");
 
     // Last processed state
-    const state = await prisma.chainSyncState.findUnique({ where: { id: 1 } });
+    const state = await prisma.chainSyncState.findUnique({ where: this.chainSyncWhere });
     // A restart immediately after a mined transaction must not reuse viem's cached block
     // number or the catch-up pass can incorrectly conclude that there is no new work.
     const latestBlock = await this.publicClient.getBlockNumber({ cacheTime: 0 });
@@ -700,9 +733,13 @@ export class BlockchainListenerService {
     }
     // Persist last processed block/logIndex
     await prisma.chainSyncState.upsert({
-      where: { id: 1 },
+      where: this.chainSyncWhere,
       update: { lastProcessedBlock, lastProcessedLogIndex },
-      create: { id: 1, lastProcessedBlock, lastProcessedLogIndex },
+      create: {
+        ...this.chainSyncIdentity,
+        lastProcessedBlock,
+        lastProcessedLogIndex,
+      },
     });
 
     console.log("Catch-up complete.");
@@ -781,13 +818,13 @@ export class BlockchainListenerService {
     }
 
     await prisma.chainSyncState.upsert({
-      where: { id: 1 },
+      where: this.chainSyncWhere,
       update: {
         lastReferralAllocationBlock: lastProcessedBlock,
         lastReferralAllocationLogIndex: lastProcessedLogIndex,
       },
       create: {
-        id: 1,
+        ...this.chainSyncIdentity,
         lastProcessedBlock: state?.lastProcessedBlock ?? 0n,
         lastProcessedLogIndex: state?.lastProcessedLogIndex ?? 0,
         lastReferralAllocationBlock: lastProcessedBlock,
@@ -799,7 +836,10 @@ export class BlockchainListenerService {
   // Applies the user campaign events since the last catch-up, in chain order. The saved position stops
   // before the first event that failed, so the next start tries it again
   private async syncCampaignEvents(
-    state: { lastCampaignEventBlock?: bigint; lastCampaignEventLogIndex?: number } | null,
+    state: {
+      lastCampaignEventBlock?: bigint;
+      lastCampaignEventLogIndex?: number;
+    } | null,
     latestBlock: bigint,
   ): Promise<void> {
     const fromBlock = state?.lastCampaignEventBlock ?? 0n;
@@ -812,13 +852,18 @@ export class BlockchainListenerService {
 
     const range = { fromBlock, toBlock: latestBlock };
     const service = this.readReferralContractService;
-    const sources: [string, () => Promise<any[]>, (event: any) => Promise<ProjectionResult>][] = [
+    const sources: [
+      string,
+      () => Promise<any[]>,
+      (event: any) => Promise<ProjectionResult>,
+    ][] = [
       [
         "CampaignCreated",
         () => service.getCampaignCreatedEvents(range),
-        (created: CampaignCreatedEvent) => created.rewardType === 1
-          ? applyCampaignCreated(created, service)
-          : applyCampaignCreated(created),
+        (created: CampaignCreatedEvent) =>
+          created.rewardType === 1
+            ? applyCampaignCreated(created, service)
+            : applyCampaignCreated(created),
       ],
       [
         "CampaignFulfillmentSubmitted",
@@ -838,15 +883,28 @@ export class BlockchainListenerService {
       [
         "CampaignRewardPaid",
         () => service.getCampaignRewardPaidEvents(range),
-        (reward: CampaignRewardPaidEvent) => reward.rewardType === 1
-          ? applyCampaignRewardPaid(reward, service)
-          : applyCampaignRewardPaid(reward),
+        (reward: CampaignRewardPaidEvent) =>
+          reward.rewardType === 1
+            ? applyCampaignRewardPaid(reward, service)
+            : applyCampaignRewardPaid(reward),
       ],
-      ["DirectRewardAccrued", () => service.getDirectRewardAccruedEvents(range), applyDirectRewardAccrued],
-      ["DirectRewardsWithdrawn", () => service.getDirectRewardsWithdrawnEvents(range), applyDirectRewardsWithdrawn],
+      [
+        "DirectRewardAccrued",
+        () => service.getDirectRewardAccruedEvents(range),
+        applyDirectRewardAccrued,
+      ],
+      [
+        "DirectRewardsWithdrawn",
+        () => service.getDirectRewardsWithdrawnEvents(range),
+        applyDirectRewardsWithdrawn,
+      ],
     ];
 
-    const events: { eventName: string; apply: (event: any) => Promise<ProjectionResult>; event: any }[] = [];
+    const events: {
+      eventName: string;
+      apply: (event: any) => Promise<ProjectionResult>;
+      event: any;
+    }[] = [];
     for (const [eventName, read, apply] of sources) {
       for (const log of await read()) {
         events.push({
@@ -877,7 +935,12 @@ export class BlockchainListenerService {
       ) {
         continue;
       }
-      const applied = await this.applyCampaignEvent(eventName, apply, event, "catch-up");
+      const applied = await this.applyCampaignEvent(
+        eventName,
+        apply,
+        event,
+        "catch-up",
+      );
       if (!applied && !resumeFrom) {
         resumeFrom = { block: event.blockNumber, logIndex: event.logIndex - 1 };
       }
@@ -885,10 +948,13 @@ export class BlockchainListenerService {
 
     const position = resumeFrom ?? { block: latestBlock, logIndex: -1 };
     await prisma.chainSyncState.upsert({
-      where: { id: 1 },
-      update: { lastCampaignEventBlock: position.block, lastCampaignEventLogIndex: position.logIndex },
+      where: this.chainSyncWhere,
+      update: {
+        lastCampaignEventBlock: position.block,
+        lastCampaignEventLogIndex: position.logIndex,
+      },
       create: {
-        id: 1,
+        ...this.chainSyncIdentity,
         lastProcessedBlock: 0n,
         lastProcessedLogIndex: 0,
         lastCampaignEventBlock: position.block,
