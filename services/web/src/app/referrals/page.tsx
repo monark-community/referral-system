@@ -43,7 +43,7 @@ import { createPrivateInvite, PrivateInviteResponse } from "@/lib/api/user";
 import { Button } from "@/components/ui/button";
 import { WriteReferralContractHelper } from "@reffinity/blockchain-connector/writeReferralContractHelper";
 import { useWriteContract } from "wagmi";
-import { hardhat } from "wagmi/chains";
+import { activeChainId } from "@/lib/wagmi/network";
 
 function StatCard({
   label,
@@ -122,7 +122,7 @@ function QuickShareCard({ referralLink }: { referralLink: string }) {
         const ctx = await WriteReferralContractHelper.createInviteContext();
         await writeContractAsync({
           ...ctx,
-          chainId: hardhat.id,
+          chainId: activeChainId,
           args: [
             privateInvite?.bytesinviteId as `0x${string}`,
             privateInvite?.referrerWallet as `0x${string}`,

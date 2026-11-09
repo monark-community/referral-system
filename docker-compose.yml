@@ -106,9 +106,10 @@ services:
       SMTP_PASS: ${SMTP_PASS}
 
       # Blockchain
-      RPC_URL: http://hardhat:8545
-      RPC_WEBSOCKET_URL: ws://hardhat:8545
-      CHAIN_TYPE: localhost
+      RPC_URL: ${RPC_URL:-http://hardhat:8545}
+      RPC_WEBSOCKET_URL: ${RPC_WEBSOCKET_URL:-ws://hardhat:8545}
+      BLOCKCHAIN_NETWORK: ${BLOCKCHAIN_NETWORK:-localhost}
+      CHAIN_TYPE: ${BLOCKCHAIN_NETWORK:-localhost}
       HARDHAT_NODE_URL: http://hardhat:8545
       HARDHAT_DEFAULT_PRIVATE_KEY: "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
       REFERRAL_CONTRACT_ADDRESS: ${REFERRAL_CONTRACT_ADDRESS:-0x5fbdb2315678afecb367f032d93f642f64180aa3}
@@ -128,7 +129,8 @@ services:
       dockerfile: docker/Dockerfile.web
       args:
         NEXT_PUBLIC_API_URL: http://localhost:3001/api
-        NEXT_PUBLIC_RPC_URL: http://localhost:8545
+        NEXT_PUBLIC_BLOCKCHAIN_NETWORK: ${BLOCKCHAIN_NETWORK:-localhost}
+        NEXT_PUBLIC_RPC_URL: ${NEXT_PUBLIC_RPC_URL:-http://localhost:8545}
         NEXT_PUBLIC_REFERRAL_CONTRACT_ADDRESS: ${REFERRAL_CONTRACT_ADDRESS:-0x5fbdb2315678afecb367f032d93f642f64180aa3}
     ports:
       - "3000:3000"
@@ -143,8 +145,8 @@ services:
       NEXT_PUBLIC_API_URL: http://localhost:3001/api
 
       # Blockchain
-      NEXT_PUBLIC_CHAIN_ID: 31337
-      NEXT_PUBLIC_RPC_URL: http://localhost:8545
+      NEXT_PUBLIC_BLOCKCHAIN_NETWORK: ${BLOCKCHAIN_NETWORK:-localhost}
+      NEXT_PUBLIC_RPC_URL: ${NEXT_PUBLIC_RPC_URL:-http://localhost:8545}
       NEXT_PUBLIC_REFERRAL_CONTRACT_ADDRESS: ${REFERRAL_CONTRACT_ADDRESS:-0x5fbdb2315678afecb367f032d93f642f64180aa3}
 
       # Wallet Connect (if needed)

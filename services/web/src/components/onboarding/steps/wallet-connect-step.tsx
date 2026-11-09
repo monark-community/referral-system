@@ -16,8 +16,8 @@ import { Wallet } from 'lucide-react';
 import { walletAuth } from '@/lib/api/auth';
 import { useAuth } from '@/contexts/auth-context';
 import { WriteReferralContractHelper } from '@reffinity/blockchain-connector/writeReferralContractHelper';
-import { hardhat } from 'wagmi/chains';
 import { wagmiConfig } from '@/lib/wagmi/config';
+import { activeChainId } from '@/lib/wagmi/network';
 import { stringToHex } from 'viem';
 
 interface WalletConnectStepProps {
@@ -101,8 +101,8 @@ export function WalletConnectStep({ onSuccess, onReturningUser, onNeedsVerificat
       }
 
       // New user — complete blockchain registration before storing the token
-      // Ensure MetaMask is on the Hardhat chain before sending the tx
-      await switchChainAsync({ chainId: hardhat.id });
+      // Ensure the wallet is on the deployment's configured chain before sending the tx
+      await switchChainAsync({ chainId: activeChainId });
 
       // If referred, call acceptInvite with referrer's address; otherwise joinProgram
       let txHash: `0x${string}`;
@@ -115,7 +115,7 @@ export function WalletConnectStep({ onSuccess, onReturningUser, onNeedsVerificat
         const acceptInviteContext = await WriteReferralContractHelper.acceptInviteContext();
         txHash = await writeContractAsync({
           ...acceptInviteContext,
-          chainId: hardhat.id,
+          chainId: activeChainId,
           args: [response.referrerWalletAddress as `0x${string}`, inviteId as `0x${string}`],
         });
       } else {
@@ -129,7 +129,7 @@ export function WalletConnectStep({ onSuccess, onReturningUser, onNeedsVerificat
 
         txHash = await writeContractAsync({
           ...joinProgramContext,
-          chainId: hardhat.id,
+          chainId: activeChainId,
           args: [],
         });
 

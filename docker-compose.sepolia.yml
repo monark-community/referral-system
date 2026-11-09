@@ -1,0 +1,100 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-reffinity}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-reffinity}
+    volumes:
+      - postgres_sepolia_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-reffinity} -d ${POSTGRES_DB:-reffinity}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  db-migrate:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: >
+      sh -c "npx prisma generate && npx prisma migrate deploy && npx prisma db seed"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-reffinity}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-reffinity}
+    working_dir: /app/services/api
+    restart: "no"
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    ports:
+      - "${API_PORT:-3001}:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATABASE_URL: postgresql://${POSTGRES_USER:-reffinity}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-reffinity}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+      FRONTEND_URL: ${FRONTEND_URL:?FRONTEND_URL is required}
+      API_URL: ${API_URL:?API_URL is required}
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-smtp}
+      FROM_EMAIL: ${FROM_EMAIL:-noreply@reffinity.io}
+      FROM_NAME: ${FROM_NAME:-Reffinity}
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASS: ${SMTP_PASS}
+      BLOCKCHAIN_NETWORK: sepolia
+      RPC_URL: ${RPC_URL:?RPC_URL is required}
+      RPC_WEBSOCKET_URL: ${RPC_WEBSOCKET_URL:-}
+      REFERRAL_CONTRACT_ADDRESS: ${REFERRAL_CONTRACT_ADDRESS:?REFERRAL_CONTRACT_ADDRESS is required}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3001/ready || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 20s
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.web
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?NEXT_PUBLIC_API_URL is required}
+        NEXT_PUBLIC_BLOCKCHAIN_NETWORK: sepolia
+        NEXT_PUBLIC_RPC_URL: ${NEXT_PUBLIC_RPC_URL:?NEXT_PUBLIC_RPC_URL is required}
+        NEXT_PUBLIC_REFERRAL_CONTRACT_ADDRESS: ${REFERRAL_CONTRACT_ADDRESS:?REFERRAL_CONTRACT_ADDRESS is required}
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+      NEXT_PUBLIC_BLOCKCHAIN_NETWORK: sepolia
+      NEXT_PUBLIC_RPC_URL: ${NEXT_PUBLIC_RPC_URL}
+      NEXT_PUBLIC_REFERRAL_CONTRACT_ADDRESS: ${REFERRAL_CONTRACT_ADDRESS}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://' + process.env.HOSTNAME + ':3000').then(r => { if (!r.ok) process.exit(1) }).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  postgres_sepolia_data:

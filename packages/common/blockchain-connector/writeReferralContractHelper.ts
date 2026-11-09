@@ -9,7 +9,7 @@ export class WriteReferralContractHelper {
   static async acceptInviteContext() {
     return {
       abi: contracts.referral.abi,
-      address: contracts.referral.address.local,
+      address: contracts.referral.address,
       functionName: "acceptInvite",
     } as const;
   }
@@ -17,7 +17,7 @@ export class WriteReferralContractHelper {
   static async joinProgramContext() {
     return {
       abi: contracts.referral.abi,
-      address: contracts.referral.address.local,
+      address: contracts.referral.address,
       functionName: "joinProgram",
     } as const;
   }
@@ -25,7 +25,7 @@ export class WriteReferralContractHelper {
   static async setPointsForActionContext() {
     return {
       abi: contracts.referral.abi,
-      address: contracts.referral.address.local,
+      address: contracts.referral.address,
       functionName: "setPointsForAction",
     } as const;
   }
@@ -33,7 +33,7 @@ export class WriteReferralContractHelper {
   static async setReferralSplitContext() {
     return {
       abi: contracts.referral.abi,
-      address: contracts.referral.address.local,
+      address: contracts.referral.address,
       functionName: "setReferralSplit",
     } as const;
   }
@@ -41,7 +41,7 @@ export class WriteReferralContractHelper {
   static async addMilestoneContext() {
     return {
       abi: contracts.referral.abi,
-      address: contracts.referral.address.local,
+      address: contracts.referral.address,
       functionName: "addNewMilestone",
     } as const;
   }
@@ -49,7 +49,7 @@ export class WriteReferralContractHelper {
   static async createInviteContext() {
     return {
       abi: contracts.referral.abi,
-      address: contracts.referral.address.local,
+      address: contracts.referral.address,
       functionName: "createInvite",
     } as const;
   }
@@ -57,7 +57,7 @@ export class WriteReferralContractHelper {
   static async createCampaignContext() {
     return {
       abi: contracts.referral.abi,
-      address: contracts.referral.address.local,
+      address: contracts.referral.address,
       functionName: "createCampaign",
     } as const;
   }
@@ -65,7 +65,7 @@ export class WriteReferralContractHelper {
   static async createCampaignWithVisibilityContext() {
     return {
       abi: contracts.referral.abi,
-      address: contracts.referral.address.local,
+      address: contracts.referral.address,
       functionName: "createCampaignWithVisibility",
     } as const;
   }
@@ -73,7 +73,7 @@ export class WriteReferralContractHelper {
   static async setMaxCampaignPointsPerCompletionContext() {
     return {
       abi: contracts.referral.abi,
-      address: contracts.referral.address.local,
+      address: contracts.referral.address,
       functionName: "setMaxCampaignPointsPerCompletion",
     } as const;
   }
@@ -81,7 +81,7 @@ export class WriteReferralContractHelper {
   static async setMaxCampaignDirectRewardPerCompletionContext() {
     return {
       abi: contracts.referral.abi,
-      address: contracts.referral.address.local,
+      address: contracts.referral.address,
       functionName: "setMaxCampaignDirectRewardPerCompletion",
     } as const;
   }
@@ -89,7 +89,7 @@ export class WriteReferralContractHelper {
   static async fundCampaignContext() {
     return {
       abi: contracts.referral.abi,
-      address: contracts.referral.address.local,
+      address: contracts.referral.address,
       functionName: "fundCampaign",
     } as const;
   }
@@ -97,7 +97,7 @@ export class WriteReferralContractHelper {
   static async withdrawDirectRewardsContext() {
     return {
       abi: contracts.referral.abi,
-      address: contracts.referral.address.local,
+      address: contracts.referral.address,
       functionName: "withdrawDirectRewards",
     } as const;
   }
@@ -105,7 +105,7 @@ export class WriteReferralContractHelper {
   static async submitCampaignFulfillmentContext() {
     return {
       abi: contracts.referral.abi,
-      address: contracts.referral.address.local,
+      address: contracts.referral.address,
       functionName: "submitCampaignFulfillment",
     } as const;
   }
@@ -113,7 +113,7 @@ export class WriteReferralContractHelper {
   static async createPreVerifiedCampaignFulfillmentContext() {
     return {
       abi: contracts.referral.abi,
-      address: contracts.referral.address.local,
+      address: contracts.referral.address,
       functionName: "createPreVerifiedCampaignFulfillment",
     } as const;
   }
@@ -121,7 +121,7 @@ export class WriteReferralContractHelper {
   static async completePreVerifiedCampaignFulfillmentContext() {
     return {
       abi: contracts.referral.abi,
-      address: contracts.referral.address.local,
+      address: contracts.referral.address,
       functionName: "completePreVerifiedCampaignFulfillment",
     } as const;
   }
@@ -129,7 +129,7 @@ export class WriteReferralContractHelper {
   static async verifyCampaignFulfillmentContext() {
     return {
       abi: contracts.referral.abi,
-      address: contracts.referral.address.local,
+      address: contracts.referral.address,
       functionName: "verifyCampaignFulfillment",
     } as const;
   }
@@ -137,7 +137,7 @@ export class WriteReferralContractHelper {
   static async rejectCampaignFulfillmentContext() {
     return {
       abi: contracts.referral.abi,
-      address: contracts.referral.address.local,
+      address: contracts.referral.address,
       functionName: "rejectCampaignFulfillment",
     } as const;
   }

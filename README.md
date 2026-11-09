@@ -116,7 +116,8 @@ For running the app go to [setup.md](./setup.md)
 
 ## Deployment
 
-TODO
+- Local development remains the default: `npm run contracts:setup-local`, then `npm run dev`.
+- Sepolia production deployment: [docs/sepolia-deployment.md](docs/sepolia-deployment.md).
 
 ## Documentation
 

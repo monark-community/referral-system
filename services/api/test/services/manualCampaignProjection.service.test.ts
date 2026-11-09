@@ -368,6 +368,7 @@ describe("CampaignRewardPaid", () => {
       transactionHash: "0xdecided",
       logIndex: 4,
       blockNumber: 12n,
+      chainId: 31337,
       participantWalletAddress: ALICE.toLowerCase(),
       pool: 10,
       directRecipientWalletAddress: BOB.toLowerCase(),
@@ -378,7 +379,13 @@ describe("CampaignRewardPaid", () => {
       source: "campaign",
     };
     expect(db.referralPointAllocation.upsert).toHaveBeenCalledWith({
-      where: { transactionHash_logIndex: { transactionHash: "0xdecided", logIndex: 4 } },
+      where: {
+        chainId_transactionHash_logIndex: {
+          chainId: 31337,
+          transactionHash: "0xdecided",
+          logIndex: 4,
+        },
+      },
       update: allocation,
       create: allocation,
     });

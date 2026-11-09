@@ -18,6 +18,7 @@ import { ReadReferralContractService } from "@reffinity/blockchain-connector/rea
 import { getAddress, isAddress, zeroAddress, type Address, type Hex } from "viem";
 import { uuidToBytes32 } from "@reffinity/blockchain-connector/uuidBytesConverter";
 import { prisma } from "../lib/prisma.js";
+import { getApiBlockchainConfig } from "../config/blockchain.js";
 import {
   BOUNTY_TASK_STRATEGY,
   CAMPAIGN_DIRECT_NATIVE_STRATEGY,
@@ -89,7 +90,8 @@ let defaultChain: ManualCampaignChain | undefined;
 
 function chainFromEnvironment(): ManualCampaignChain {
   if (!defaultChain) {
-    const { publicClient } = createClient(process.env.CHAIN_TYPE as "localhost" | "sepolia");
+    const config = getApiBlockchainConfig();
+    const { publicClient } = createClient(config.network, config.rpcUrl);
     const reader = new ReadReferralContractService({ publicClient });
     defaultChain = {
       chainId: publicClient.chain!.id,
@@ -102,13 +104,9 @@ function chainFromEnvironment(): ManualCampaignChain {
   return defaultChain;
 }
 
-const configuredChainId = () => (process.env.CHAIN_TYPE === "sepolia" ? 11155111 : 31337);
-const configuredContractAddress = (): Address => {
-  const value = process.env.REFERRAL_CONTRACT_ADDRESS ?? process.env.NEXT_PUBLIC_REFERRAL_CONTRACT_ADDRESS
-    ?? "0x5fbdb2315678afecb367f032d93f642f64180aa3";
-  if (!isAddress(value)) throw new Error("Configured referral contract address is invalid");
-  return getAddress(value);
-};
+const configuredChainId = () => getApiBlockchainConfig().chainId;
+const configuredContractAddress = (): Address =>
+  getApiBlockchainConfig().contractAddress;
 
 // A contract call for the user's wallet to send; arguments are JSON-safe, so point amounts are numbers
 export type ChainCall = {

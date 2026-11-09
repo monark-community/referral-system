@@ -6,6 +6,8 @@ import { prisma } from "../lib/prisma.js";
 import { markNotReady, markReady } from "../readiness.js";
 import { clearE2EEmails } from "./e2eMailbox.service.js";
 import type { BlockchainListenerService } from "./blockchainListener.service.js";
+import { getApiBlockchainConfig } from "../config/blockchain.js";
+import { getConfiguredBlockchainNetwork } from "@reffinity/blockchain-connector/networks";
 
 type JsonRpcResponse<T> = {
   result?: T;
@@ -53,20 +55,20 @@ export function isE2EResetConfigured(): boolean {
     process.env.E2E_ENABLE_STATE_RESET === "true" &&
     typeof process.env.E2E_RESET_KEY === "string" &&
     process.env.E2E_RESET_KEY.length >= 16 &&
-    process.env.CHAIN_TYPE === "localhost"
+    getConfiguredBlockchainNetwork() === "localhost"
   );
 }
 
 function assertConfigured(): void {
   if (!isE2EResetConfigured()) {
     throw new Error(
-      "State reset requires NODE_ENV=test, E2E_ENABLE_STATE_RESET=true, an E2E_RESET_KEY of at least 16 characters, and CHAIN_TYPE=localhost",
+      "State reset requires NODE_ENV=test, E2E_ENABLE_STATE_RESET=true, an E2E_RESET_KEY of at least 16 characters, and BLOCKCHAIN_NETWORK=localhost",
     );
   }
 }
 
 async function rpc<T>(method: string, params: unknown[] = []): Promise<T> {
-  const response = await fetch(process.env.RPC_URL ?? "http://hardhat:8545", {
+  const response = await fetch(getApiBlockchainConfig().rpcUrl, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
@@ -233,7 +235,15 @@ export async function resetE2EState(): Promise<E2EResetResult> {
 }
 
 async function listenerResult(listening: boolean): Promise<E2EListenerResult> {
-  const state = await prisma.chainSyncState.findUnique({ where: { id: 1 } });
+  const config = getApiBlockchainConfig();
+  const state = await prisma.chainSyncState.findUnique({
+    where: {
+      chainId_contractAddress: {
+        chainId: config.chainId,
+        contractAddress: config.contractAddress.toLowerCase(),
+      },
+    },
+  });
   return {
     listening,
     syncState: state

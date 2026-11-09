@@ -9,6 +9,10 @@ import { createWalletClient, createPublicClient, http, maxUint256 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { hardhat, sepolia } from "viem/chains";
+
+const LOCAL_PRIVATE_KEY =
+  "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
 
 async function writeDeploymentArtifact(deployment) {
   const outputPath = process.env.DEPLOYMENT_OUTPUT_PATH;
@@ -25,23 +29,40 @@ async function writeDeploymentArtifact(deployment) {
 
 
 async function main() {
+  const connection = await hre.network.connect();
+  const network = connection.networkName === "sepolia" ? "sepolia" : "localhost";
+  const isLocal = network === "localhost";
+  const rpcUrl = isLocal
+    ? process.env.HARDHAT_NODE_URL || "http://127.0.0.1:8545"
+    : process.env.SEPOLIA_RPC_URL;
+  const privateKey = isLocal
+    ? process.env.HARDHAT_DEFAULT_PRIVATE_KEY || LOCAL_PRIVATE_KEY
+    : process.env.SEPOLIA_PRIVATE_KEY;
 
-  const rpcUrl = process.env.HARDHAT_NODE_URL || "http://127.0.0.1:8545";
-  console.log("Connecting to Hardhat node at:", rpcUrl);
+  if (!rpcUrl) throw new Error("SEPOLIA_RPC_URL is required for Sepolia deployment");
+  if (!privateKey) throw new Error("SEPOLIA_PRIVATE_KEY is required for Sepolia deployment");
 
-  // Hardhat local private key (account #0)
-  const account = privateKeyToAccount(
-    "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
-  );
+  const chain = isLocal ? hardhat : sepolia;
+  console.log(`Connecting to ${network} at:`, rpcUrl);
+  const account = privateKeyToAccount(privateKey);
 
   const publicClient = createPublicClient({
+    chain,
     transport: http(rpcUrl),
   });
 
   const walletClient = createWalletClient({
     account,
+    chain,
     transport: http(rpcUrl),
   });
+
+  const actualChainId = await publicClient.getChainId();
+  if (actualChainId !== chain.id) {
+    throw new Error(
+      `Deployment RPC chain mismatch: expected ${chain.id}, received ${actualChainId}`,
+    );
+  }
 
   // Get compiled facade artifact. ReferralProgram creates and owns its modules.
   const artifact = await hre.artifacts.readArtifact("ReferralProgram");
@@ -141,7 +162,7 @@ async function main() {
     console.log("Max campaign direct reward per completion set: uint256 maximum");
 
     await writeDeploymentArtifact({
-      chainId: await publicClient.getChainId(),
+      chainId: actualChainId,
       contractName: "ReferralProgram",
       address: receipt.contractAddress,
       deploymentTransactionHash: receipt.transactionHash,

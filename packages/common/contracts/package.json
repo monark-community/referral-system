@@ -15,6 +15,7 @@
     "generate:abi": "node scripts/generate-abi.js",
     "hardhat:node": "hardhat node",
     "hardhat:deploy": "hardhat run ./scripts/deploy.js --network localhost",
+    "deploy:sepolia": "hardhat --network sepolia --build-profile production run ./scripts/deploy.js",
     "setup-local": "concurrently -s first \"npm run hardhat:node\" \"wait-on http://localhost:8545 && npm run hardhat:deploy\"",
     "viem-test": "node scripts/viem-test.js"
   },
