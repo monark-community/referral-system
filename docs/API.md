@@ -770,6 +770,11 @@ signed-in user submits with the same code. The code stays the same for the campa
 every campaign, so its id, rewards, submissions and payouts can still be seen there. The contract
 records the campaign as private, but only as a label: the API is what checks the link's code.
 
+**Manual and pre-verified campaigns.** A campaign is `MANUAL` unless the creator sends
+`verificationType: "PRE_VERIFIED"` while it is a draft. A manual campaign takes proof and the
+creator approves it. A [pre-verified campaign](#pre-verified-campaigns) takes no proof: the creator
+lists the winners' wallets beforehand, and only those wallets can claim.
+
 **Submission states.** `SUBMITTED` (proof saved) → `UNDER_REVIEW` (on chain) → `APPROVED` or
 `REJECTED` (the creator's decision) → `REWARDED` (paid on chain). Every submission except a
 rejected one holds a spot. Until the chain has the creator's decision, they can change it or
@@ -788,9 +793,12 @@ send it again; the chain's decision is final and wins over the API's.
 | 403 | `NOT_CAMPAIGN_OWNER` | Only the campaign's creator can do this |
 | 403 | `OWN_CAMPAIGN` | Creators can't complete their own campaigns |
 | 404 | `CAMPAIGN_NOT_FOUND`, `SUBMISSION_NOT_FOUND` | Unknown campaign (or a private one without its code), or a submission not in it |
+| 404 | `WINNER_NOT_FOUND` | The wallet is not on the pre-verified campaign's list |
 | 409 | `NOT_EDITABLE` | Only a draft can be edited |
 | 409 | `INVALID_STATUS_CHANGE` | That state change isn't allowed from the current state |
-| 409 | `NOT_ACCEPTING_SUBMISSIONS` | Not active, or past its end date |
+| 409 | `NOT_ACCEPTING_SUBMISSIONS` | Not active, past its end date, or a pre-verified campaign (which takes no proof) |
+| 409 | `NOT_PRE_VERIFIED` | A winners-list route on a manual campaign |
+| 409 | `ALREADY_LISTED`, `NOT_REMOVABLE`, `LIST_CLOSED` | The wallet is already listed; it is already on chain or the last one; the list no longer takes wallets |
 | 409 | `CAMPAIGN_FULL` | No spots left |
 | 409 | `ALREADY_SUBMITTED` | The user has already submitted, even if rejected |
 | 409 | `NOT_REVIEWABLE` | Not on chain yet, or already decided on chain |
@@ -868,9 +876,11 @@ Shared fields:
 | `description` | string | No | Up to 500 characters |
 | `category` | string | Yes | `SOCIAL_MEDIA` or `COMMUNITY` |
 | `rewardType` | string | Yes | `POINTS` or `DIRECT` |
-| `maxCompletions` | integer | Yes | 1 or more |
+| `maxCompletions` | integer | Yes, except pre-verified | 1 or more. Leave it out for `PRE_VERIFIED`: its spots are its listed wallets |
 | `endsAt` | ISO date | Yes | In the future |
 | `isPrivate` | boolean | No | `true` for a [private campaign](#private-campaigns); defaults to `false` |
+| `verificationType` | string | No | `MANUAL` (default) or `PRE_VERIFIED`, which needs `isPrivate: true` |
+| `winners` | array | For `PRE_VERIFIED` | The [winners list](#pre-verified-campaigns): `[{ "walletAddress": "0x...", "label": "First place" }]` |
 
 Points fields (`rewardType: "POINTS"`):
 
@@ -939,7 +949,8 @@ Sending `rewardType` with its corresponding reward fields replaces the draft's r
 discriminator and configuration, so a creator may switch between Points and Direct before
 publication. Published campaigns cannot change reward type.
 Making a draft private gives it a `privateCode`, and making it public again removes it; a draft
-that stays private keeps its code.
+that stays private keeps its code. For a pre-verified draft, sending `winners` replaces its whole
+list and leaving it out keeps the list; switching a draft back to `MANUAL` drops the list.
 
 ### `POST /api/campaigns/:id/status`
 
@@ -999,6 +1010,162 @@ Body: `{ "reason": "The link is to someone else's profile" }`, up to 500 charact
 **Auth required:** Yes (creator). **Response (200):** `{ "fulfillment": ... }` with
 `{ "functionName": "rejectCampaignFulfillment", "args": [fulfillmentId] }`. Nothing is paid, and
 the participant can't submit again; the spot is freed for someone else.
+
+<a id="pre-verified-campaigns"></a>
+## Pre-verified Campaigns
+
+The creator lists the winners' wallets beforehand, and only those wallets can claim. It suits a
+contest judged somewhere else: nobody submits proof and nobody is picked afterwards. Public
+campaigns and manual private campaigns don't change.
+
+- **Private only.** The contract refuses a public pre-verified campaign, so the API does too.
+- **Wallet-based.** A winner needs no account to be listed. To claim on the site they sign in with
+  that wallet, which creates their account the first time.
+- **One spot per listed wallet.** `maxCompletions` is the number of listed wallets, kept by the API.
+  A list holds 1 to 100 wallets, each once, never the creator's own; a mixed-case address must have
+  a valid checksum.
+- **Funding works as for any Direct campaign.** The campaign only needs one funded run to be open.
+  When it runs out, listed winners wait until the creator tops it up.
+
+**The flow.** Each step that changes the chain is a `chain` call the user's own wallet sends:
+
+1. The creator saves a draft with `verificationType: "PRE_VERIFIED"`, `isPrivate: true` and `winners`,
+   then publishes it with the draft's `chain` call: `createCampaignWithVisibility` with
+   `VerificationType.PreVerified` (`2`).
+2. Once published, the creator's wallet puts each listed wallet on chain with its call from
+   [`GET /api/campaigns/:id/winners`](#get-apicampaignsidwinners):
+   `createPreVerifiedCampaignFulfillment(campaignId, winnerId, walletAddress)`. One transaction per wallet.
+3. A winner claims with their call from [`GET /api/campaigns/rewards/pre-verified/me`](#get-apicampaignsrewardspre-verifiedme)
+   or [`GET /api/campaigns/:id/winners/me`](#get-apicampaignsidwinnersme):
+   `completePreVerifiedCampaignFulfillment(winnerId)`. The contract checks the sender is the listed
+   wallet, then pays the winner and the referral pool, like an approved submission.
+4. A Direct reward lands in the winner's balance and is withdrawn with
+   [`POST /api/campaigns/rewards/direct/withdraw`](#post-apicampaignsrewardsdirectwithdraw). Points are paid on the claim.
+
+**When each step is allowed.**
+
+| Step | Allowed |
+|------|---------|
+| Add wallets | A draft, or an `ACTIVE` campaign before its `endsAt` |
+| Remove a wallet | Before it goes on chain, keeping at least one wallet; not on a cancelled campaign |
+| Put a wallet on chain | Once published and not cancelled; a Direct campaign needs a funded run |
+| Claim | `ACTIVE` or `ENDED`, so ending never strands a listed winner; `PAUSED` holds claims; a Direct campaign needs a funded run |
+
+An ended pre-verified Direct campaign can still be topped up with `POST /api/campaigns/:id/funding`,
+for winners still waiting.
+
+**A listed wallet's `status`.** `LISTED` (saved) → `RESERVED` (on chain) → `CLAIMED` → `REWARDED` (paid).
+`REMOVED` wallets are left out of every list. Each response also carries a `state` that says what
+comes next (below).
+
+**A listed wallet**, as the creator sees it. `reservation`, `claim` and `reward` are the chain events
+that confirmed each step, or `null`. `label` is the creator's own note, never shown to the winner:
+
+```json
+{
+  "id": "44444444-4444-4444-8444-444444444444",
+  "campaignId": "11111111-1111-4111-8111-111111111111",
+  "walletAddress": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+  "label": "First place",
+  "status": "LISTED",
+  "state": "READY_TO_PUT_ON_CHAIN",
+  "completerReward": null,
+  "chainId": 31337,
+  "createdAt": "2026-11-09T12:00:00.000Z",
+  "reservedAt": null,
+  "claimedAt": null,
+  "rewardedAt": null,
+  "reservation": null,
+  "claim": null,
+  "reward": null,
+  "chain": {
+    "functionName": "createPreVerifiedCampaignFulfillment",
+    "args": ["0x1111...", "0x4444...", "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"]
+  }
+}
+```
+
+The creator's `state`:
+
+| `state` | Meaning | `chain` |
+|---------|---------|---------|
+| `NOT_PUBLISHED` | The campaign isn't on chain yet | `null` |
+| `READY_TO_PUT_ON_CHAIN` | The creator's wallet can put this wallet on chain | `createPreVerifiedCampaignFulfillment` |
+| `WAITING_FOR_FUNDS` | A Direct campaign has no funded run left | `null` |
+| `WAITING_FOR_CLAIM` | On chain; the winner hasn't claimed yet | `null` |
+| `CLAIMED` | The winner claimed | `null` |
+| `CLOSED` | The campaign was cancelled | `null` |
+
+The winner's `state`:
+
+| `state` | Meaning | `chain` |
+|---------|---------|---------|
+| `NOT_ON_CHAIN_YET` | Listed; the creator still has to put it on chain | `null` |
+| `CLAIMABLE` | The winner's wallet can claim | `completePreVerifiedCampaignFulfillment` |
+| `WAITING_FOR_FUNDS` | A Direct campaign has no funded run left until the creator tops it up | `null` |
+| `PAUSED` | The creator paused the campaign | `null` |
+| `CLAIMED` | Already claimed | `null` |
+
+### `GET /api/campaigns/:id/winners`
+
+The creator's list, oldest first. **Auth required:** Yes (creator). Works on a draft too. For a
+published Direct campaign, `funding` says how much to top up so every unpaid winner can claim:
+
+```json
+{
+  "winners": [{ "...": "a listed wallet, as above" }],
+  "funding": {
+    "balanceWei": "40",
+    "runsRemaining": 1,
+    "chainStatus": "ACTIVE",
+    "rewardPerRunWei": "40",
+    "unpaidWinners": 2,
+    "runsShort": 1,
+    "topUpWei": "40"
+  }
+}
+```
+
+`funding` is `null` for a points campaign or a draft. Pass `runsShort` to
+[`POST /api/campaigns/:id/funding`](#post-apicampaignsidfunding) as `runs`.
+
+### `POST /api/campaigns/:id/winners`
+
+Add wallets. Body: `{ "winners": [{ "walletAddress": "0x...", "label": "Late entry" }] }`.
+**Auth required:** Yes (creator). **Response (201):** the whole list, as `GET` returns it. A wallet
+removed earlier comes back with the same id.
+
+### `DELETE /api/campaigns/:id/winners/:winnerId`
+
+Take a wallet off the list before it goes on chain; the contract can't remove one after.
+**Auth required:** Yes (creator). **Response (200):** the whole list.
+
+### `GET /api/campaigns/rewards/pre-verified/me`
+
+Every published pre-verified campaign that lists the signed-in wallet, newest first, for a
+"Rewards to claim" card. **Auth required:** Yes. The campaign is the board summary, without its
+`privateCode`; the entry has no `label`:
+
+```json
+{
+  "rewards": [
+    {
+      "campaign": { "...": "board summary", "verificationType": "PRE_VERIFIED" },
+      "winner": {
+        "...": "a listed wallet, without label",
+        "state": "CLAIMABLE",
+        "chain": { "functionName": "completePreVerifiedCampaignFulfillment", "args": ["0x4444..."] }
+      }
+    }
+  ]
+}
+```
+
+### `GET /api/campaigns/:id/winners/me`
+
+The signed-in wallet's entry on one campaign, for its link page. **Auth required:** Yes.
+**Response (200):** `{ "winner": ... }`, shaped like an entry above. **Response (404):**
+`WINNER_NOT_FOUND` when the wallet isn't listed or the campaign isn't published yet.
 
 ---
 
@@ -1150,6 +1317,13 @@ the event names, and skips an event for one the API didn't save or from the wron
 | `CampaignFulfillmentVerified` | The creator's approval is final (`APPROVED`) |
 | `CampaignFulfillmentRejected` | The creator's rejection is final (`REJECTED`) |
 | `CampaignRewardPaid` | The submission becomes `REWARDED`, and the pool's split is stored in `ReferralPointAllocation` with `source: "campaign"`; invite points are never touched |
+
+For a [pre-verified campaign](#pre-verified-campaigns), the same events move a listed wallet instead:
+`CampaignCreated` also has to carry `VerificationType.PreVerified` for a pre-verified draft (and
+`Manual` for a manual one), `CampaignFulfillmentSubmitted` makes the wallet `RESERVED` (the creator
+put it on chain), `CampaignFulfillmentVerified` makes it `CLAIMED`, and `CampaignRewardPaid` makes it
+`REWARDED` and stores the payout the same way as for a submission. A Direct payout's
+`DirectCampaignSettlement` then names the winner instead of a submission.
 
 Each is safe to apply twice. The new balances themselves arrive as `PointsAdded` events, like any other.
 

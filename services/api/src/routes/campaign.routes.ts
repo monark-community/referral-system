@@ -24,6 +24,13 @@ import {
   submitCampaignProof,
   updateCampaign,
 } from "../controllers/manualCampaign.controller.js";
+import {
+  addWinners,
+  getCampaignWinners,
+  getMyPreVerifiedRewards,
+  getMyWinnerEntry,
+  removeWinner,
+} from "../controllers/preVerifiedCampaign.controller.js";
 import { authMiddleware } from "../middlewares/auth.middleware.js";
 
 const router = Router();
@@ -37,6 +44,8 @@ router.get("/mine", authMiddleware, getMyCampaigns);
 // Fixed reward routes must precede /:idOrKey.
 router.get("/rewards/direct/me", authMiddleware, getMyDirectRewards);
 router.post("/rewards/direct/withdraw", authMiddleware, prepareMyDirectRewardWithdrawal);
+// GET /api/campaigns/rewards/pre-verified/me - Every pre-verified campaign that lists your wallet
+router.get("/rewards/pre-verified/me", authMiddleware, getMyPreVerifiedRewards);
 // GET /api/campaigns/private/:code - A private campaign, opened through its link
 router.get("/private/:code", getPrivateCampaign);
 router.get(
@@ -58,6 +67,11 @@ router.post(
   authMiddleware,
   rejectCampaignSubmission,
 );
+// A pre-verified campaign's winners list: the creator's list, adding and removing wallets, and your own entry
+router.get("/:id/winners/me", authMiddleware, getMyWinnerEntry);
+router.get("/:id/winners", authMiddleware, getCampaignWinners);
+router.post("/:id/winners", authMiddleware, addWinners);
+router.delete("/:id/winners/:winnerId", authMiddleware, removeWinner);
 // POST /api/campaigns/:id/status - Pause, resume, end or cancel
 router.post("/:id/status", authMiddleware, changeCampaignStatus);
 router.post("/:id/funding", authMiddleware, prepareCampaignFunding);

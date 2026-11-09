@@ -50,6 +50,11 @@ const ERROR_STATUS: Record<ManualCampaignErrorCode, number> = {
   ALREADY_SUBMITTED: 409,
   NOT_REVIEWABLE: 409,
   CHAIN_UNAVAILABLE: 503,
+  NOT_PRE_VERIFIED: 409,
+  WINNER_NOT_FOUND: 404,
+  ALREADY_LISTED: 409,
+  NOT_REMOVABLE: 409,
+  LIST_CLOSED: 409,
 };
 
 export function handleManualCampaignError(error: unknown, res: Response, fallback: string): void {
@@ -99,7 +104,7 @@ export function manualCampaignSummary(campaign: ManualCampaignDefinition, spotsT
     owner: campaign.owner,
     taskType: "BOUNTY",
     category: campaign.category,
-    verificationType: "MANUAL",
+    verificationType: campaign.verificationType === "PRE_VERIFIED" ? "PRE_VERIFIED" : "MANUAL",
     reward,
     maxCompletions: campaign.maxCompletions,
     spotsLeft: Math.max(0, campaign.maxCompletions - spotsTaken),
@@ -123,7 +128,7 @@ function ownerCampaign(campaign: ManualCampaignDefinition, spotsTaken: number) {
   };
 }
 
-function chainEvent(transactionHash: string | null, blockNumber: bigint | null, logIndex: number | null) {
+export function chainEvent(transactionHash: string | null, blockNumber: bigint | null, logIndex: number | null) {
   return transactionHash
     ? { transactionHash, blockNumber: blockNumber?.toString() ?? null, logIndex }
     : null;
@@ -224,9 +229,9 @@ function reviewItem(campaign: ManualCampaignDefinition, fulfillment: ReviewedFul
 }
 
 // Express types route params as string | string[]; these routes only have plain segments
-const param = (req: Request, name: string) => String(req.params[name]);
+export const param = (req: Request, name: string) => String(req.params[name]);
 
-function requireUser(req: Request, res: Response): string | null {
+export function requireUser(req: Request, res: Response): string | null {
   if (!req.user) {
     res.status(401).json({ error: "Not authenticated" });
     return null;
