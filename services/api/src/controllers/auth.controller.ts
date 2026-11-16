@@ -11,6 +11,7 @@ import {
   generateReferralCode,
 } from "../services/auth.service.js";
 import { uuidToBytes32 } from "@reffinity/blockchain-connector/uuidBytesConverter";
+import { id as hashUtf8 } from "ethers";
 
 class PrivateInviteUnavailableError extends Error {}
 
@@ -46,6 +47,8 @@ export async function walletAuth(req: Request, res: Response): Promise<void> {
 
     let isNewUser = false;
     let referrerWalletAddress: string | undefined;
+    let referrerPublicLinkId: string | undefined;
+    let referralType: "public" | "private" | undefined;
     let bytesInviteId: string | undefined;
 
     // Create new user if not found
@@ -135,11 +138,22 @@ export async function walletAuth(req: Request, res: Response): Promise<void> {
           inviteId = invite.id;
         }
 
-        return { user: createdUser, referrer, inviteId };
+        return {
+          user: createdUser,
+          referrer,
+          inviteId,
+          referralType: referrer
+            ? (privateInviteId ? "private" : "public")
+            : undefined,
+        } as const;
       });
 
       user = created.user;
       referrerWalletAddress = created.referrer?.walletAddress;
+      referrerPublicLinkId = created.referrer
+        ? hashUtf8(created.referrer.referralCode)
+        : undefined;
+      referralType = created.referralType;
       const inviteId = created.inviteId;
 
       bytesInviteId = inviteId ? uuidToBytes32(inviteId) : "";
@@ -171,8 +185,11 @@ export async function walletAuth(req: Request, res: Response): Promise<void> {
       },
       token,
       isNewUser,
+      publicLinkId: hashUtf8(user.referralCode),
       bytesInviteId,
       ...(referrerWalletAddress && { referrerWalletAddress }),
+      ...(referrerPublicLinkId && { referrerPublicLinkId }),
+      ...(referralType && { referralType }),
     });
   } catch (error) {
     console.error("Wallet auth error:", error);

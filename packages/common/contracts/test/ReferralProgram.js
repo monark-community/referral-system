@@ -518,9 +518,10 @@ test("no milestone is announced for points that do not reach a new level", async
     await addReferrerAndReferree();
 
     // The referrer is already at the top milestone, so another referral only announces the new referee's first level
-    const receipt = await writeProgramContract(testAccounts[2], testWalletClients[2], "acceptInvite", [
-        referrerAccount.address,
+    const receipt = await writeProgramContract(testAccounts[2], testWalletClients[2], "acceptPublicReferral", [
+        publicLinkId(referrerAccount),
         stringToHex("invite-second", { size: 32 }),
+        publicLinkId(testAccounts[2]),
     ]);
 
     assert.deepEqual(milestoneRewardEvents(receipt), [
@@ -528,14 +529,14 @@ test("no milestone is announced for points that do not reach a new level", async
     ]);
 });
 
-test("user can have have a invite created", async () => {
+test("a referrer can create, accept, and cancel private invites", async () => {
     await addPointsForActions();
 
     await setMilestones()
 
     await addReferrerAndReferree();
 
-    await createInvitesForUser();
+    await createInvitesForUser(referrerAccount);
 
     const userinvites = await publicClient.readContract({
         address: contractAddress,
@@ -562,214 +563,135 @@ test("user can have have a invite created", async () => {
     assert.equal(userinvites[2].points, 100n); // points for referring
 
     assert.equal(userinvites[3].inviteId, stringToHex("invite3", {size: 32}));
-    assert.equal(userinvites[3].status, 2); // closed
+    assert.equal(userinvites[3].status, 2); // closed 
     assert.equal(userinvites[3].points, 100n); // points for referring
 
-    const userPoints = await publicClient.readContract({
+    const userPendingPoints = await publicClient.readContract({
         address: contractAddress,
         abi,
-        functionName: "viewPoints",
+        functionName: "viewPendingPoints",
         args: [referrerAccount.address],
     });
 
-    // 100 for invite0 plus 100 for invite2, which account #2 joined through
-    assert.equal(userPoints, 200n);
-
+    assert.equal(userPendingPoints, 100n);
+    
 });
 
-test("user invite status can be updated", async () => {
+test("only the invite referrer can cancel it and cancellation removes pending points", async () => {
     await addPointsForActions();
 
     await setMilestones()
 
     await addReferrerAndReferree();
 
-    await createInvitesForUser();
+    const inviteId = stringToHex("cancel-authorization", { size: 32 });
+    await writeProgramContract(referrerAccount, referrerWalletClient, "createInvite", [inviteId]);
 
-    const userinvites = await publicClient.readContract({
-        address: contractAddress,
-        abi,
-        functionName: "getReferrerInvites",
-        args: [referrerAccount.address],
-    });
+    await assert.rejects(
+        () => writeProgramContract(referreeAccount, referreeWalletClient, "cancelInvite", [inviteId]),
+    );
 
-    assert.equal(userinvites.length, 4);
-
-    assert.equal(userinvites[1].inviteId, stringToHex("invite1", {size: 32}));
-    assert.equal(userinvites[1].status, 0); // pending 
-    assert.equal(userinvites[1].points, 100n); // points for referring
-
-    let request;
-
-    ({ request } = await publicClient.simulateContract({
-        account: referrerAccount,
-        address: contractAddress,
-        abi: abi,
-        functionName: "updateInviteStatus",
-        args: [userinvites[1].inviteId, 2], // the referrer cancels their pending invite
-    }))
-    var hash = await referreeWalletClient.writeContract(request)
-    await publicClient.waitForTransactionReceipt({ hash });
-
-    const newStatus = await publicClient.readContract({
+    assert.equal(await publicClient.readContract({
         address: contractAddress,
         abi,
         functionName: "getInviteStatus",
-        args: [userinvites[1].inviteId],
-    });
+        args: [inviteId],
+    }), 0);
+    assert.equal(await publicClient.readContract({
+        address: contractAddress,
+        abi,
+        functionName: "viewPendingPoints",
+        args: [referrerAccount.address],
+    }), 100n);
 
-    assert.equal(newStatus, 2); // status should be closed now
+    await writeProgramContract(referrerAccount, referrerWalletClient, "cancelInvite", [inviteId]);
 
+    assert.equal(await publicClient.readContract({
+        address: contractAddress,
+        abi,
+        functionName: "getInviteStatus",
+        args: [inviteId],
+    }), 2);
+    assert.equal(await publicClient.readContract({
+        address: contractAddress,
+        abi,
+        functionName: "viewPendingPoints",
+        args: [referrerAccount.address],
+    }), 0n);
 });
 
-/* Invite ownership (issue #101). The local Hardhat node returns no revert reason,
-   so each rejected call is paired with a near-identical call that succeeds. */
+test("private acceptance requires a pending invite owned by the supplied referrer", async () => {
+    await addPointsForActions();
+    await addReferrerAndReferree();
 
-test("only the referrer can create their own invite", async () => {
-    await joinProgram(testAccounts[0], testWalletClients[0]);
-    const inviteId = stringToHex("owned-invite", { size: 32 });
+    const inviteId = stringToHex("owned-pending", { size: 32 });
+    await writeProgramContract(referrerAccount, referrerWalletClient, "createInvite", [inviteId]);
 
-    // Account #2 tries to register an invite in account #0's name
     await assert.rejects(
-        writeProgramContract(testAccounts[2], testWalletClients[2], "createInvite", [
+        () => writeProgramContract(testAccounts[2], testWalletClients[2], "acceptInvite", [
+            referreeAccount.address,
             inviteId,
-            testAccounts[0].address,
-            0,
-        ])
+            publicLinkId(testAccounts[2]),
+        ]),
     );
-    assert.deepEqual(await getReferrerInvites(testAccounts[0]), []);
+    await assert.rejects(
+        () => writeProgramContract(testAccounts[2], testWalletClients[2], "acceptInvite", [
+            referrerAccount.address,
+            stringToHex("missing", { size: 32 }),
+            publicLinkId(testAccounts[2]),
+        ]),
+    );
 
-    await writeProgramContract(testAccounts[0], testWalletClients[0], "createInvite", [
+    await writeProgramContract(testAccounts[2], testWalletClients[2], "acceptInvite", [
+        referrerAccount.address,
         inviteId,
-        testAccounts[0].address,
-        0,
+        publicLinkId(testAccounts[2]),
     ]);
-    assert.equal(await getInviteStatus(inviteId), 0);
-    assert.equal(await getInviteReferrer(inviteId), testAccounts[0].address);
-});
 
-test("new invites must start as Pending", async () => {
-    await joinProgram(testAccounts[0], testWalletClients[0]);
-    const inviteId = stringToHex("must-be-pending", { size: 32 });
-
-    for (const status of [1, 2]) { // Accepted, Closed
-        await assert.rejects(
-            writeProgramContract(testAccounts[0], testWalletClients[0], "createInvite", [
-                inviteId,
-                testAccounts[0].address,
-                status,
-            ])
-        );
-    }
-
-    await writeProgramContract(testAccounts[0], testWalletClients[0], "createInvite", [
-        inviteId,
-        testAccounts[0].address,
-        0,
-    ]);
-    assert.equal(await getInviteStatus(inviteId), 0);
-});
-
-test("only the referrer can cancel their invite", async () => {
-    await joinProgram(testAccounts[0], testWalletClients[0]);
-    const inviteId = await createPendingInvite(0, "cancel-me");
-
+    assert.equal(await publicClient.readContract({
+        address: contractAddress,
+        abi,
+        functionName: "getInviteStatus",
+        args: [inviteId],
+    }), 1);
     await assert.rejects(
-        writeProgramContract(testAccounts[2], testWalletClients[2], "updateInviteStatus", [inviteId, 2])
-    );
-    assert.equal(await getInviteStatus(inviteId), 0);
-
-    await writeProgramContract(testAccounts[0], testWalletClients[0], "updateInviteStatus", [inviteId, 2]);
-    assert.equal(await getInviteStatus(inviteId), 2);
-});
-
-test("updateInviteStatus cannot mark an invite Accepted or reopen it", async () => {
-    await joinProgram(testAccounts[0], testWalletClients[0]);
-    const inviteId = await createPendingInvite(0, "no-shortcut");
-
-    // Even the referrer can't mark their own invite Accepted without anyone joining
-    await assert.rejects(
-        writeProgramContract(testAccounts[0], testWalletClients[0], "updateInviteStatus", [inviteId, 1])
-    );
-    assert.equal(await getInviteStatus(inviteId), 0);
-
-    await writeProgramContract(testAccounts[0], testWalletClients[0], "updateInviteStatus", [inviteId, 2]);
-
-    // A cancelled invite can't be set back to Pending
-    await assert.rejects(
-        writeProgramContract(testAccounts[0], testWalletClients[0], "updateInviteStatus", [inviteId, 0])
-    );
-    assert.equal(await getInviteStatus(inviteId), 2);
-});
-
-test("an accepted invite can't be cancelled afterwards", async () => {
-    await joinProgram(testAccounts[0], testWalletClients[0]);
-    const openInvite = await createPendingInvite(0, "still-open");
-    const usedInvite = await createPendingInvite(0, "already-used");
-    await acceptReferral(2, 0, "already-used");
-
-    await assert.rejects(
-        writeProgramContract(testAccounts[0], testWalletClients[0], "updateInviteStatus", [usedInvite, 2])
-    );
-    assert.equal(await getInviteStatus(usedInvite), 1);
-
-    await writeProgramContract(testAccounts[0], testWalletClients[0], "updateInviteStatus", [openInvite, 2]);
-    assert.equal(await getInviteStatus(openInvite), 2);
-});
-
-test("completeInvite can no longer be called directly", () => {
-    const callable = abi.filter((item) => item.type === "function").map((item) => item.name);
-    assert.equal(callable.includes("completeInvite"), false);
-    assert.equal(callable.includes("_completeInvite"), false);
-    assert.equal(callable.includes("acceptInvite"), true);
-});
-
-test("acceptInvite rejects an invite that belongs to another referrer", async () => {
-    await joinProgram(testAccounts[0], testWalletClients[0]);
-    await acceptReferral(1, 0, "zero-to-one");
-    const inviteId = await createPendingInvite(1, "ones-invite");
-
-    // Account #2 joins with account #1's invite but names account #0 as the referrer
-    await assert.rejects(
-        writeProgramContract(testAccounts[2], testWalletClients[2], "acceptInvite", [
-            testAccounts[0].address,
+        () => writeProgramContract(testAccounts[3], testWalletClients[3], "acceptInvite", [
+            referrerAccount.address,
             inviteId,
-        ])
+            publicLinkId(testAccounts[3]),
+        ]),
     );
-    assert.equal(await getInviteStatus(inviteId), 0);
-
-    await acceptReferral(2, 1, "ones-invite");
-    assert.equal(await getInviteStatus(inviteId), 1);
-    assert.equal(await viewReferrerOf(testAccounts[2]), testAccounts[1].address);
 });
 
-test("acceptInvite rejects a cancelled or already used invite", async () => {
-    await joinProgram(testAccounts[0], testWalletClients[0]);
-    const cancelledInvite = await createPendingInvite(0, "cancelled");
-    await writeProgramContract(testAccounts[0], testWalletClients[0], "updateInviteStatus", [cancelledInvite, 2]);
-    const usedInvite = await createPendingInvite(0, "used-once");
-    await acceptReferral(2, 0, "used-once");
+test("reusable public links resolve their registered owner and reject unknown links", async () => {
+    await addPointsForActions();
+    await joinProgram(referrerAccount, referrerWalletClient);
 
-    await assert.rejects(acceptReferral(3, 0, "cancelled"));
-    await assert.rejects(acceptReferral(3, 0, "used-once"));
-    assert.equal(await viewReferrerOf(testAccounts[3]), zeroAddress);
+    await assert.rejects(
+        () => writeProgramContract(referreeAccount, referreeWalletClient, "acceptPublicReferral", [
+            stringToHex("unknown-link", { size: 32 }),
+            stringToHex("unknown-referral", { size: 32 }),
+            publicLinkId(referreeAccount),
+        ]),
+    );
 
-    const openInvite = await createPendingInvite(0, "open");
-    await acceptReferral(3, 0, "open");
-    assert.equal(await getInviteStatus(openInvite), 1);
-    assert.equal(await viewReferrerOf(testAccounts[3]), testAccounts[0].address);
-});
+    await writeProgramContract(referreeAccount, referreeWalletClient, "acceptPublicReferral", [
+        publicLinkId(referrerAccount),
+        stringToHex("public-one", { size: 32 }),
+        publicLinkId(referreeAccount),
+    ]);
+    await writeProgramContract(testAccounts[2], testWalletClients[2], "acceptPublicReferral", [
+        publicLinkId(referrerAccount),
+        stringToHex("public-two", { size: 32 }),
+        publicLinkId(testAccounts[2]),
+    ]);
 
-test("acceptInvite still works for links with no invite on chain yet", async () => {
-    await joinProgram(testAccounts[0], testWalletClients[0]);
-    const inviteId = stringToHex("public-link", { size: 32 });
-    assert.equal(await getInviteReferrer(inviteId), zeroAddress);
-
-    await acceptReferral(2, 0, "public-link");
-
-    assert.equal(await getInviteStatus(inviteId), 1);
-    assert.equal(await getInviteReferrer(inviteId), testAccounts[0].address);
-    assert.equal(await viewReferrerOf(testAccounts[2]), testAccounts[0].address);
+    assert.equal(await publicClient.readContract({
+        address: contractAddress,
+        abi,
+        functionName: "viewReferrer",
+        args: [testAccounts[2].address],
+    }), referrerAccount.address);
 });
 
 
@@ -790,19 +712,24 @@ async function writeProgramContract(account, walletClient, functionName, args = 
 }
 
 async function joinProgram(account, walletClient) {
-    await writeProgramContract(account, walletClient, "joinProgram");
+    await writeProgramContract(account, walletClient, "joinProgram", [publicLinkId(account)]);
 }
 
 async function acceptReferral(referreeIndex, referrerIndex, inviteName) {
     await writeProgramContract(
         testAccounts[referreeIndex],
         testWalletClients[referreeIndex],
-        "acceptInvite",
+        "acceptPublicReferral",
         [
-            testAccounts[referrerIndex].address,
+            publicLinkId(testAccounts[referrerIndex]),
             stringToHex(inviteName, { size: 32 }),
+            publicLinkId(testAccounts[referreeIndex]),
         ]
     );
+}
+
+function publicLinkId(account) {
+    return stringToHex(`public-${account.address.slice(-8)}`, { size: 32 });
 }
 
 async function buildBranchedReferralTree() {
@@ -880,17 +807,22 @@ async function addReferrerAndReferree(){
         address: contractAddress,
         abi: abi,
         functionName: "joinProgram",
+        args: [publicLinkId(referrerAccount)],
     }))
     var hash = await referreeWalletClient.writeContract(request)
     await publicClient.waitForTransactionReceipt({ hash });
 
-    // acceptInvite
+    // Accept through the referrer's reusable public link.
     ({ request } = await publicClient.simulateContract({
         account: referreeAccount,
         address: contractAddress,
         abi: abi,
-        functionName: "acceptInvite",
-        args: [referrerAccount.address, stringToHex("invite0", {size: 32})],
+        functionName: "acceptPublicReferral",
+        args: [
+            publicLinkId(referrerAccount),
+            stringToHex("invite0", {size: 32}),
+            publicLinkId(referreeAccount),
+        ],
     }))
     hash = await referreeWalletClient.writeContract(request)
     return publicClient.waitForTransactionReceipt({ hash });
@@ -946,62 +878,19 @@ async function setMilestones(){
     await publicClient.waitForTransactionReceipt({ hash });
 }
 
-// Leaves the referrer (account #0) with invite1 Pending, invite2 Accepted and invite3 Closed.
-// Invites always start Pending; invite2 is accepted by account #2 joining and invite3 is cancelled by the referrer.
-async function createInvitesForUser() {
-    for (const name of ["invite1", "invite2", "invite3"]) {
-        await createPendingInvite(0, name);
-    }
-    await acceptReferral(2, 0, "invite2");
-    await writeProgramContract(referrerAccount, referrerWalletClient, "updateInviteStatus", [
-        stringToHex("invite3", { size: 32 }),
-        2,
+async function createInvitesForUser(user) {
+    assert.equal(user.address, referrerAccount.address);
+    const pendingId = stringToHex("invite1", { size: 32 });
+    const acceptedId = stringToHex("invite2", { size: 32 });
+    const closedId = stringToHex("invite3", { size: 32 });
+
+    await writeProgramContract(referrerAccount, referrerWalletClient, "createInvite", [pendingId]);
+    await writeProgramContract(referrerAccount, referrerWalletClient, "createInvite", [acceptedId]);
+    await writeProgramContract(testAccounts[2], testWalletClients[2], "acceptInvite", [
+        referrerAccount.address,
+        acceptedId,
+        publicLinkId(testAccounts[2]),
     ]);
-}
-
-async function createPendingInvite(referrerIndex, inviteName) {
-    const inviteId = stringToHex(inviteName, { size: 32 });
-    await writeProgramContract(
-        testAccounts[referrerIndex],
-        testWalletClients[referrerIndex],
-        "createInvite",
-        [inviteId, testAccounts[referrerIndex].address, 0]
-    );
-    return inviteId;
-}
-
-async function getInviteStatus(inviteId) {
-    return publicClient.readContract({
-        address: contractAddress,
-        abi,
-        functionName: "getInviteStatus",
-        args: [inviteId],
-    });
-}
-
-async function getInviteReferrer(inviteId) {
-    return publicClient.readContract({
-        address: contractAddress,
-        abi,
-        functionName: "getInviteReferrer",
-        args: [inviteId],
-    });
-}
-
-async function getReferrerInvites(account) {
-    return publicClient.readContract({
-        address: contractAddress,
-        abi,
-        functionName: "getReferrerInvites",
-        args: [account.address],
-    });
-}
-
-async function viewReferrerOf(account) {
-    return publicClient.readContract({
-        address: contractAddress,
-        abi,
-        functionName: "viewReferrer",
-        args: [account.address],
-    });
+    await writeProgramContract(referrerAccount, referrerWalletClient, "createInvite", [closedId]);
+    await writeProgramContract(referrerAccount, referrerWalletClient, "cancelInvite", [closedId]);
 }

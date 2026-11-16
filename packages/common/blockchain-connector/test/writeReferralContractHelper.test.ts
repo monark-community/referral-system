@@ -6,6 +6,7 @@ import { contracts } from "../contracts.js";
 describe("WriteReferralContractHelper", () => {
   test.each([
     ["acceptInviteContext", "acceptInvite"],
+    ["acceptPublicReferralContext", "acceptPublicReferral"],
     ["joinProgramContext", "joinProgram"],
     ["setPointsForActionContext", "setPointsForAction"],
     ["setReferralSplitContext", "setReferralSplit"],

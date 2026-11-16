@@ -12,7 +12,9 @@ import { cn } from "@/lib/utils";
 import { createPrivateInvite, PrivateInviteResponse } from "@/lib/api/user";
 import { WriteReferralContractHelper } from "@reffinity/blockchain-connector/writeReferralContractHelper";
 import { useWriteContract } from "wagmi";
+import { waitForTransactionReceipt } from "@wagmi/core";
 import { activeChainId } from "@/lib/wagmi/network";
+import { wagmiConfig } from "@/lib/wagmi/config";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth-context";
 
@@ -34,6 +36,7 @@ export function ReferralLinkCard({ referralLink, onShare }: ReferralLinkCardProp
   const queryClient = useQueryClient();
   const { refreshUser } = useAuth();
   const [privateInvite, setPrivateInvite] = useState<PrivateInviteResponse | null>(null);
+  const [privateInviteRegistered, setPrivateInviteRegistered] = useState(false);
   const [showPopup, setShowPopup] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showShareOptions, setShowShareOptions] = useState(false);
@@ -62,30 +65,31 @@ export function ReferralLinkCard({ referralLink, onShare }: ReferralLinkCardProp
   };
 
   const handleShareViaLink = async (link: string, type: LinkType) => {
-    if (!navigator.share) {
-      alert(`Share link: ${link}`);
-      return;
-    }
     try {
+      if (type == LinkType.private && !privateInviteRegistered) {
+        if (!privateInvite?.bytesinviteId) {
+          throw new Error("Private invite ID is missing");
+        }
+        const ctx = await WriteReferralContractHelper.createInviteContext();
+        const hash = await writeContractAsync({
+          ...ctx,
+          chainId: activeChainId,
+          args: [privateInvite.bytesinviteId as `0x${string}`],
+        });
+        await waitForTransactionReceipt(wagmiConfig, { hash });
+        setPrivateInviteRegistered(true);
+        queryClient.invalidateQueries({ queryKey: ["invites"] });
+        refreshUser();
+      }
+      if (!navigator.share) {
+        alert(`Share link: ${link}`);
+        return;
+      }
       await navigator.share({
         title: "Join me on Reffinity!",
         text: shareText,
         url: link,
       });
-      if (type == LinkType.private){
-        const ctx = await WriteReferralContractHelper.createInviteContext();
-        await writeContractAsync({
-          ...ctx,
-          chainId: activeChainId,
-          args: [
-            privateInvite?.bytesinviteId as `0x${string}`,
-            privateInvite?.referrerWallet as `0x${string}`,
-            0,
-          ],
-        });
-        queryClient.invalidateQueries({ queryKey: ["invites"] });
-        refreshUser();
-      }
       setShowPopup(false);
     } catch (err) {
       console.error("Share failed:", err);

@@ -104,20 +104,40 @@ export function WalletConnectStep({ onSuccess, onReturningUser, onNeedsVerificat
       // Ensure the wallet is on the deployment's configured chain before sending the tx
       await switchChainAsync({ chainId: activeChainId });
 
-      // If referred, call acceptInvite with referrer's address; otherwise joinProgram
+      // Register this user's reusable public link while joining through the appropriate path.
       let txHash: `0x${string}`;
       const inviteId = response.bytesInviteId;
       if (response.referrerWalletAddress) {
         if(!inviteId) {
           throw new Error('Invite ID is missing for referred user');
         }
-
-        const acceptInviteContext = await WriteReferralContractHelper.acceptInviteContext();
-        txHash = await writeContractAsync({
-          ...acceptInviteContext,
-          chainId: activeChainId,
-          args: [response.referrerWalletAddress as `0x${string}`, inviteId as `0x${string}`],
-        });
+        if (response.referralType === 'private') {
+          const acceptInviteContext = await WriteReferralContractHelper.acceptInviteContext();
+          txHash = await writeContractAsync({
+            ...acceptInviteContext,
+            chainId: activeChainId,
+            args: [
+              response.referrerWalletAddress as `0x${string}`,
+              inviteId as `0x${string}`,
+              response.publicLinkId as `0x${string}`,
+            ],
+          });
+        } else {
+          if (!response.referrerPublicLinkId) {
+            throw new Error('Public referral link ID is missing for referred user');
+          }
+          const acceptPublicReferralContext =
+            await WriteReferralContractHelper.acceptPublicReferralContext();
+          txHash = await writeContractAsync({
+            ...acceptPublicReferralContext,
+            chainId: activeChainId,
+            args: [
+              response.referrerPublicLinkId as `0x${string}`,
+              inviteId as `0x${string}`,
+              response.publicLinkId as `0x${string}`,
+            ],
+          });
+        }
       } else {
         const joinProgramContext =
           await WriteReferralContractHelper.joinProgramContext();
@@ -130,7 +150,7 @@ export function WalletConnectStep({ onSuccess, onReturningUser, onNeedsVerificat
         txHash = await writeContractAsync({
           ...joinProgramContext,
           chainId: activeChainId,
-          args: [],
+          args: [response.publicLinkId as `0x${string}`],
         });
 
         console.log("Join Program tx hash:", txHash);

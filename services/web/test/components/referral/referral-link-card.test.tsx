@@ -7,12 +7,15 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useWriteContract } from "wagmi";
+import { waitForTransactionReceipt } from "@wagmi/core";
 import { ReferralLinkCard } from "@/components/referral/referral-link-card";
 import { createPrivateInvite } from "@/lib/api/user";
 import { useAuth } from "@/contexts/auth-context";
 
 jest.mock("wagmi", () => ({ useWriteContract: jest.fn() }));
+jest.mock("@wagmi/core", () => ({ waitForTransactionReceipt: jest.fn() }));
 jest.mock("wagmi/chains", () => ({ hardhat: { id: 31337 } }));
+jest.mock("@/lib/wagmi/config", () => ({ wagmiConfig: {} }));
 jest.mock(
   "@reffinity/blockchain-connector/writeReferralContractHelper",
   () => ({
@@ -58,6 +61,8 @@ beforeEach(() => {
   jest.mocked(createPrivateInvite).mockResolvedValue(privateInvite);
   Object.defineProperty(navigator, "share", { value: mockShare, configurable: true });
   mockShare.mockResolvedValue(undefined);
+  mockWriteContractAsync.mockResolvedValue("0xtxhash");
+  jest.mocked(waitForTransactionReceipt).mockResolvedValue({} as never);
 });
 
 afterEach(() => {
@@ -110,8 +115,9 @@ test("sharing the private link registers the invite on-chain and refreshes invit
   expect(mockWriteContractAsync).toHaveBeenCalledWith({
     functionName: "createInvite",
     chainId: 31337,
-    args: ["0xinvite", privateInvite.referrerWallet, 0],
+    args: ["0xinvite"],
   });
+  expect(waitForTransactionReceipt).toHaveBeenCalledWith({}, { hash: "0xtxhash" });
   expect(queryClient.invalidateQueries).toHaveBeenCalledWith({ queryKey: ["invites"] });
 });
 

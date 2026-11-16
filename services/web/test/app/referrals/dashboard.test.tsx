@@ -35,7 +35,9 @@ jest.mock("@/lib/api/user", () => ({
   getMilestoneTiers: jest.fn().mockResolvedValue({}),
 }));
 jest.mock("wagmi", () => ({ useWriteContract: () => ({ writeContractAsync: jest.fn() }) }));
+jest.mock("@wagmi/core", () => ({ waitForTransactionReceipt: jest.fn() }));
 jest.mock("wagmi/chains", () => ({ hardhat: { id: 31337 } }));
+jest.mock("@/lib/wagmi/config", () => ({ wagmiConfig: {} }));
 jest.mock(
   "@reffinity/blockchain-connector/writeReferralContractHelper",
   () => ({ WriteReferralContractHelper: {} }),

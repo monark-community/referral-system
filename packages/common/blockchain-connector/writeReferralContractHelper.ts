@@ -14,6 +14,14 @@ export class WriteReferralContractHelper {
     } as const;
   }
 
+  static async acceptPublicReferralContext() {
+    return {
+      abi: contracts.referral.abi,
+      address: contracts.referral.address,
+      functionName: "acceptPublicReferral",
+    } as const;
+  }
+
   static async joinProgramContext() {
     return {
       abi: contracts.referral.abi,
