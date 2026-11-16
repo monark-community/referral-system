@@ -865,24 +865,6 @@ export const RefferalABI = [
     "inputs": [
       {
         "internalType": "bytes32",
-        "name": "inviteID",
-        "type": "bytes32"
-      },
-      {
-        "internalType": "address",
-        "name": "referrer",
-        "type": "address"
-      }
-    ],
-    "name": "completeInvite",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "bytes32",
         "name": "fulfillmentId",
         "type": "bytes32"
       }
