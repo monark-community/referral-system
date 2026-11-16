@@ -31,7 +31,7 @@
     "lint": "npm run lint -w reffinity-api && npm run lint -w reffinity-web"
   },
   "devDependencies": {
-    "@playwright/test": "1.51.1",
+    "@playwright/test": "1.65.0",
     "concurrently": "^8.2.2",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3",
