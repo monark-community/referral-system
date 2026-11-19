@@ -58,6 +58,16 @@ contract ReferralProgram is AccessControl, CampaignSignals {
 
     EnumerableSet.AddressSet users;
 
+    // A public referral link is registered once and can be accepted by any number of new users.
+    // Link IDs are derived from the API's unique referral codes and never expose those codes on-chain.
+    mapping(bytes32 => address) public publicLinkOwners;
+    mapping(address => bytes32) public userPublicLinkIds;
+
+    event PublicReferralLinkRegistered(
+        bytes32 indexed publicLinkId,
+        address indexed owner
+    );
+
     constructor() {
         relationships = new ReferralRelationships(msg.sender, address(this));
         points = new ReferralPoints(msg.sender, address(this));
@@ -69,25 +79,63 @@ contract ReferralProgram is AccessControl, CampaignSignals {
     }
 
     //adds someone to the program without a referral
-    function joinProgram() public {
-        users.add(msg.sender);
+    function joinProgram(bytes32 publicLinkId) public {
+        require(users.add(msg.sender), "User already in system");
+        _registerPublicReferralLink(msg.sender, publicLinkId);
     }
 
-    //adds someone to the program using a referral
-    function acceptInvite(address referrer, bytes32 inviteId) public {
+    // Adds someone through a single-use private invite.
+    function acceptInvite(
+        address referrer,
+        bytes32 inviteId,
+        bytes32 publicLinkId
+    ) public {
+        require(invites.inviteExists(inviteId), "Invite not found");
+        require(
+            invites.getInviteReferrer(inviteId) == referrer,
+            "Invite does not belong to referrer"
+        );
+        require(
+            invites.getInviteStatus(inviteId) ==
+                ReferralInvites.InviteStatus.Pending,
+            "Invite not pending"
+        );
+
+        _acceptReferral(referrer, publicLinkId);
+        invites.acceptPendingInvite(inviteId);
+        _removePendingPoints(inviteId);
+        emit ReferralInvites.InviteChanged(
+            inviteId,
+            referrer,
+            ReferralInvites.InviteStatus.Accepted
+        );
+    }
+
+    // Adds someone through a reusable public link. Each acceptance still has a unique
+    // referral ID so event projection and replay protection remain one-record-per-signup.
+    function acceptPublicReferral(
+        bytes32 referrerPublicLinkId,
+        bytes32 referralId,
+        bytes32 publicLinkId
+    ) public {
+        address referrer = publicLinkOwners[referrerPublicLinkId];
+        require(referrer != address(0), "Public referral link not found");
+        require(!invites.inviteExists(referralId), "Invite ID already exists");
+
+        _acceptReferral(referrer, publicLinkId);
+        invites.recordAcceptedPublicReferral(referralId, referrer);
+        emit ReferralInvites.InviteChanged(
+            referralId,
+            referrer,
+            ReferralInvites.InviteStatus.Accepted
+        );
+    }
+
+    function _acceptReferral(address referrer, bytes32 publicLinkId) private {
         require(users.contains(referrer), "Referrer not in system");
         require(!users.contains(msg.sender), "Referree already in system");
-        // An invite already on chain must belong to this referrer and still be open.
-        // Public links (and private ones never registered) have no invite yet; one is created as Accepted below.
-        address inviteReferrer = invites.getInviteReferrer(inviteId);
-        if (inviteReferrer != address(0)) {
-            require(inviteReferrer == referrer, "Invite belongs to another referrer");
-            require(
-                invites.getInviteStatus(inviteId) == ReferralInvites.InviteStatus.Pending,
-                "Invite is not pending"
-            );
-        }
         users.add(msg.sender);
+        _registerPublicReferralLink(msg.sender, publicLinkId);
         relationships.createRelationship(msg.sender, referrer);
 
         uint256 referralPointPool = viewReferralPointPool();
@@ -102,7 +150,24 @@ contract ReferralProgram is AccessControl, CampaignSignals {
         uint256 refereePoints = points.getUserPoints(msg.sender);
         emit ReferralPoints.PointsAdded(msg.sender, refereePoints, false);
         milestones.updateUserMilestone(msg.sender, refereePoints);
-        _completeInvite(inviteId, referrer);
+    }
+
+    function _registerPublicReferralLink(
+        address owner,
+        bytes32 publicLinkId
+    ) private {
+        require(publicLinkId != bytes32(0), "Invalid public referral link");
+        require(
+            publicLinkOwners[publicLinkId] == address(0),
+            "Public referral link already registered"
+        );
+        require(
+            userPublicLinkIds[owner] == bytes32(0),
+            "User public referral link already registered"
+        );
+        publicLinkOwners[publicLinkId] = owner;
+        userPublicLinkIds[owner] = publicLinkId;
+        emit PublicReferralLinkRegistered(publicLinkId, owner);
     }
 
     function viewReferrals(
@@ -161,6 +226,10 @@ contract ReferralProgram is AccessControl, CampaignSignals {
 
     function viewPoints(address user) public view returns (uint256) {
         return points.getUserPoints(user);
+    }
+
+    function viewPendingPoints(address user) public view returns (uint256) {
+        return points.getPendingUserPoints(user);
     }
 
     function getCurrentUserMilestone(
@@ -433,24 +502,14 @@ contract ReferralProgram is AccessControl, CampaignSignals {
 
     // -- Functions for invites and statuses
 
-    // A referrer registers their own invite, and it always starts Pending.
-    // The status argument stays so existing callers keep working; only Pending is accepted.
-    function createInvite(
-        bytes32 inviteID,
-        address referrer,
-        ReferralInvites.InviteStatus status
-    ) public {
-        require(msg.sender == referrer, "Only the referrer can create their invite");
-        require(
-            status == ReferralInvites.InviteStatus.Pending,
-            "New invites must be Pending"
-        );
-        invites.createInvite(inviteID, referrer, status);
+    function createInvite(bytes32 inviteID) public {
+        require(users.contains(msg.sender), "Referrer not in system");
+        invites.createPendingInvite(inviteID, msg.sender);
         ReferralAllocation.Allocation memory allocation = ReferralAllocation
             .allocate(
                 viewReferralPointPool(),
-                referrer,
-                relationships.viewReferrer(referrer),
+                msg.sender,
+                relationships.viewReferrer(msg.sender),
                 directReferralBps,
                 grandparentReferralBps
             );
@@ -461,42 +520,31 @@ contract ReferralProgram is AccessControl, CampaignSignals {
             grandparentAmount: allocation.grandparentAmount
         });
         _addPendingPoints(allocation);
-        emit ReferralInvites.InviteChanged(inviteID, referrer, status);
-    }
-
-    // Only acceptInvite calls this, so an invite becomes Accepted only when someone joins through it
-    function _completeInvite(bytes32 inviteID, address referrer) private {
-        bool removePending = invites.completeInvite(inviteID, referrer);
-        if (removePending) {
-            _removePendingPoints(inviteID);
-        }
         emit ReferralInvites.InviteChanged(
             inviteID,
-            referrer,
-            ReferralInvites.InviteStatus.Accepted
+            msg.sender,
+            ReferralInvites.InviteStatus.Pending
         );
     }
 
-    // A referrer can cancel (close) their own pending invite. Accepting only happens through acceptInvite.
-    function updateInviteStatus(
-        bytes32 inviteID,
-        ReferralInvites.InviteStatus newStatus
-    ) public {
-        // An invite that doesn't exist has no referrer (address 0), so this also rejects unknown IDs
+    function cancelInvite(bytes32 inviteID) public {
+        require(invites.inviteExists(inviteID), "Invite not found");
         require(
-            msg.sender == invites.getInviteReferrer(inviteID),
-            "Only the referrer can change their invite"
+            invites.getInviteReferrer(inviteID) == msg.sender,
+            "Caller is not invite referrer"
         );
         require(
-            newStatus == ReferralInvites.InviteStatus.Closed,
-            "Invites can only be cancelled"
+            invites.getInviteStatus(inviteID) ==
+                ReferralInvites.InviteStatus.Pending,
+            "Invite not pending"
         );
-        require(
-            invites.getInviteStatus(inviteID) == ReferralInvites.InviteStatus.Pending,
-            "Only pending invites can be cancelled"
+        invites.closePendingInvite(inviteID);
+        _removePendingPoints(inviteID);
+        emit ReferralInvites.InviteChanged(
+            inviteID,
+            msg.sender,
+            ReferralInvites.InviteStatus.Closed
         );
-        address referrer = invites.updateInviteStatus(inviteID, newStatus);
-        emit ReferralInvites.InviteChanged(inviteID, referrer, newStatus);
     }
 
     function getInviteStatus(

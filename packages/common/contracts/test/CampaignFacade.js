@@ -133,14 +133,19 @@ async function createCampaign(reward = pointsReward, value) {
 }
 
 async function joinProgram(account, wallet) {
-    return writeFacade(account, wallet, "joinProgram", []);
+    return writeFacade(account, wallet, "joinProgram", [publicLinkId(account)]);
 }
 
 async function acceptInvite(account, wallet, referrer, inviteName) {
-    return writeFacade(account, wallet, "acceptInvite", [
-        referrer.address,
+    return writeFacade(account, wallet, "acceptPublicReferral", [
+        publicLinkId(referrer),
         stringToHex(inviteName, { size: 32 }),
+        publicLinkId(account),
     ]);
+}
+
+function publicLinkId(account) {
+    return stringToHex(`public-${account.address.slice(-8)}`, { size: 32 });
 }
 
 async function verify() {

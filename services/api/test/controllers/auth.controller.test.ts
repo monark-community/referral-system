@@ -88,6 +88,7 @@ describe("Test auth controller", () => {
     const mockReferrer = {
       id: "referrer123",
       walletAddress: "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd",
+      referralCode: "REFERRER1",
     };
     (prisma.user.findUnique as jest.Mock)
       // 1st call: check if user exists → new user
@@ -354,6 +355,8 @@ describe("Test auth controller", () => {
           isNewUser: true,
           bytesInviteId: "BYTES32",
           referrerWalletAddress: "0xreferrer",
+          referralType: "private",
+          referrerPublicLinkId: expect.stringMatching(/^0x[0-9a-f]{64}$/),
         }),
       );
     });

@@ -14,9 +14,10 @@ const contractAddress = process.env.E2E_REFERRAL_CONTRACT_ADDRESS as `0x${string
 const mnemonic = "test test test test test test test test test test test junk";
 const mailboxHeaders = { "x-e2e-mailbox-key": process.env.E2E_MAILBOX_KEY ?? "" };
 const abi = parseAbi([
-  "function joinProgram()",
-  "function createInvite(bytes32 inviteID, address referrer, uint8 status)",
-  "function acceptInvite(address referrer, bytes32 inviteId)",
+  "function joinProgram(bytes32 publicLinkId)",
+  "function createInvite(bytes32 inviteID)",
+  "function acceptInvite(address referrer, bytes32 inviteId, bytes32 publicLinkId)",
+  "function acceptPublicReferral(bytes32 referrerPublicLinkId, bytes32 referralId, bytes32 publicLinkId)",
   "function viewPoints(address user) view returns (uint256)",
   "function viewReferrer(address user) view returns (address)",
 ]);
@@ -111,7 +112,10 @@ async function createJoinedUser(
     headers: { authorization: `Bearer ${auth.token}` },
     data: { name },
   });
-  await writeAndWait(walletClient(wallet), { functionName: "joinProgram" });
+  await writeAndWait(walletClient(wallet), {
+    functionName: "joinProgram",
+    args: [auth.publicLinkId],
+  });
   return auth;
 }
 
@@ -130,8 +134,8 @@ async function acceptReferral(
     data: { name },
   });
   await writeAndWait(walletClient(wallet), {
-    functionName: "acceptInvite",
-    args: [referrer.wallet.address, auth.bytesInviteId],
+    functionName: "acceptPublicReferral",
+    args: [auth.referrerPublicLinkId, auth.bytesInviteId, auth.publicLinkId],
   });
   return auth;
 }
@@ -267,7 +271,7 @@ test.describe("@phase6 core browser journeys", () => {
     const privateInvite = await privateResponse.json();
     await writeAndWait(walletClient(referrerWallet), {
       functionName: "createInvite",
-      args: [privateInvite.bytesinviteId, referrerWallet.address, 0],
+      args: [privateInvite.bytesinviteId],
     });
 
     const first = await createUserContext("referee");

@@ -3,7 +3,7 @@ import { createWalletClient, http, parseAbi } from "viem";
 import { mnemonicToAccount } from "viem/accounts";
 
 const immutabilityAbi = parseAbi([
-  "function acceptInvite(address referrer, bytes32 inviteId)",
+  "function acceptInvite(address referrer, bytes32 inviteId, bytes32 publicLinkId)",
 ]);
 
 async function joinThroughUi(page: import("@playwright/test").Page) {
@@ -54,7 +54,11 @@ test("restores the database, contract, mailbox, and listener to a clean baseline
     address: process.env.E2E_REFERRAL_CONTRACT_ADDRESS as `0x${string}`,
     abi: immutabilityAbi,
     functionName: "acceptInvite",
-    args: [account.address, `0x${"01".padEnd(64, "0")}`],
+    args: [
+      account.address,
+      `0x${"01".padEnd(64, "0")}`,
+      `0x${"02".padEnd(64, "0")}`,
+    ],
   })).rejects.toThrow();
 
   const reset = await resetState();

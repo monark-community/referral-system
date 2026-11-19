@@ -37,6 +37,7 @@ jest.mock(
   () => ({
     WriteReferralContractHelper: {
       acceptInviteContext: jest.fn().mockResolvedValue({ functionName: "acceptInvite" }),
+      acceptPublicReferralContext: jest.fn().mockResolvedValue({ functionName: "acceptPublicReferral" }),
       joinProgramContext: jest.fn().mockResolvedValue({ functionName: "joinProgram" }),
     },
   }),
@@ -72,6 +73,7 @@ function mockAuthResponse(overrides: Partial<AuthResponse>) {
     user: buildUser(),
     token: "jwt-123",
     isNewUser: true,
+    publicLinkId: "0xnew-public-link",
     ...overrides,
   });
 }
@@ -184,7 +186,11 @@ describe("after the wallet is connected", () => {
   test("registers a referred user by accepting the invite on-chain before logging in", async () => {
     mockWallet();
     const referrer = "0x2222222222222222222222222222222222222222";
-    mockAuthResponse({ referrerWalletAddress: referrer, bytesInviteId: "0xinvite" });
+    mockAuthResponse({
+      referrerWalletAddress: referrer,
+      bytesInviteId: "0xinvite",
+      referralType: "private",
+    });
     const { onSuccess } = renderStep();
 
     await userEvent.click(screen.getByRole("button", { name: "Sign & Continue" }));
@@ -193,7 +199,7 @@ describe("after the wallet is connected", () => {
     expect(mockWriteContractAsync).toHaveBeenCalledWith({
       functionName: "acceptInvite",
       chainId: 31337,
-      args: [referrer, "0xinvite"],
+      args: [referrer, "0xinvite", "0xnew-public-link"],
     });
     expect(waitForTransactionReceipt).toHaveBeenCalledWith({}, { hash: "0xtxhash" });
     expect(mockLogin).toHaveBeenCalledWith("jwt-123", expect.anything());
@@ -210,9 +216,29 @@ describe("after the wallet is connected", () => {
     expect(mockWriteContractAsync).toHaveBeenCalledWith({
       functionName: "joinProgram",
       chainId: 31337,
-      args: [],
+      args: ["0xnew-public-link"],
     });
     expect(onSuccess).toHaveBeenCalledTimes(1);
+  });
+
+  test("registers a public-link referral through its on-chain owner binding", async () => {
+    mockWallet();
+    const referrer = "0x2222222222222222222222222222222222222222";
+    mockAuthResponse({
+      referrerWalletAddress: referrer,
+      referrerPublicLinkId: "0xreferrer-public-link",
+      bytesInviteId: "0xreferral",
+      referralType: "public",
+    });
+    renderStep();
+
+    await userEvent.click(screen.getByRole("button", { name: "Sign & Continue" }));
+
+    expect(mockWriteContractAsync).toHaveBeenCalledWith({
+      functionName: "acceptPublicReferral",
+      chainId: 31337,
+      args: ["0xreferrer-public-link", "0xreferral", "0xnew-public-link"],
+    });
   });
 
   test("does not log in a referred user whose invite id is missing", async () => {

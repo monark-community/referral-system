@@ -11,9 +11,10 @@ const hardhatRpcUrl = process.env.E2E_HARDHAT_RPC_URL ?? "http://hardhat:8545";
 const contractAddress = (process.env.E2E_REFERRAL_CONTRACT_ADDRESS ?? "") as `0x${string}`;
 const hardhatMnemonic = "test test test test test test test test test test test junk";
 const referralAbi = parseAbi([
-  "function joinProgram()",
-  "function createInvite(bytes32 inviteID, address referrer, uint8 status)",
-  "function acceptInvite(address referrer, bytes32 inviteId)",
+  "function joinProgram(bytes32 publicLinkId)",
+  "function createInvite(bytes32 inviteID)",
+  "function acceptInvite(address referrer, bytes32 inviteId, bytes32 publicLinkId)",
+  "function acceptPublicReferral(bytes32 referrerPublicLinkId, bytes32 referralId, bytes32 publicLinkId)",
   "function viewPoints(address user) view returns (uint256)",
   "function viewReferrer(address user) view returns (address)",
 ]);
@@ -174,6 +175,7 @@ test.describe("@api real-dependency authentication", () => {
       address: contractAddress,
       abi: referralAbi,
       functionName: "joinProgram",
+      args: [referrer.publicLinkId],
     });
     expect((await publicClient.waitForTransactionReceipt({ hash: joinHash })).status).toBe("success");
 
@@ -198,8 +200,8 @@ test.describe("@api real-dependency authentication", () => {
     const acceptHash = await refereeClient.writeContract({
       address: contractAddress,
       abi: referralAbi,
-      functionName: "acceptInvite",
-      args: [referrerWallet.address, referee.bytesInviteId],
+      functionName: "acceptPublicReferral",
+      args: [referee.referrerPublicLinkId, referee.bytesInviteId, referee.publicLinkId],
     });
     expect((await publicClient.waitForTransactionReceipt({ hash: acceptHash })).status).toBe("success");
 
@@ -331,6 +333,7 @@ test.describe("@api real-dependency authentication", () => {
       address: contractAddress,
       abi: referralAbi,
       functionName: "joinProgram",
+      args: [referrer.publicLinkId],
     });
     await publicClient.waitForTransactionReceipt({ hash: joinHash });
 
@@ -355,8 +358,8 @@ test.describe("@api real-dependency authentication", () => {
     const acceptHash = await refereeClient.writeContract({
       address: contractAddress,
       abi: referralAbi,
-      functionName: "acceptInvite",
-      args: [referrerWallet.address, referee.bytesInviteId],
+      functionName: "acceptPublicReferral",
+      args: [referee.referrerPublicLinkId, referee.bytesInviteId, referee.publicLinkId],
     });
     await publicClient.waitForTransactionReceipt({ hash: acceptHash });
 
@@ -446,6 +449,7 @@ test.describe("@api real-dependency authentication", () => {
       address: contractAddress,
       abi: referralAbi,
       functionName: "joinProgram",
+      args: [referrer.publicLinkId],
     });
     await publicClient.waitForTransactionReceipt({ hash: joinHash });
 
@@ -464,7 +468,7 @@ test.describe("@api real-dependency authentication", () => {
       address: contractAddress,
       abi: referralAbi,
       functionName: "createInvite",
-      args: [privateInvite.bytesinviteId, referrerWallet.address, 0],
+      args: [privateInvite.bytesinviteId],
     });
     await publicClient.waitForTransactionReceipt({ hash: createHash });
 
@@ -484,7 +488,7 @@ test.describe("@api real-dependency authentication", () => {
       address: contractAddress,
       abi: referralAbi,
       functionName: "acceptInvite",
-      args: [referrerWallet.address, privateInvite.bytesinviteId],
+      args: [referrerWallet.address, privateInvite.bytesinviteId, referee.publicLinkId],
     });
     await publicClient.waitForTransactionReceipt({ hash: acceptHash });
 

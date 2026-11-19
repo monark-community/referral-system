@@ -698,6 +698,25 @@ export const RefferalABI = [
     "inputs": [
       {
         "indexed": true,
+        "internalType": "bytes32",
+        "name": "publicLinkId",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "owner",
+        "type": "address"
+      }
+    ],
+    "name": "PublicReferralLinkRegistered",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
         "internalType": "address",
         "name": "participant",
         "type": "address"
@@ -841,9 +860,37 @@ export const RefferalABI = [
         "internalType": "bytes32",
         "name": "inviteId",
         "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "publicLinkId",
+        "type": "bytes32"
       }
     ],
     "name": "acceptInvite",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "referrerPublicLinkId",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "referralId",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "publicLinkId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "acceptPublicReferral",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -857,6 +904,19 @@ export const RefferalABI = [
       }
     ],
     "name": "addNewMilestone",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "inviteID",
+        "type": "bytes32"
+      }
+    ],
+    "name": "cancelInvite",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -1105,16 +1165,6 @@ export const RefferalABI = [
         "internalType": "bytes32",
         "name": "inviteID",
         "type": "bytes32"
-      },
-      {
-        "internalType": "address",
-        "name": "referrer",
-        "type": "address"
-      },
-      {
-        "internalType": "enum ReferralInvites.InviteStatus",
-        "name": "status",
-        "type": "uint8"
       }
     ],
     "name": "createInvite",
@@ -1555,7 +1605,13 @@ export const RefferalABI = [
     "type": "function"
   },
   {
-    "inputs": [],
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "publicLinkId",
+        "type": "bytes32"
+      }
+    ],
     "name": "joinProgram",
     "outputs": [],
     "stateMutability": "nonpayable",
@@ -1643,6 +1699,25 @@ export const RefferalABI = [
         "internalType": "struct ReferralAllocation.Allocation",
         "name": "",
         "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "name": "publicLinkOwners",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
       }
     ],
     "stateMutability": "view",
@@ -1855,24 +1930,6 @@ export const RefferalABI = [
   {
     "inputs": [
       {
-        "internalType": "bytes32",
-        "name": "inviteID",
-        "type": "bytes32"
-      },
-      {
-        "internalType": "enum ReferralInvites.InviteStatus",
-        "name": "newStatus",
-        "type": "uint8"
-      }
-    ],
-    "name": "updateInviteStatus",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
         "internalType": "uint256",
         "name": "value",
         "type": "uint256"
@@ -1886,6 +1943,25 @@ export const RefferalABI = [
     "name": "updateMilestone",
     "outputs": [],
     "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "name": "userPublicLinkIds",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
     "type": "function"
   },
   {
@@ -1974,6 +2050,25 @@ export const RefferalABI = [
         "internalType": "address[2]",
         "name": "",
         "type": "address[2]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "user",
+        "type": "address"
+      }
+    ],
+    "name": "viewPendingPoints",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
       }
     ],
     "stateMutability": "view",

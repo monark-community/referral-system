@@ -25,8 +25,11 @@ export interface AuthResponse {
   user: User;
   token: string;
   isNewUser: boolean;
+  publicLinkId: string;
   bytesInviteId?: string;
   referrerWalletAddress?: string;
+  referrerPublicLinkId?: string;
+  referralType?: "public" | "private";
 }
 
 export interface GetMeResponse {
