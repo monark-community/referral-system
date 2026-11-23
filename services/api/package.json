@@ -31,7 +31,7 @@
     "helmet": "^8.0.0",
     "jsonwebtoken": "^9.0.2",
     "nodemailer": "^8.0.4",
-    "tsx": "^4.21.0",
+    "tsx": "^4.23.15",
     "uuid": "^11.0.3"
   },
   "devDependencies": {
