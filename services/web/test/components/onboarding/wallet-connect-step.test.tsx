@@ -73,6 +73,7 @@ function mockAuthResponse(overrides: Partial<AuthResponse>) {
     user: buildUser(),
     token: "jwt-123",
     isNewUser: true,
+    referralRegistrationRequired: false,
     publicLinkId: "0xnew-public-link",
     ...overrides,
   });
@@ -187,6 +188,7 @@ describe("after the wallet is connected", () => {
     mockWallet();
     const referrer = "0x2222222222222222222222222222222222222222";
     mockAuthResponse({
+      referralRegistrationRequired: true,
       referrerWalletAddress: referrer,
       bytesInviteId: "0xinvite",
       referralType: "private",
@@ -225,6 +227,7 @@ describe("after the wallet is connected", () => {
     mockWallet();
     const referrer = "0x2222222222222222222222222222222222222222";
     mockAuthResponse({
+      referralRegistrationRequired: true,
       referrerWalletAddress: referrer,
       referrerPublicLinkId: "0xreferrer-public-link",
       bytesInviteId: "0xreferral",
@@ -243,7 +246,11 @@ describe("after the wallet is connected", () => {
 
   test("does not log in a referred user whose invite id is missing", async () => {
     mockWallet();
-    mockAuthResponse({ referrerWalletAddress: "0x2222222222222222222222222222222222222222" });
+    mockAuthResponse({
+      referralRegistrationRequired: true,
+      referrerWalletAddress: "0x2222222222222222222222222222222222222222",
+      referralType: "private",
+    });
     const { onSuccess } = renderStep();
 
     await userEvent.click(screen.getByRole("button", { name: "Sign & Continue" }));
@@ -257,12 +264,31 @@ describe("after the wallet is connected", () => {
   test("does not log in when the registration transaction fails", async () => {
     mockWallet();
     mockAuthResponse({});
+    localStorage.setItem("referralCode", "BOB1234567");
+    localStorage.setItem("inviteCode", "INV12345");
     mockWriteContractAsync.mockRejectedValue(new Error("Referree already in system"));
     const { onSuccess } = renderStep();
 
     await userEvent.click(screen.getByRole("button", { name: "Sign & Continue" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Referree already in system");
+    expect(mockLogin).not.toHaveBeenCalled();
+    expect(onSuccess).not.toHaveBeenCalled();
+    expect(localStorage.getItem("referralCode")).toBe("BOB1234567");
+    expect(localStorage.getItem("inviteCode")).toBe("INV12345");
+  });
+
+  test("fails closed instead of joining when referral context is incomplete", async () => {
+    mockWallet();
+    mockAuthResponse({ referralRegistrationRequired: true });
+    const { onSuccess } = renderStep();
+
+    await userEvent.click(screen.getByRole("button", { name: "Sign & Continue" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Referral registration context is missing the referrer wallet",
+    );
+    expect(mockWriteContractAsync).not.toHaveBeenCalled();
     expect(mockLogin).not.toHaveBeenCalled();
     expect(onSuccess).not.toHaveBeenCalled();
   });

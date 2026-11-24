@@ -250,6 +250,69 @@ test.describe("@phase6 core browser journeys", () => {
     await expect(page.getByText("100 Points Earned")).toBeVisible();
   });
 
+  test("@smoke public referral resumes after the first registration transaction is rejected", async ({
+    request,
+    walletFor,
+    createUserContext,
+    cleanBaseline: _cleanBaseline,
+  }) => {
+    test.slow();
+    const referrerWallet = walletFor("referrer");
+    const refereeWallet = walletFor("referee");
+    const referrer = await createJoinedUser(
+      request,
+      referrerWallet,
+      "referrer",
+      "Retry Referrer",
+    );
+
+    const referee = await createUserContext("referee");
+    await referee.page.goto(`/invite/${referrer.user.referralCode}`);
+    await referee.page.getByRole("button", { name: "Join the Program" }).click();
+    await referee.page.evaluate(() =>
+      localStorage.setItem("reffinity:e2e-wallet-reject-method", "eth_sendTransaction"),
+    );
+
+    await connectAndSign(referee.page);
+    await expect(
+      referee.page.getByRole("alert").filter({ hasText: "rejected" }),
+    ).toBeVisible();
+    expect(await referee.page.evaluate(() => localStorage.getItem("referralCode"))).toBe(
+      referrer.user.referralCode,
+    );
+
+    await referee.page.evaluate(() =>
+      localStorage.removeItem("reffinity:e2e-wallet-reject-method"),
+    );
+    await referee.page.getByRole("button", { name: "Sign & Continue" }).click();
+    await expect(referee.page.getByRole("heading", { name: "Terms of Service" })).toBeVisible();
+    expect(await referee.page.evaluate(() => localStorage.getItem("referralCode"))).toBeNull();
+
+    const token = await referee.page.evaluate(() => localStorage.getItem("token"));
+    expect(token).toBeTruthy();
+    await expect.poll(async () => {
+      const network = await request.get(`${apiBaseUrl}/api/users/referral-network`, {
+        headers: { authorization: `Bearer ${referrer.token}` },
+      });
+      return (await network.json()).totals;
+    }, { timeout: 25_000, intervals: [500, 1_000, 2_000] }).toEqual(
+      expect.objectContaining({ level1Count: 1, level1Points: 100 }),
+    );
+
+    expect(await publicClient.readContract({
+      address: contractAddress,
+      abi,
+      functionName: "viewReferrer",
+      args: [refereeWallet.address],
+    })).toBe(referrerWallet.address);
+    expect(await publicClient.readContract({
+      address: contractAddress,
+      abi,
+      functionName: "viewPoints",
+      args: [referrerWallet.address],
+    })).toBe(100n);
+  });
+
   test("private invite can be consumed once and reuse is rejected in the browser", async ({
     request,
     walletFor,

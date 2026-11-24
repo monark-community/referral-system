@@ -83,13 +83,11 @@ export function WalletConnectStep({ onSuccess, onReturningUser, onNeedsVerificat
       // Send to backend for verification
       const response = await walletAuth(address, signature, message, referralCode, inviteCode);
 
-      // Clear the stored referral code after use
-      localStorage.removeItem('referralCode');
-      localStorage.removeItem('inviteCode');
-
       // Returning user who has completed their profile — login immediately
       // and skip onboarding. Users without a name haven't finished onboarding.
       if (!response.isNewUser && response.user.name && onReturningUser) {
+        localStorage.removeItem('referralCode');
+        localStorage.removeItem('inviteCode');
         login(response.token, response.user);
         // If email is set but not verified, go to verification step instead
         if (response.user.email && !response.user.emailVerified && onNeedsVerification) {
@@ -107,9 +105,15 @@ export function WalletConnectStep({ onSuccess, onReturningUser, onNeedsVerificat
       // Register this user's reusable public link while joining through the appropriate path.
       let txHash: `0x${string}`;
       const inviteId = response.bytesInviteId;
-      if (response.referrerWalletAddress) {
+      if (response.referralRegistrationRequired) {
+        if (!response.referrerWalletAddress) {
+          throw new Error('Referral registration context is missing the referrer wallet');
+        }
         if(!inviteId) {
           throw new Error('Invite ID is missing for referred user');
+        }
+        if (!response.referralType) {
+          throw new Error('Referral registration type is missing');
         }
         if (response.referralType === 'private') {
           const acceptInviteContext = await WriteReferralContractHelper.acceptInviteContext();
@@ -158,6 +162,11 @@ export function WalletConnectStep({ onSuccess, onReturningUser, onNeedsVerificat
 
       // Wait for the transaction to be mined so the blockchain listener can pick up the events
       await waitForTransactionReceipt(wagmiConfig, { hash: txHash });
+
+      // Keep the invite context when signing or transaction submission fails so a retry can
+      // resume the same referral. It is safe to clear only after the transaction is mined.
+      localStorage.removeItem('referralCode');
+      localStorage.removeItem('inviteCode');
 
       // Contract call succeeded — now safe to login
       login(response.token, response.user);

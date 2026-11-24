@@ -14,6 +14,7 @@ import { uuidToBytes32 } from "@reffinity/blockchain-connector/uuidBytesConverte
 import { id as hashUtf8 } from "ethers";
 
 class PrivateInviteUnavailableError extends Error {}
+class ReferralOnboardingStateError extends Error {}
 
 /**
  * POST /api/auth/wallet
@@ -163,6 +164,35 @@ export async function walletAuth(req: Request, res: Response): Promise<void> {
       );
     }
 
+    // Wallet authentication commits the provisional user before MetaMask submits the
+    // registration transaction. If that transaction is rejected or fails, a retry finds
+    // an existing user. Reconstruct the original referral context so the client resumes
+    // acceptInvite/acceptPublicReferral instead of silently falling back to joinProgram.
+    if (!isNewUser && user.referredBy) {
+      const referral = await prisma.referral.findFirst({
+        where: { refereeId: user.id },
+        select: {
+          id: true,
+          isPrivate: true,
+          referrer: {
+            select: { walletAddress: true, referralCode: true },
+          },
+        },
+        orderBy: { createdAt: "asc" },
+      });
+
+      if (!referral) {
+        throw new ReferralOnboardingStateError(
+          "Referred user is missing its referral registration context",
+        );
+      }
+
+      referrerWalletAddress = referral.referrer.walletAddress;
+      referrerPublicLinkId = hashUtf8(referral.referrer.referralCode);
+      referralType = referral.isPrivate ? "private" : "public";
+      bytesInviteId = uuidToBytes32(referral.id);
+    }
+
     // Generate JWT token
     const token = generateJWT(user.id, user.walletAddress);
 
@@ -185,6 +215,7 @@ export async function walletAuth(req: Request, res: Response): Promise<void> {
       },
       token,
       isNewUser,
+      referralRegistrationRequired: Boolean(user.referredBy),
       publicLinkId: hashUtf8(user.referralCode),
       bytesInviteId,
       ...(referrerWalletAddress && { referrerWalletAddress }),
@@ -194,6 +225,10 @@ export async function walletAuth(req: Request, res: Response): Promise<void> {
   } catch (error) {
     console.error("Wallet auth error:", error);
     if (error instanceof PrivateInviteUnavailableError) {
+      res.status(409).json({ error: error.message });
+      return;
+    }
+    if (error instanceof ReferralOnboardingStateError) {
       res.status(409).json({ error: error.message });
       return;
     }
