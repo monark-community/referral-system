@@ -25,6 +25,7 @@ export interface AuthResponse {
   user: User;
   token: string;
   isNewUser: boolean;
+  referralRegistrationRequired: boolean;
   publicLinkId: string;
   bytesInviteId?: string;
   referrerWalletAddress?: string;

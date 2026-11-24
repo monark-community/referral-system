@@ -20,6 +20,7 @@ jest.mock("@/lib/prisma", () => ({
       create: jest.fn(),
       update: jest.fn(),
       findUnique: jest.fn(),
+      findFirst: jest.fn(),
       updateMany: jest.fn(),
     },
     $transaction: jest.fn(),
@@ -300,8 +301,75 @@ describe("Test auth controller", () => {
           user: expect.objectContaining({ id: "user1" }),
           token: "JWT_TOKEN",
           isNewUser: false,
+          referralRegistrationRequired: false,
         }),
       );
+    });
+
+    test("walletAuth resumes an unfinished public referral for an existing user", async () => {
+      req = { body: { ...loginBody, referralCode: "REFERRER1" } };
+      const existingUser = {
+        id: "user1",
+        walletAddress: walletAddress.toLowerCase(),
+        referralCode: "REFERRAL123",
+        referredBy: "referrer123",
+        name: null,
+      };
+      (prisma.user.findUnique as jest.Mock).mockResolvedValueOnce(existingUser);
+      (prisma.referral.findFirst as jest.Mock).mockResolvedValueOnce({
+        id: "referral1",
+        isPrivate: false,
+        referrer: {
+          walletAddress: "0xreferrer",
+          referralCode: "REFERRER1",
+        },
+      });
+
+      await walletAuth(req, res);
+
+      expect(prisma.user.create).not.toHaveBeenCalled();
+      expect(prisma.referral.findFirst).toHaveBeenCalledWith({
+        where: { refereeId: "user1" },
+        select: {
+          id: true,
+          isPrivate: true,
+          referrer: {
+            select: { walletAddress: true, referralCode: true },
+          },
+        },
+        orderBy: { createdAt: "asc" },
+      });
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          isNewUser: false,
+          referralRegistrationRequired: true,
+          bytesInviteId: "BYTES32",
+          referrerWalletAddress: "0xreferrer",
+          referralType: "public",
+          referrerPublicLinkId: expect.stringMatching(/^0x[0-9a-f]{64}$/),
+        }),
+      );
+    });
+
+    test("walletAuth fails closed when a referred existing user has no referral row", async () => {
+      req = { body: loginBody };
+      (prisma.user.findUnique as jest.Mock).mockResolvedValueOnce({
+        id: "user1",
+        walletAddress: walletAddress.toLowerCase(),
+        referralCode: "REFERRAL123",
+        referredBy: "referrer123",
+        name: null,
+      });
+      (prisma.referral.findFirst as jest.Mock).mockResolvedValueOnce(null);
+      const consoleError = jest.spyOn(console, "error").mockImplementation(() => {});
+
+      await walletAuth(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(409);
+      expect(res.json).toHaveBeenCalledWith({
+        error: "Referred user is missing its referral registration context",
+      });
+      consoleError.mockRestore();
     });
 
     test("walletAuth generates a new referral code when the first one is taken", async () => {
