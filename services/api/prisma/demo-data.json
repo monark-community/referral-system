@@ -1,0 +1,128 @@
+{
+  "users": [
+    {
+      "key": "steve",
+      "name": "CampaignOwnerSteve",
+      "email": "campaign-owner-steve@demo.reffinity.local",
+      "walletAddress": "0x70997970c51812dc3a010c7d01b50e0d17dc79c8",
+      "referralCode": "STEVEDEMO1",
+      "earnedPoints": 2350,
+      "pendingPoints": 150,
+      "milestoneLevel": 2
+    },
+    {
+      "key": "bob",
+      "name": "ReferrerBob",
+      "email": "referrer-bob@demo.reffinity.local",
+      "walletAddress": "0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc",
+      "referralCode": "BOBREFERS1",
+      "earnedPoints": 1850,
+      "pendingPoints": 100,
+      "milestoneLevel": 2
+    },
+    {
+      "key": "alice",
+      "name": "ReferredAlice",
+      "email": "referred-alice@demo.reffinity.local",
+      "walletAddress": "0x90f79bf6eb2c4f870365e785982e1f101e93b906",
+      "referralCode": "ALICEDEMO1",
+      "earnedPoints": 740,
+      "pendingPoints": 50,
+      "milestoneLevel": 1,
+      "referredBy": "bob"
+    },
+    {
+      "key": "carol",
+      "name": "ReferredCarol",
+      "email": "referred-carol@demo.reffinity.local",
+      "walletAddress": "0x15d34aaf54267db7d7c367839aaf71a00a2c6a65",
+      "referralCode": "CAROLDEMO1",
+      "earnedPoints": 520,
+      "pendingPoints": 0,
+      "milestoneLevel": 1,
+      "referredBy": "bob"
+    },
+    {
+      "key": "dave",
+      "name": "SecondLevelDave",
+      "email": "second-level-dave@demo.reffinity.local",
+      "walletAddress": "0x9965507d1a55bcc2695c58ba16fb37d819b0a4dc",
+      "referralCode": "DAVEDEMO1",
+      "earnedPoints": 260,
+      "pendingPoints": 50,
+      "milestoneLevel": 0,
+      "referredBy": "alice"
+    },
+    {
+      "key": "erin",
+      "name": "SecondLevelErin",
+      "email": "second-level-erin@demo.reffinity.local",
+      "walletAddress": "0x976ea74026e726554db657fa54763abd0c3a0aa9",
+      "referralCode": "ERINDEMO1",
+      "earnedPoints": 120,
+      "pendingPoints": 0,
+      "milestoneLevel": 0,
+      "referredBy": "carol"
+    },
+    {
+      "key": "winner",
+      "name": "PrizeWinnerWendy",
+      "email": "prize-winner-wendy@demo.reffinity.local",
+      "walletAddress": "0x14dc79964da2c08b23698b3d3cc7ca32193d9955",
+      "referralCode": "WENDYDEMO1",
+      "earnedPoints": 80,
+      "pendingPoints": 0,
+      "milestoneLevel": 0
+    }
+  ],
+  "campaigns": [
+    {
+      "key": "demo-social-share",
+      "owner": "steve",
+      "title": "Demo: Share Our Launch Post",
+      "description": "A ready-to-publish public campaign for the live demo.",
+      "instructions": "Share the launch post, then submit the public URL to your post as proof.",
+      "category": "SOCIAL_MEDIA",
+      "verificationType": "MANUAL",
+      "rewardType": "POINTS",
+      "completerPoints": 200,
+      "referralPoolPoints": 50,
+      "maxCompletions": 20,
+      "endsInDays": 30,
+      "isPrivate": false
+    },
+    {
+      "key": "demo-community-welcome",
+      "owner": "steve",
+      "title": "Demo: Community Welcome Mission",
+      "description": "A private points campaign that demonstrates invite-only access.",
+      "instructions": "Join the demo community and submit your username as proof.",
+      "category": "COMMUNITY",
+      "verificationType": "MANUAL",
+      "rewardType": "POINTS",
+      "completerPoints": 300,
+      "referralPoolPoints": 75,
+      "maxCompletions": 10,
+      "endsInDays": 21,
+      "isPrivate": true
+    },
+    {
+      "key": "demo-preverified-prizes",
+      "owner": "steve",
+      "title": "Demo: Pre-Selected Prize Winners",
+      "description": "A private pre-verified campaign with an existing winner list.",
+      "instructions": "Selected wallets can claim after the owner publishes and reserves each winner on-chain.",
+      "category": "COMMUNITY",
+      "verificationType": "PRE_VERIFIED",
+      "rewardType": "POINTS",
+      "completerPoints": 400,
+      "referralPoolPoints": 100,
+      "endsInDays": 45,
+      "isPrivate": true,
+      "winners": [
+        { "user": "winner", "label": "Launch raffle winner" },
+        { "user": "alice", "label": "Community contributor" }
+      ]
+    }
+  ]
+}
