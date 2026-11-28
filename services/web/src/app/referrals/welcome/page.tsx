@@ -136,10 +136,10 @@ export default function WelcomePage() {
                 Invite Friends, Boost your Network & Earn Together.
               </h1>
               <p className="text-sm lg:text-base text-muted-foreground">
-                Gain <span className="text-primary font-semibold">5,000 points</span> for every
+                Gain up to <span className="text-primary font-semibold">100 points</span> for every
                 referral while increasing your{" "}
                 <span className="text-primary font-semibold">Monark network score</span>. They
-                gain 250 points and network start!
+                gain 50 points and network start!
               </p>
             </div>
           </div>

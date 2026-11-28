@@ -257,6 +257,18 @@ test("centres each person over the people they referred", () => {
   expect(x("Grace, Referred Paul")).toBe(x("Alice, You"));
 });
 
+test("spaces neighbours wider than a name can be, so names never overlap", () => {
+  renderPage();
+  const x = (label: string) => position(label).x;
+  // A name is cut short to its person's width, so people further apart than that can't touch
+  const width = parseFloat(personButton("Carol, Referred by Bob").style.width);
+
+  expect(width).toBeGreaterThan(0);
+  expect(x("Dave, Referred by Bob") - x("Carol, Referred by Bob")).toBeGreaterThan(width);
+  expect(x("Erin, Referred by Bob") - x("Dave, Referred by Bob")).toBeGreaterThan(width);
+  expect(x("Frank, Referred by Dana") - x("Erin, Referred by Bob")).toBeGreaterThan(width);
+});
+
 test("spreads the user's referrals evenly on both sides of them", () => {
   renderPage({ data: network([bob, dana, erin].map((child) => referral(child, 100))) });
   const x = (label: string) => position(label).x;

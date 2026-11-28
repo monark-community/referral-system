@@ -270,7 +270,7 @@ function RecentActivityCard({
               </p>
             </div>
             <p className="text-[12px] text-muted-foreground shrink-0">
-              {invite.createdAt}
+              {new Date(invite.createdAt).toLocaleDateString()}
             </p>
             <div className="tabular-nums shrink-0 min-w-[80px] text-right">
               {invite.status === 1 ? (

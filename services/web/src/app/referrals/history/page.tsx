@@ -49,7 +49,7 @@ function InviteItem({ invite }: { invite: Invite }) {
           <span className="truncate text-sm font-medium text-foreground">{invite.referee?.name || invite.description || "Unknown User"}</span>
           {getStatusBadge(invite.status, invite.points)}
         </div>
-        <p className="mt-0.5 text-xs text-muted-foreground">{dateLabel} {invite.createdAt}</p>
+        <p className="mt-0.5 text-xs text-muted-foreground">{dateLabel} {new Date(invite.createdAt).toLocaleDateString()}</p>
       </div>
     </div>
   );

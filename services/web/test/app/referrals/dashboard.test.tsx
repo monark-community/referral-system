@@ -176,6 +176,15 @@ test("lists the five most recent invites with their status", () => {
   expect(within(activity).queryByText("Grace")).not.toBeInTheDocument();
 });
 
+test("shows when each invite was made as a readable date, not a raw timestamp", () => {
+  const createdAt = "2026-11-28T01:51:38.517Z";
+  renderPage({ invites: [buildInvite({ createdAt })] });
+
+  const activity = activityCard();
+  expect(within(activity).getByText(new Date(createdAt).toLocaleDateString())).toBeInTheDocument();
+  expect(within(activity).queryByText(createdAt)).not.toBeInTheDocument();
+});
+
 test("View all opens the history page", async () => {
   renderPage({ invites: [buildInvite()] });
 

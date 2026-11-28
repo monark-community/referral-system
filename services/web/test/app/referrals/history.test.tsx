@@ -165,6 +165,14 @@ test("groups verified invites into Pending and Earned and hides unverified ones"
   expect(screen.queryByText("Unverified friend")).not.toBeInTheDocument();
 });
 
+test("shows when an invite was made as a readable date, not a raw timestamp", () => {
+  const createdAt = "2026-11-28T01:51:38.517Z";
+  renderPage({ invites: [buildInvite({ status: PENDING, createdAt })] });
+
+  expect(screen.getByText(`Invited ${new Date(createdAt).toLocaleDateString()}`)).toBeInTheDocument();
+  expect(screen.queryByText(new RegExp(createdAt))).not.toBeInTheDocument();
+});
+
 test("labels direct and grandchild rewards with their level", () => {
   renderPage({
     rewards: [
