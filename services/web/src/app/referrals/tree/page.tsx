@@ -67,7 +67,10 @@ const GAP: Record<Level, number> = { ancestor: 32, me: 32, child: 56, grandchild
 const DROP = 32;
 const CORNER = 24;
 
-const GRANDCHILD_SLOT = 84;
+// How wide each person is drawn; a longer name is cut short to fit. Neighbours sit at least this far
+// apart plus a small gap, so their names never run into each other
+const NODE_WIDTH = 112;
+const GRANDCHILD_SLOT = NODE_WIDTH + 12;
 const CHILD_MIN = 110;
 const CHILD_GAP = 40;
 const MIN_SCALE = 0.4;
@@ -504,8 +507,8 @@ function TreeCanvas({
               onPointerLeave={onNodeLeave}
               onFocus={() => setTooltipId(id)}
               onBlur={() => setTooltipId(null)}
-              className="absolute flex w-28 -translate-x-1/2 flex-col items-center gap-1.5 rounded-2xl outline-none cursor-pointer focus-visible:ring-2 focus-visible:ring-primary"
-              style={{ left: p.x, top: p.y - RADIUS[n.level] }}
+              className="absolute flex -translate-x-1/2 flex-col items-center gap-1.5 rounded-2xl outline-none cursor-pointer focus-visible:ring-2 focus-visible:ring-primary"
+              style={{ left: p.x, top: p.y - RADIUS[n.level], width: NODE_WIDTH }}
             >
               <Avatar user={n.user} level={n.level} selected={selectedId === id} />
               <span className="max-w-full truncate text-xs font-medium text-foreground">{displayName(n.user)}</span>

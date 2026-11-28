@@ -1,0 +1,273 @@
+{
+  "users": [
+    {
+      "key": "steve",
+      "hardhatAccount": 1,
+      "walletAddress": "0x70997970c51812dc3a010c7d01b50e0d17dc79c8",
+      "name": "CampaignOwnerSteve",
+      "email": "campaign-owner-steve@demo.reffinity.local",
+      "referralCode": "STEVEDEMO1"
+    },
+    {
+      "key": "bob",
+      "hardhatAccount": 2,
+      "walletAddress": "0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc",
+      "name": "ReferrerBob",
+      "email": "referrer-bob@demo.reffinity.local",
+      "referralCode": "BOBREFERS1"
+    },
+    {
+      "key": "alice",
+      "hardhatAccount": 3,
+      "walletAddress": "0x90f79bf6eb2c4f870365e785982e1f101e93b906",
+      "name": "ReferredAlice",
+      "email": "referred-alice@demo.reffinity.local",
+      "referralCode": "ALICEDEMO1",
+      "referredBy": "bob"
+    },
+    {
+      "key": "carol",
+      "hardhatAccount": 4,
+      "walletAddress": "0x15d34aaf54267db7d7c367839aaf71a00a2c6a65",
+      "name": "ReferredCarol",
+      "email": "referred-carol@demo.reffinity.local",
+      "referralCode": "CAROLDEMO1",
+      "referredBy": "bob"
+    },
+    {
+      "key": "dave",
+      "hardhatAccount": 5,
+      "walletAddress": "0x9965507d1a55bcc2695c58ba16fb37d819b0a4dc",
+      "name": "SecondLevelDave",
+      "email": "second-level-dave@demo.reffinity.local",
+      "referralCode": "DAVEDEMO01",
+      "referredBy": "alice"
+    },
+    {
+      "key": "erin",
+      "hardhatAccount": 6,
+      "walletAddress": "0x976ea74026e726554db657fa54763abd0c3a0aa9",
+      "name": "SecondLevelErin",
+      "email": "second-level-erin@demo.reffinity.local",
+      "referralCode": "ERINDEMO01",
+      "referredBy": "carol"
+    },
+    {
+      "key": "wendy",
+      "hardhatAccount": 7,
+      "walletAddress": "0x14dc79964da2c08b23698b3d3cc7ca32193d9955",
+      "name": "PrizeWinnerWendy",
+      "email": "prize-winner-wendy@demo.reffinity.local",
+      "referralCode": "WENDYDEMO1"
+    },
+    {
+      "key": "ivan",
+      "hardhatAccount": 8,
+      "walletAddress": "0x23618e81e3f5cdf7f54c3d65f7fbc0abf5b21e8f",
+      "name": "ReferredIvan",
+      "email": "referred-ivan@demo.reffinity.local",
+      "referralCode": "IVANDEMO01",
+      "referredBy": "bob"
+    },
+    {
+      "key": "frank",
+      "hardhatAccount": 9,
+      "walletAddress": "0xa0ee7a142d267c1f36714e4a8f75612f20a79720",
+      "name": "SecondLevelFrank",
+      "email": "second-level-frank@demo.reffinity.local",
+      "referralCode": "FRANKDEMO1",
+      "referredBy": "alice"
+    },
+    {
+      "key": "hana",
+      "hardhatAccount": 10,
+      "walletAddress": "0xbcd4042de499d14e55001ccbb24a551f3b954096",
+      "name": "SecondLevelHana",
+      "email": "second-level-hana@demo.reffinity.local",
+      "referralCode": "HANADEMO01",
+      "referredBy": "carol"
+    },
+    {
+      "key": "jade",
+      "hardhatAccount": 11,
+      "walletAddress": "0x71be63f3384f5fb98995898a86b02fb2426c5788",
+      "name": "SecondLevelJade",
+      "email": "second-level-jade@demo.reffinity.local",
+      "referralCode": "JADEDEMO01",
+      "referredBy": "ivan"
+    },
+    {
+      "key": "grace",
+      "hardhatAccount": 12,
+      "walletAddress": "0xfabb0ac9d68b0b445fb7357272ff202c5651694a",
+      "name": "ThirdLevelGrace",
+      "email": "third-level-grace@demo.reffinity.local",
+      "referralCode": "GRACEDEMO1",
+      "referredBy": "dave"
+    },
+    {
+      "key": "kai",
+      "hardhatAccount": 13,
+      "walletAddress": "0x1cbd3b2770909d4e10f157cabc84c7264073c9ec",
+      "name": "ThirdLevelKai",
+      "email": "third-level-kai@demo.reffinity.local",
+      "referralCode": "KAIDEMO001",
+      "referredBy": "dave"
+    },
+    {
+      "key": "leo",
+      "hardhatAccount": 14,
+      "walletAddress": "0xdf3e18d64bc6a983f673ab319ccae4f1a57c7097",
+      "name": "ReferredLeo",
+      "email": "referred-leo@demo.reffinity.local",
+      "referralCode": "LEODEMO001",
+      "referredBy": "wendy"
+    },
+    {
+      "key": "olivia",
+      "hardhatAccount": 15,
+      "walletAddress": "0xcd3b766ccdd6ae721141f452c550ca635964ce71",
+      "name": "CampaignOwnerOlivia",
+      "email": "campaign-owner-olivia@demo.reffinity.local",
+      "referralCode": "OLIVIADEMO"
+    }
+  ],
+  "campaigns": [
+    {
+      "key": "follow-on-x",
+      "owner": "steve",
+      "title": "Follow Us on X",
+      "description": "Help us grow our audience by following our account.",
+      "instructions": "Follow our account on X, then submit the link to your X profile as proof.",
+      "category": "SOCIAL_MEDIA",
+      "verificationType": "MANUAL",
+      "completerPoints": 100,
+      "referralPoolPoints": 50,
+      "maxCompletions": 25,
+      "endsInDays": 30,
+      "isPrivate": false,
+      "publish": true,
+      "completions": [
+        { "user": "alice", "status": "REWARDED" },
+        { "user": "carol", "status": "REWARDED" },
+        { "user": "dave", "status": "REWARDED" },
+        { "user": "grace", "status": "REWARDED" },
+        { "user": "erin", "status": "UNDER_REVIEW" }
+      ]
+    },
+    {
+      "key": "join-discord",
+      "owner": "steve",
+      "title": "Join Our Discord Community",
+      "description": "Meet the community and get early news about upcoming rewards.",
+      "instructions": "Join our Discord server and introduce yourself in the welcome channel. Submit your Discord username as proof.",
+      "category": "COMMUNITY",
+      "verificationType": "MANUAL",
+      "completerPoints": 150,
+      "referralPoolPoints": 100,
+      "maxCompletions": 30,
+      "endsInDays": 21,
+      "isPrivate": false,
+      "publish": true,
+      "completions": [
+        { "user": "bob", "status": "REWARDED" },
+        { "user": "frank", "status": "REWARDED" },
+        { "user": "hana", "status": "REWARDED" },
+        { "user": "jade", "status": "REWARDED" },
+        { "user": "kai", "status": "REWARDED" }
+      ]
+    },
+    {
+      "key": "share-launch-post",
+      "owner": "steve",
+      "title": "Share Our Launch Post",
+      "description": "A ready-to-publish public campaign for the live demo.",
+      "instructions": "Share the launch post, then submit the public URL to your post as proof.",
+      "category": "SOCIAL_MEDIA",
+      "verificationType": "MANUAL",
+      "completerPoints": 200,
+      "referralPoolPoints": 50,
+      "maxCompletions": 20,
+      "endsInDays": 30,
+      "isPrivate": false,
+      "publish": false
+    },
+    {
+      "key": "community-welcome",
+      "owner": "steve",
+      "title": "Community Welcome Mission",
+      "description": "A private points campaign that demonstrates invite-only access.",
+      "instructions": "Join the demo community and submit your username as proof.",
+      "category": "COMMUNITY",
+      "verificationType": "MANUAL",
+      "completerPoints": 300,
+      "referralPoolPoints": 75,
+      "maxCompletions": 10,
+      "endsInDays": 21,
+      "isPrivate": true,
+      "publish": true,
+      "completions": [
+        { "user": "wendy", "status": "REWARDED" },
+        { "user": "leo", "status": "REWARDED" }
+      ]
+    },
+    {
+      "key": "preverified-prizes",
+      "owner": "steve",
+      "title": "Pre-Selected Prize Winners",
+      "description": "A private pre-verified campaign with an existing winner list.",
+      "instructions": "Selected wallets can claim after the owner publishes and reserves each winner on-chain.",
+      "category": "COMMUNITY",
+      "verificationType": "PRE_VERIFIED",
+      "completerPoints": 400,
+      "referralPoolPoints": 100,
+      "endsInDays": 45,
+      "isPrivate": true,
+      "publish": false,
+      "winners": [
+        { "user": "wendy", "label": "Launch raffle winner" },
+        { "user": "alice", "label": "Community contributor" }
+      ]
+    },
+    {
+      "key": "product-photo",
+      "owner": "olivia",
+      "title": "Post a Photo with Our Product",
+      "description": "Show your followers how you use our product day to day.",
+      "instructions": "Post a photo of yourself with our product on any public social account, then submit the link to the post.",
+      "category": "SOCIAL_MEDIA",
+      "verificationType": "MANUAL",
+      "completerPoints": 250,
+      "referralPoolPoints": 100,
+      "maxCompletions": 10,
+      "endsInDays": 14,
+      "isPrivate": false,
+      "publish": true,
+      "completions": [
+        { "user": "ivan", "status": "REWARDED" },
+        { "user": "dave", "status": "REWARDED" },
+        { "user": "leo", "status": "REWARDED" }
+      ]
+    },
+    {
+      "key": "beta-feedback",
+      "owner": "olivia",
+      "title": "Beta Test Our App and Share Feedback",
+      "description": "Try the beta for a week and tell us what to improve.",
+      "instructions": "Install the beta, use it for a week, and fill in the feedback form. Submit the username you used in the form as proof.",
+      "category": "COMMUNITY",
+      "verificationType": "MANUAL",
+      "completerPoints": 300,
+      "referralPoolPoints": 150,
+      "maxCompletions": 15,
+      "endsInDays": 28,
+      "isPrivate": false,
+      "publish": true,
+      "completions": [
+        { "user": "alice", "status": "REWARDED" },
+        { "user": "kai", "status": "REWARDED" },
+        { "user": "erin", "status": "REWARDED" }
+      ]
+    }
+  ]
+}
